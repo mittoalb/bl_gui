@@ -818,69 +818,6 @@
     ]
   },
   "_pv_fields": {
-    "Shutters::User Mode": {
-      "shtr_A": {
-        "kind": "valve",
-        "status": "PB:32ID:STA_A_FES_CLSD_PL",
-        "on": "32idb:rshtrA:Open.PROC",
-        "off": "32idb:rshtrA:Close.PROC"
-      },
-      "shtr_B": {
-        "kind": "valve",
-        "status": "PB:32ID:STA_B_SBS_CLSD_PL",
-        "on": "32idb:rshtrB:Open.PROC",
-        "off": "32idb:rshtrB:Close.PROC"
-      },
-      "shtr_U": {
-        "kind": "valve",
-        "status": "",
-        "on": "32idbTXM:uniblitz:control",
-        "off": "32idbTXM:uniblitz:control"
-      }
-    },
-    "Beam::User Mode": {
-      "beam_curr": "S-DCCT:CurrentM",
-      "beam_life": "S-DCCT:LifetimeM",
-      "beam_mode": "S:ActualMode",
-      "beam_und_e": "S32ID:USID:EnergyM.VAL"
-    },
-    "In / Out::User Mode": {
-      "io_sample": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveSampleIn",
-        "off": "32id:TXMOptics:MoveSampleOut"
-      },
-      "io_phring": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MovePhaseRingIn",
-        "off": "32id:TXMOptics:MovePhaseRingOut"
-      },
-      "io_zp": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveZonePlateIn",
-        "off": "32id:TXMOptics:MoveZonePlateOut"
-      },
-      "io_pinhole": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MovePinholeIn",
-        "off": "32id:TXMOptics:MovePinholeOut"
-      },
-      "io_cond": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveCondenserIn",
-        "off": "32id:TXMOptics:MoveCondenserOut"
-      },
-      "io_bs": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveBeamstopIn",
-        "off": "32id:TXMOptics:MoveBeamstopOut"
-      },
-      "io_diff": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveDiffuserIn",
-        "off": "32id:TXMOptics:MoveDiffuserOut"
-      }
-    },
     "Energy::User Mode": {
       "energy_sp": "32id:TXMOptics:Energy",
       "bragg_rbv": "32ida:BraggERdbkAO",
@@ -889,28 +826,7 @@
       "energy_calfile1": "32id:TXMOptics:EnergyCalibrationFileOne",
       "energy_calfile2": "32id:TXMOptics:EnergyCalibrationFileTwo",
       "und_energy_rbv": "S32ID:USID:EnergyM.VAL",
-      "energy_set": "32id:TXMOptics:EnergySet",
-      "energy_busy_led": "32id:TXMOptics:EnergyBusy"
-    },
-    "Camera::User Mode": {
-      "cam_acquire": "32idbSP1:cam1:Acquire",
-      "cam_acq_led": "32idbSP1:cam1:Acquire",
-      "cam_exp_sp": "32idbSP1:cam1:AcquireTime",
-      "cam_exp_rb": "32idbSP1:cam1:AcquireTime_RBV",
-      "cam_sizex": "32idbSP1:cam1:SizeX_RBV",
-      "cam_sizey": "32idbSP1:cam1:SizeY_RBV",
-      "cam_numfilt": "32idbSP1:Proc1:NumFilter",
-      "cam_filtered": "32idbSP1:Proc1:NumFiltered_RBV",
-      "cam_flat_valid": "32idbSP1:Proc1:ValidFlatField_RBV",
-      "cam_reset": "32idbSP1:Proc1:ResetFilter",
-      "cam_save_flat": "32idbSP1:Proc1:SaveFlatField"
-    },
-    "Crop::User Mode": {
-      "crop_L": "32id:TXMOptics:CropLeft",
-      "crop_R": "32id:TXMOptics:CropRight",
-      "crop_T": "32id:TXMOptics:CropTop",
-      "crop_B": "32id:TXMOptics:CropBottom",
-      "crop_apply": "32id:TXMOptics:Crop"
+      "energy_set": "32id:TXMOptics:EnergySet"
     },
     "Valves::User Mode": {
       "valve_all": {
@@ -939,19 +855,6 @@
     "PV Save/Load::User Mode": {
       "pvsr_file": "32id:TXMOptics:FileAllPVs"
     },
-    "Beam Status::User Mode": {
-      "bs_desired_mode": "S:DesiredMode",
-      "bs_actual_mode": "S:ActualMode",
-      "bs_inj_period": "S-INJ:InjectionPeriodCounterM"
-    },
-    "OPS Messages::User Mode": {
-      "ops_msg1": "OPS:message1",
-      "ops_msg2": "OPS:message2",
-      "ops_msg3": "OPS:message3",
-      "ops_msg4": "OPS:message4",
-      "ops_msg5": "OPS:message5",
-      "ops_msg6": "OPS:message6"
-    },
     "Shaker::User Mode": {
       "shaker_freq": "32idbShaker:shaker:frequency.VAL",
       "shaker_time": "32idbShaker:shaker:timePerPoint.VAL",
@@ -966,69 +869,6 @@
       "shaker_B_off": "32idbShaker:shaker:B:ampOffset.VAL",
       "shaker_B_fmult": "32idbShaker:shaker:B:freqMult.VAL"
     },
-    "Shutters::Expert Mode": {
-      "shtr_A": {
-        "kind": "valve",
-        "status": "PB:32ID:STA_A_FES_CLSD_PL",
-        "on": "32idb:rshtrA:Open.PROC",
-        "off": "32idb:rshtrA:Close.PROC"
-      },
-      "shtr_B": {
-        "kind": "valve",
-        "status": "PB:32ID:STA_B_SBS_CLSD_PL",
-        "on": "32idb:rshtrB:Open.PROC",
-        "off": "32idb:rshtrB:Close.PROC"
-      },
-      "shtr_U": {
-        "kind": "valve",
-        "status": "",
-        "on": "32idbTXM:uniblitz:control",
-        "off": "32idbTXM:uniblitz:control"
-      }
-    },
-    "Beam::Expert Mode": {
-      "beam_curr": "S-DCCT:CurrentM",
-      "beam_life": "S-DCCT:LifetimeM",
-      "beam_mode": "S:ActualMode",
-      "beam_und_e": "S32ID:USID:EnergyM.VAL"
-    },
-    "In / Out::Expert Mode": {
-      "io_sample": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveSampleIn",
-        "off": "32id:TXMOptics:MoveSampleOut"
-      },
-      "io_phring": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MovePhaseRingIn",
-        "off": "32id:TXMOptics:MovePhaseRingOut"
-      },
-      "io_zp": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveZonePlateIn",
-        "off": "32id:TXMOptics:MoveZonePlateOut"
-      },
-      "io_pinhole": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MovePinholeIn",
-        "off": "32id:TXMOptics:MovePinholeOut"
-      },
-      "io_cond": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveCondenserIn",
-        "off": "32id:TXMOptics:MoveCondenserOut"
-      },
-      "io_bs": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveBeamstopIn",
-        "off": "32id:TXMOptics:MoveBeamstopOut"
-      },
-      "io_diff": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveDiffuserIn",
-        "off": "32id:TXMOptics:MoveDiffuserOut"
-      }
-    },
     "Energy::Expert Mode": {
       "energy_sp": "32id:TXMOptics:Energy",
       "bragg_rbv": "32ida:BraggERdbkAO",
@@ -1037,28 +877,7 @@
       "energy_calfile1": "32id:TXMOptics:EnergyCalibrationFileOne",
       "energy_calfile2": "32id:TXMOptics:EnergyCalibrationFileTwo",
       "und_energy_rbv": "S32ID:USID:EnergyM.VAL",
-      "energy_set": "32id:TXMOptics:EnergySet",
-      "energy_busy_led": "32id:TXMOptics:EnergyBusy"
-    },
-    "Camera::Expert Mode": {
-      "cam_acquire": "32idbSP1:cam1:Acquire",
-      "cam_acq_led": "32idbSP1:cam1:Acquire",
-      "cam_exp_sp": "32idbSP1:cam1:AcquireTime",
-      "cam_exp_rb": "32idbSP1:cam1:AcquireTime_RBV",
-      "cam_sizex": "32idbSP1:cam1:SizeX_RBV",
-      "cam_sizey": "32idbSP1:cam1:SizeY_RBV",
-      "cam_numfilt": "32idbSP1:Proc1:NumFilter",
-      "cam_filtered": "32idbSP1:Proc1:NumFiltered_RBV",
-      "cam_flat_valid": "32idbSP1:Proc1:ValidFlatField_RBV",
-      "cam_reset": "32idbSP1:Proc1:ResetFilter",
-      "cam_save_flat": "32idbSP1:Proc1:SaveFlatField"
-    },
-    "Crop::Expert Mode": {
-      "crop_L": "32id:TXMOptics:CropLeft",
-      "crop_R": "32id:TXMOptics:CropRight",
-      "crop_T": "32id:TXMOptics:CropTop",
-      "crop_B": "32id:TXMOptics:CropBottom",
-      "crop_apply": "32id:TXMOptics:Crop"
+      "energy_set": "32id:TXMOptics:EnergySet"
     },
     "Valves::Expert Mode": {
       "valve_all": {
@@ -1084,29 +903,8 @@
       "plc_ao1_sp": "32idbSoft:PLC1:ao1",
       "plc_ao1_rb": "32idbSoft:PLC1:ao1"
     },
-    "BPM/EPID::Expert Mode": {
-      "bpm_H_sp": "32idbSoft:epidH.VAL",
-      "bpm_H_rb": "32idbSoft:epidH.CVAL",
-      "bpm_H_fb": "32idbSoft:epidH:on",
-      "bpm_V_sp": "32idbSoft:epidV.VAL",
-      "bpm_V_rb": "32idbSoft:epidV.CVAL",
-      "bpm_V_fb": "32idbSoft:epidV:on"
-    },
     "PV Save/Load::Expert Mode": {
       "pvsr_file": "32id:TXMOptics:FileAllPVs"
-    },
-    "Beam Status::Expert Mode": {
-      "bs_desired_mode": "S:DesiredMode",
-      "bs_actual_mode": "S:ActualMode",
-      "bs_inj_period": "S-INJ:InjectionPeriodCounterM"
-    },
-    "OPS Messages::Expert Mode": {
-      "ops_msg1": "OPS:message1",
-      "ops_msg2": "OPS:message2",
-      "ops_msg3": "OPS:message3",
-      "ops_msg4": "OPS:message4",
-      "ops_msg5": "OPS:message5",
-      "ops_msg6": "OPS:message6"
     },
     "Shaker::Expert Mode": {
       "shaker_freq": "32idbShaker:shaker:frequency.VAL",
@@ -1122,6 +920,5 @@
       "shaker_B_off": "32idbShaker:shaker:B:ampOffset.VAL",
       "shaker_B_fmult": "32idbShaker:shaker:B:freqMult.VAL"
     }
-  },
-  "_custom_rows": {}
+  }
 }

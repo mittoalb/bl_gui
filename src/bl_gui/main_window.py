@@ -9,7 +9,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from .motor import MC, GROUPS, _DEFAULT_TABS, _fs, _rb, _act, set_font_scale
 from .pv import PVEngine, caput_bg
-from .pv_field import PVField, ValveField
+from .pv_field import PVField, ValveField, ToggleField
 from . import theme as _theme_mod
 from .theme import _IMG, _PANEL_SS, _PANEL_SS_EDIT, _SS
 
@@ -30,13 +30,11 @@ class Win(QtWidgets.QMainWindow):
         self.resize(1800, 1000)
         # All motor cards and shutter/readback labels across ALL tabs
         self.mcs: List[MC] = []
-        self.shs: List[tuple] = []          # (pv_name_or_None, QLabel)
-        self._rb: Dict[str, List[QtWidgets.QLabel]] = {}   # pv -> [labels...]
-        self._special: Dict[str, List[QtWidgets.QLabel]] = {}  # special indicators
-        # Valve status labels: list of (pv, QLabel) — shows ON/OFF, colour-coded
-        self.vlv: List[tuple] = []
-        # PVField rows (Energy/BPM/etc.) indexed by panel_key -> {field_id: PVField}
+        # PVField / ValveField rows: panel_key -> {field_id: widget}
         self._pv_fields: Dict[str, Dict[str, "PVField"]] = {}
+        # User-added rows (via "Add PV Row..." in edit mode) — per-panel config
+        # lists. Each entry = {kind, label, field_id, pv, on_pv, off_pv, opts}
+        self._custom_rows: Dict[str, List[dict]] = {}
         # panel_key -> Panel  (keys are "PanelName::TabName")
         self._panels: Dict[str, Panel] = {}
         self._tab_canvases: Dict[str, QtWidgets.QWidget] = {}
@@ -133,10 +131,6 @@ class Win(QtWidgets.QMainWindow):
         self._next_panel_id += 1
         return f"{base}#{self._next_panel_id}::{tab_name}"
 
-    def _register_rb(self, pv, label):
-        """Register a readback label for a PV (supports multiple labels per PV)."""
-        self._rb.setdefault(pv, []).append(label)
-
     def _register_pv_fields(self, panel, field_defs, form_layout):
         """Build PVField rows, wire into form_layout, and register them with the window
         so save/load + PV monitoring work.
@@ -149,6 +143,124 @@ class Win(QtWidgets.QMainWindow):
             f = PVField(kind=kind, pv=default_pv, field_id=field_id, parent=panel, **opts)
             form_layout.addRow(row_label, f)
             slot[field_id] = f
+
+    def add_pv_row_dialog(self, panel):
+        """Triggered by a panel's context menu — opens the row-builder dialog
+        and, on accept, adds a live PVField/ValveField row to the panel."""
+        from .row_builder import AddPVRowDialog
+        existing = set(self._pv_fields.get(panel.key, {}).keys())
+        dlg = AddPVRowDialog(existing_field_ids=existing, parent=panel)
+        if dlg.exec_() != QtWidgets.QDialog.Accepted or not dlg.cfg:
+            return
+        self._add_custom_pv_row(panel, dlg.cfg, record=True)
+
+    def _add_custom_pv_row(self, panel, cfg, record=True):
+        """Instantiate a PVField / ValveField from a config dict and insert it
+        into the panel. If record=True the config is also stashed in
+        self._custom_rows so it persists across save/load."""
+        kind = cfg.get("kind")
+        field_id = cfg.get("field_id") or kind
+        label = cfg.get("label", "")
+        pv = cfg.get("pv", "")
+        on_pv = cfg.get("on_pv", "")
+        off_pv = cfg.get("off_pv", "")
+        opts = dict(cfg.get("opts", {}) or {})
+
+        # Build the widget
+        if kind == "valve":
+            f = ValveField(status_pv=pv, on_pv=on_pv, off_pv=off_pv,
+                           field_id=field_id, label_text=label, parent=panel)
+        elif kind == "toggle":
+            f = ToggleField(status_pv=pv, open_pv=on_pv, close_pv=off_pv,
+                            field_id=field_id, label_text=label, parent=panel)
+        elif kind == "btn_pair":
+            f = PVField("btn_pair", "", field_id,
+                        on_pv=on_pv, off_pv=off_pv,
+                        button_text=opts.pop("button_text", "In/Out"),
+                        parent=panel, **opts)
+        else:
+            f = PVField(kind, pv, field_id, parent=panel, **opts)
+
+        # Insert into the panel's existing layout, adapting to its type
+        lay = panel.layout()
+        if lay is None:
+            lay = QtWidgets.QFormLayout(panel)
+            lay.setContentsMargins(6, 22, 6, 6); lay.setSpacing(4)
+
+        if isinstance(lay, QtWidgets.QFormLayout):
+            lay.addRow(label, f)
+        elif isinstance(lay, QtWidgets.QGridLayout):
+            row = lay.rowCount()
+            lay.addWidget(QtWidgets.QLabel(label), row, 0)
+            lay.addWidget(f, row, 1)
+        else:
+            # QVBoxLayout / QHBoxLayout — wrap label+field in a horizontal row
+            wrap = QtWidgets.QWidget()
+            hl = QtWidgets.QHBoxLayout(wrap); hl.setContentsMargins(0, 0, 0, 0); hl.setSpacing(4)
+            if label:
+                hl.addWidget(QtWidgets.QLabel(label))
+            hl.addWidget(f, 1)
+            # Insert before any trailing stretch so new rows stack at the top
+            insert_at = lay.count()
+            for i in range(lay.count() - 1, -1, -1):
+                item = lay.itemAt(i)
+                if item and item.spacerItem() is not None:
+                    insert_at = i; break
+            lay.insertWidget(insert_at, wrap)
+
+        # Register the row so PV updates find it
+        slot = self._pv_fields.setdefault(panel.key, {})
+        slot[field_id] = f
+        f.set_edit_mode(self._edit_mode)
+        if hasattr(self, "_pve"):
+            pvs = f.monitored_pvs()
+            if pvs:
+                self._pve.monitor_many(pvs)
+
+        # Record for persistence
+        if record:
+            self._custom_rows.setdefault(panel.key, []).append({
+                "kind": kind,
+                "label": label,
+                "field_id": field_id,
+                "pv": pv,
+                "on_pv": on_pv,
+                "off_pv": off_pv,
+                "opts": opts,
+            })
+
+    def _delete_custom_row(self, field):
+        """Remove a PVField/ValveField row from its panel + bookkeeping."""
+        # Find which panel owns it
+        panel_key = None
+        field_id = getattr(field, "field_id", None)
+        for k, slot in self._pv_fields.items():
+            if slot.get(field_id) is field:
+                panel_key = k
+                break
+        if panel_key is None:
+            field.setParent(None); field.deleteLater()
+            return
+        # Remove from PVField registry
+        self._pv_fields[panel_key].pop(field_id, None)
+        # Remove from _custom_rows (if user-added)
+        rows = self._custom_rows.get(panel_key, [])
+        self._custom_rows[panel_key] = [r for r in rows if r.get("field_id") != field_id]
+        if not self._custom_rows[panel_key]:
+            self._custom_rows.pop(panel_key, None)
+        # Detach the whole row: label + the field widget.
+        # In a QFormLayout, removing the field widget also removes its label.
+        p = self._panels.get(panel_key)
+        lay = p.layout() if p else None
+        if isinstance(lay, QtWidgets.QFormLayout):
+            lay.removeRow(field)
+        else:
+            parent = field.parentWidget()
+            if parent and parent is not p:
+                # It's inside the wrap QWidget we made for QVBoxLayout/QHBoxLayout
+                parent.setParent(None); parent.deleteLater()
+            else:
+                field.setParent(None); field.deleteLater()
 
     def _pv_field_rebind(self, field, old_pv, new_pv):
         """Called by PVField._edit_pv_dialog after the user changes a PV.
@@ -186,34 +298,33 @@ class Win(QtWidgets.QMainWindow):
     def _build_all_panels(self, tab_name):
         x, y = 0, 0; GAP = 4
 
-        # --- Shutters ---
-        p, _ = self._make_panel("Shutters", 380, 80, tab_name)
-        lay = QtWidgets.QHBoxLayout(); lay.setContentsMargins(6, 20, 6, 4); lay.setSpacing(4)
-        for a in [("A-Stn","32idb:rshtrA:Open.PROC","32idb:rshtrA:Close.PROC","PB:32ID:STA_A_FES_CLSD_PL"),
-                  ("B-Stn","32idb:rshtrB:Open.PROC","32idb:rshtrB:Close.PROC","PB:32ID:STA_B_SBS_CLSD_PL"),
-                  ("Uniblitz","32idbTXM:uniblitz:control","32idbTXM:uniblitz:control",None)]:
-            sf = QtWidgets.QFrame(); sf.setStyleSheet("background:transparent;")
-            sl = QtWidgets.QVBoxLayout(sf); sl.setContentsMargins(0,0,0,0); sl.setSpacing(2)
-            st = QtWidgets.QLabel("---"); st.setAlignment(QtCore.Qt.AlignCenter); st.setFixedHeight(20)
-            st.setStyleSheet("background:#2d2d2d;border:1px solid #404040;border-radius:3px;font:bold 9pt;")
-            sl.addWidget(st)
-            br = QtWidgets.QHBoxLayout(); br.setSpacing(2)
-            bo = QtWidgets.QPushButton("Open"); bo.setStyleSheet("background:#27ae60;color:#fff;font:8pt;padding:2px;")
-            bo.clicked.connect(partial(caput_bg, a[1], 1)); br.addWidget(bo)
-            bc = QtWidgets.QPushButton("Close"); bc.setStyleSheet("background:#c0392b;color:#fff;font:8pt;padding:2px;")
-            bc.clicked.connect(partial(caput_bg, a[2], 1)); br.addWidget(bc)
-            sl.addLayout(br); lay.addWidget(sf)
-            self.shs.append((a[3], st))
-        p.setLayout(lay); p.setGeometry(x, y, 380, 80); x += 384
+        # --- Shutters (ADL-style toggle buttons) ---
+        p, _ = self._make_panel("Shutters", 400, 120, tab_name)
+        lay = QtWidgets.QHBoxLayout(); lay.setContentsMargins(6, 22, 6, 4); lay.setSpacing(6)
+        shutter_rows = [
+            # (field_id, label, status PV, Open PV, Close PV)
+            ("shtr_A", "A-Stn",    "PB:32ID:STA_A_FES_CLSD_PL", "32idb:rshtrA:Open.PROC",     "32idb:rshtrA:Close.PROC"),
+            ("shtr_B", "B-Stn",    "PB:32ID:STA_B_SBS_CLSD_PL", "32idb:rshtrB:Open.PROC",     "32idb:rshtrB:Close.PROC"),
+            ("shtr_U", "Uniblitz", "",                           "32idbTXM:uniblitz:control", "32idbTXM:uniblitz:control"),
+        ]
+        slot = self._pv_fields.setdefault(p.key, {})
+        for fid, lbl, st_pv, o_pv, c_pv in shutter_rows:
+            tf = ToggleField(status_pv=st_pv, open_pv=o_pv, close_pv=c_pv, field_id=fid,
+                             label_text=lbl, open_text="Open", close_text="Close", parent=p)
+            lay.addWidget(tf)
+            slot[fid] = tf
+        p.setLayout(lay); p.setGeometry(x, y, 400, 120); x += 404
 
         # --- Beam Info ---
-        p, _ = self._make_panel("Beam", 350, 80, tab_name)
-        bl = QtWidgets.QGridLayout(); bl.setContentsMargins(6, 20, 6, 4); bl.setSpacing(3)
-        for i, (lbl, pv) in enumerate([("I (mA):","S-DCCT:CurrentM"),("Life:","S-DCCT:LifetimeM"),
-                                        ("Mode:","S:ActualMode"),("Und E:","S32ID:USID:EnergyM.VAL")]):
-            bl.addWidget(QtWidgets.QLabel(lbl), i//2, (i%2)*2)
-            v = _rb(); self._register_rb(pv, v); bl.addWidget(v, i//2, (i%2)*2+1)
-        p.setLayout(bl); p.setGeometry(x, y, 350, 80); x += 354
+        p, _ = self._make_panel("Beam", 350, 90, tab_name)
+        bl = QtWidgets.QFormLayout(); bl.setContentsMargins(6, 20, 6, 4); bl.setSpacing(3)
+        self._register_pv_fields(p, [
+            ('rb', "I (mA):",  "beam_curr",  "S-DCCT:CurrentM",        dict(fmt=".2f")),
+            ('rb', "Life:",    "beam_life",  "S-DCCT:LifetimeM",       dict(fmt=".1f")),
+            ('rb', "Mode:",    "beam_mode",  "S:ActualMode",           {}),
+            ('rb', "Und E:",   "beam_und_e", "S32ID:USID:EnergyM.VAL", dict(fmt=".3f")),
+        ], bl)
+        p.setLayout(bl); p.setGeometry(x, y, 350, 90); x += 354
 
         # --- Presets ---
         p, _ = self._make_panel("Presets", 200, 80, tab_name)
@@ -238,23 +349,30 @@ class Win(QtWidgets.QMainWindow):
 
         # --- In/Out ---
         iy = y + (0 if ci == 0 else 190 + GAP)
-        p, _ = self._make_panel("In / Out", 700, 60, tab_name)
-        iol = QtWidgets.QHBoxLayout(); iol.setContentsMargins(6, 18, 6, 4); iol.setSpacing(6)
-        for lbl, pvp in [("Sample","Sample"),("PhRing","PhaseRing"),("ZP","ZonePlate"),
-                         ("Pinhole","Pinhole"),("Cond","Condenser"),("BS","Beamstop"),("Diff","Diffuser")]:
-            sub = QtWidgets.QVBoxLayout(); sub.setSpacing(1)
-            t = QtWidgets.QLabel(lbl); t.setAlignment(QtCore.Qt.AlignCenter); t.setStyleSheet("font:8pt;"); sub.addWidget(t)
-            br2 = QtWidgets.QHBoxLayout(); br2.setSpacing(2)
-            bi = QtWidgets.QPushButton("In"); bi.setFixedSize(28,18); bi.setStyleSheet("background:#27ae60;color:#fff;font:7pt;padding:0;")
-            bi.clicked.connect(partial(caput_bg,f"32id:TXMOptics:Move{pvp}In",1)); br2.addWidget(bi)
-            boo = QtWidgets.QPushButton("Out"); boo.setFixedSize(28,18); boo.setStyleSheet("background:#c0392b;color:#fff;font:7pt;padding:0;")
-            boo.clicked.connect(partial(caput_bg,f"32id:TXMOptics:Move{pvp}Out",1)); br2.addWidget(boo)
-            sub.addLayout(br2); iol.addLayout(sub)
-        iol.addStretch()
-        bp = QtWidgets.QPushButton("PyStream"); bp.setFixedSize(90,28)
+        p, _ = self._make_panel("In / Out", 760, 70, tab_name)
+        iol = QtWidgets.QGridLayout(); iol.setContentsMargins(6, 18, 6, 4); iol.setSpacing(6)
+        inout_rows = [
+            ("io_sample",   "Sample",  "32id:TXMOptics:MoveSampleIn",     "32id:TXMOptics:MoveSampleOut"),
+            ("io_phring",   "PhRing",  "32id:TXMOptics:MovePhaseRingIn",  "32id:TXMOptics:MovePhaseRingOut"),
+            ("io_zp",       "ZP",      "32id:TXMOptics:MoveZonePlateIn",  "32id:TXMOptics:MoveZonePlateOut"),
+            ("io_pinhole",  "Pinhole", "32id:TXMOptics:MovePinholeIn",    "32id:TXMOptics:MovePinholeOut"),
+            ("io_cond",     "Cond",    "32id:TXMOptics:MoveCondenserIn",  "32id:TXMOptics:MoveCondenserOut"),
+            ("io_bs",       "BS",      "32id:TXMOptics:MoveBeamstopIn",   "32id:TXMOptics:MoveBeamstopOut"),
+            ("io_diff",     "Diff",    "32id:TXMOptics:MoveDiffuserIn",   "32id:TXMOptics:MoveDiffuserOut"),
+        ]
+        slot = self._pv_fields.setdefault(p.key, {})
+        for col, (fid, lbl, pv_in, pv_out) in enumerate(inout_rows):
+            iol.addWidget(QtWidgets.QLabel(lbl), 0, col, alignment=QtCore.Qt.AlignCenter)
+            pf = PVField('btn_pair', "", fid, button_text="In/Out",
+                         on_pv=pv_in, off_pv=pv_out, on_value=1, off_value=1, parent=p)
+            iol.addWidget(pf, 1, col)
+            slot[fid] = pf
+        # A convenience launcher button (non-PV). Keep as plain button.
+        bp = QtWidgets.QPushButton("PyStream"); bp.setFixedSize(90, 28)
         bp.setStyleSheet("background:#27ae60;color:#fff;font:bold 10pt;border-radius:3px;")
-        bp.clicked.connect(lambda: subprocess.Popen(["/home/beams/USERTXM/scripts/start_pystream.sh"],start_new_session=True))
-        iol.addWidget(bp); p.setLayout(iol); p.setGeometry(0, iy, 700, 60)
+        bp.clicked.connect(lambda: subprocess.Popen(["/home/beams/USERTXM/scripts/start_pystream.sh"], start_new_session=True))
+        iol.addWidget(bp, 0, len(inout_rows), 2, 1)
+        p.setLayout(iol); p.setGeometry(0, iy, 760, 70)
 
         # --- Energy ---
         p, _ = self._make_panel("Energy", 340, 280, tab_name)
@@ -273,58 +391,55 @@ class Win(QtWidgets.QMainWindow):
         ]
         self._register_pv_fields(p, energy_fields, el)
 
-        # Busy indicator (special — coloured dot)
-        e_busy = QtWidgets.QLabel("\u25CF"); e_busy.setStyleSheet("color:#555;font:12pt;")
-        self._special.setdefault("32id:TXMOptics:EnergyBusy", []).append(e_busy)
-        el.addRow("Busy:", e_busy)
+        # Busy indicator (LED — green when EnergyBusy != 0)
+        self._register_pv_fields(p, [
+            ('led', "Busy:", "energy_busy_led", "32id:TXMOptics:EnergyBusy", {}),
+        ], el)
 
         p.setLayout(el); p.setGeometry(700 + GAP, 84 + GAP, 340, 280)
 
         # --- Camera ---
-        p, _ = self._make_panel("Camera", 340, 250, tab_name)
+        p, _ = self._make_panel("Camera", 360, 280, tab_name)
         cl = QtWidgets.QFormLayout(); cl.setContentsMargins(6, 22, 6, 6); cl.setSpacing(3)
-        ar = QtWidgets.QHBoxLayout()
-        ar.addWidget(_act("Acquire", lambda: caput_bg("32idbSP1:cam1:Acquire",1)))
-        acq = QtWidgets.QLabel("\u25CF"); acq.setStyleSheet("color:#555;font:12pt;")
-        self._special.setdefault("32idbSP1:cam1:Acquire", []).append(acq)
-        ar.addWidget(acq); ar.addStretch(); cl.addRow(ar)
-        er = QtWidgets.QHBoxLayout()
-        exp_entry = QtWidgets.QLineEdit(); exp_entry.setPlaceholderText("sec")
-        exp_entry.returnPressed.connect(lambda: caput_bg("32idbSP1:cam1:AcquireTime", exp_entry.text()))
-        er.addWidget(exp_entry)
-        v = _rb(); self._register_rb("32idbSP1:cam1:AcquireTime_RBV", v); er.addWidget(v); cl.addRow("Exp:", er)
-        for lbl, pv in [("SzX:","32idbSP1:cam1:SizeX_RBV"),("SzY:","32idbSP1:cam1:SizeY_RBV")]:
-            v = _rb(); self._register_rb(pv, v); cl.addRow(lbl, v)
-        nr = QtWidgets.QHBoxLayout()
-        nf_entry = QtWidgets.QLineEdit(); nf_entry.setPlaceholderText("N")
-        nf_entry.returnPressed.connect(lambda: caput_bg("32idbSP1:Proc1:NumFilter", nf_entry.text()))
-        nr.addWidget(nf_entry)
-        v = _rb(); self._register_rb("32idbSP1:Proc1:NumFiltered_RBV", v); nr.addWidget(v); cl.addRow("Filter:", nr)
-        v = _rb(); self._register_rb("32idbSP1:Proc1:ValidFlatField_RBV", v); cl.addRow("Flat Valid:", v)
-        pr = QtWidgets.QHBoxLayout()
-        pr.addWidget(_act("Reset", lambda: caput_bg("32idbSP1:Proc1:ResetFilter",1)))
-        pr.addWidget(_act("Save Flat", lambda: caput_bg("32idbSP1:Proc1:SaveFlatField",1)))
-        cl.addRow(pr); p.setLayout(cl); p.setGeometry(700 + GAP + 344, 84 + GAP, 340, 250)
+        self._register_pv_fields(p, [
+            ('btn', "Acquire:",     "cam_acquire",    "32idbSP1:cam1:Acquire",             dict(button_text="Start", button_value=1)),
+            ('led', "Busy:",        "cam_acq_led",    "32idbSP1:cam1:Acquire",             {}),
+            ('sp',  "Exp (s):",     "cam_exp_sp",     "32idbSP1:cam1:AcquireTime",         dict(placeholder="sec")),
+            ('rb',  "Exp RBV:",     "cam_exp_rb",     "32idbSP1:cam1:AcquireTime_RBV",     dict(fmt=".3f")),
+            ('rb',  "Size X:",      "cam_sizex",      "32idbSP1:cam1:SizeX_RBV",           {}),
+            ('rb',  "Size Y:",      "cam_sizey",      "32idbSP1:cam1:SizeY_RBV",           {}),
+            ('sp',  "Num Filter:",  "cam_numfilt",    "32idbSP1:Proc1:NumFilter",          dict(placeholder="N")),
+            ('rb',  "Filtered:",    "cam_filtered",   "32idbSP1:Proc1:NumFiltered_RBV",    {}),
+            ('rb',  "Flat Valid:",  "cam_flat_valid", "32idbSP1:Proc1:ValidFlatField_RBV", {}),
+            ('btn', "Reset filt:",  "cam_reset",      "32idbSP1:Proc1:ResetFilter",        dict(button_text="Reset", button_value=1)),
+            ('btn', "Save flat:",   "cam_save_flat",  "32idbSP1:Proc1:SaveFlatField",      dict(button_text="Save",  button_value=1)),
+        ], cl)
+        p.setLayout(cl); p.setGeometry(700 + GAP + 344, 84 + GAP, 360, 280)
 
         # --- Crop ---
-        p, _ = self._make_panel("Crop", 300, 60, tab_name)
-        crl = QtWidgets.QHBoxLayout(); crl.setContentsMargins(6, 18, 6, 4); crl.setSpacing(4)
-        crop = {}
-        for n in ("L","R","T","B"):
-            e = QtWidgets.QLineEdit(); e.setFixedWidth(45); e.setPlaceholderText(n)
-            crl.addWidget(e); crop[{"L":"Left","R":"Right","T":"Top","B":"Bottom"}[n]] = e
-        def _apply_crop(cr=crop):
-            for nn, ee in cr.items():
-                tt = ee.text().strip()
-                if tt: caput_bg(f"32id:TXMOptics:Crop{nn}", tt)
-            caput_bg("32id:TXMOptics:Crop", 1)
-        crl.addWidget(_act("Apply", _apply_crop)); p.setLayout(crl)
-        p.setGeometry(700 + GAP, iy, 300, 60)
+        p, _ = self._make_panel("Crop", 360, 100, tab_name)
+        crl = QtWidgets.QGridLayout(); crl.setContentsMargins(6, 22, 6, 4); crl.setSpacing(4)
+        crop_rows = [
+            ("crop_L", "L:", "32id:TXMOptics:CropLeft"),
+            ("crop_R", "R:", "32id:TXMOptics:CropRight"),
+            ("crop_T", "T:", "32id:TXMOptics:CropTop"),
+            ("crop_B", "B:", "32id:TXMOptics:CropBottom"),
+        ]
+        slot = self._pv_fields.setdefault(p.key, {})
+        for col, (fid, lbl, pv) in enumerate(crop_rows):
+            crl.addWidget(QtWidgets.QLabel(lbl), 0, col, alignment=QtCore.Qt.AlignCenter)
+            f = PVField('sp', pv, fid, placeholder=lbl[0], parent=p)
+            crl.addWidget(f, 1, col)
+            slot[fid] = f
+        apply_f = PVField('btn', "32id:TXMOptics:Crop", "crop_apply",
+                          button_text="Apply", button_value=1, parent=p)
+        crl.addWidget(apply_f, 1, len(crop_rows))
+        slot["crop_apply"] = apply_f
+        p.setLayout(crl); p.setGeometry(700 + GAP, iy, 360, 100)
 
         # --- Valves ---
-        p, _ = self._make_panel("Valves", 320, 110, tab_name)
-        vl = QtWidgets.QGridLayout(); vl.setContentsMargins(6, 22, 6, 4); vl.setSpacing(3)
-        vl.setColumnMinimumWidth(0, 90)   # enough for "Granite X / Y"
+        p, _ = self._make_panel("Valves", 320, 120, tab_name)
+        vl = QtWidgets.QVBoxLayout(); vl.setContentsMargins(6, 22, 6, 4); vl.setSpacing(3)
         valve_rows = [
             # (field_id,       label,       status PV,             On PV,                  Off PV)
             ("valve_all",       "all",       "32idbSoft:PLC1:C1", "32idbSoft:PLC1:oC21", "32idbSoft:PLC1:oC31"),
@@ -332,15 +447,12 @@ class Win(QtWidgets.QMainWindow):
             ("valve_granite_y", "Granite Y", "32idbSoft:PLC1:C3", "32idbSoft:PLC1:oC23", "32idbSoft:PLC1:oC33"),
         ]
         slot = self._pv_fields.setdefault(p.key, {})
-        for i, (fid, lbl, st, on, off) in enumerate(valve_rows):
-            name_lbl = QtWidgets.QLabel(lbl)
-            name_lbl.setMinimumWidth(90)
-            name_lbl.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Preferred)
-            vl.addWidget(name_lbl, i, 0)
-            vf = ValveField(status_pv=st, on_pv=on, off_pv=off, field_id=fid, parent=p)
-            vl.addWidget(vf, i, 1, 1, 3)
+        for fid, lbl, st, on, off in valve_rows:
+            vf = ValveField(status_pv=st, on_pv=on, off_pv=off, field_id=fid,
+                            label_text=lbl, parent=p)
+            vl.addWidget(vf)
             slot[fid] = vf
-        p.setLayout(vl); p.setGeometry(1004 + GAP, iy, 320, 110)
+        p.setLayout(vl); p.setGeometry(1004 + GAP, iy, 320, 120)
 
         # --- PLC Outputs (analog) ---
         p, _ = self._make_panel("PLC Outputs", 320, 80, tab_name)
@@ -353,18 +465,23 @@ class Win(QtWidgets.QMainWindow):
         p.setLayout(plc_form); p.setGeometry(1004 + GAP, iy + 114, 320, 80)
 
         # --- BPM/EPID ---
-        p, _ = self._make_panel("BPM/EPID", 400, 100, tab_name)
+        p, _ = self._make_panel("BPM/EPID", 440, 110, tab_name)
         epl = QtWidgets.QGridLayout(); epl.setContentsMargins(6, 22, 6, 4); epl.setSpacing(3)
-        epl.addWidget(QtWidgets.QLabel(""), 0, 0); epl.addWidget(QtWidgets.QLabel("Setpoint"), 0, 1)
-        epl.addWidget(QtWidgets.QLabel("Current"), 0, 2); epl.addWidget(QtWidgets.QLabel("FB"), 0, 3)
-        for i, (ax, pv) in enumerate([("Horiz", "32idbSoft:epidH"), ("Vert", "32idbSoft:epidV")], 1):
+        epl.addWidget(QtWidgets.QLabel("Axis"),     0, 0, alignment=QtCore.Qt.AlignCenter)
+        epl.addWidget(QtWidgets.QLabel("Setpoint"), 0, 1, alignment=QtCore.Qt.AlignCenter)
+        epl.addWidget(QtWidgets.QLabel("Current"),  0, 2, alignment=QtCore.Qt.AlignCenter)
+        epl.addWidget(QtWidgets.QLabel("FB"),       0, 3, alignment=QtCore.Qt.AlignCenter)
+        slot = self._pv_fields.setdefault(p.key, {})
+        bpm_rows = [
+            ("bpm_H", "Horiz", "32idbSoft:epidH"),
+            ("bpm_V", "Vert",  "32idbSoft:epidV"),
+        ]
+        for i, (fid, ax, base) in enumerate(bpm_rows, 1):
             epl.addWidget(QtWidgets.QLabel(f"{ax}:"), i, 0)
-            e = QtWidgets.QLineEdit(); e.setFixedWidth(70)
-            e.returnPressed.connect(partial(lambda pp, w: caput_bg(f"{pp}.VAL", w.text()), pv, e)); epl.addWidget(e, i, 1)
-            v = _rb(); self._register_rb(f"{pv}.CVAL", v); epl.addWidget(v, i, 2)
-            fb = QtWidgets.QComboBox(); fb.addItems(["Off", "On"]); fb.setFixedWidth(55)
-            fb.currentIndexChanged.connect(partial(lambda pp, idx: caput_bg(f"{pp}:on", idx), pv)); epl.addWidget(fb, i, 3)
-        p.setLayout(epl); p.setGeometry(700 + GAP, iy + 64, 400, 100)
+            sp = PVField('sp',  f"{base}.VAL",  f"{fid}_sp", parent=p); epl.addWidget(sp, i, 1); slot[f"{fid}_sp"] = sp
+            rb = PVField('rb',  f"{base}.CVAL", f"{fid}_rb", fmt=".3f", parent=p); epl.addWidget(rb, i, 2); slot[f"{fid}_rb"] = rb
+            fb = PVField('cmb', f"{base}:on",   f"{fid}_fb", choices=["Off", "On"], parent=p); epl.addWidget(fb, i, 3); slot[f"{fid}_fb"] = fb
+        p.setLayout(epl); p.setGeometry(700 + GAP, iy + 64, 440, 110)
 
         # --- PV Save/Load ---
         p, _ = self._make_panel("PV Save/Load", 360, 90, tab_name)
@@ -381,17 +498,20 @@ class Win(QtWidgets.QMainWindow):
         # --- Beam Status ---
         p, _ = self._make_panel("Beam Status", 400, 100, tab_name)
         bsl = QtWidgets.QFormLayout(); bsl.setContentsMargins(6, 22, 6, 4); bsl.setSpacing(3)
-        for lbl, pv in [("Desired Mode:", "S:DesiredMode"), ("Actual Mode:", "S:ActualMode"),
-                        ("Inj Period:", "S-INJ:InjectionPeriodCounterM")]:
-            v = _rb(); self._register_rb(pv, v); bsl.addRow(lbl, v)
+        self._register_pv_fields(p, [
+            ('rb', "Desired Mode:", "bs_desired_mode", "S:DesiredMode",                {}),
+            ('rb', "Actual Mode:",  "bs_actual_mode",  "S:ActualMode",                 {}),
+            ('rb', "Inj Period:",   "bs_inj_period",   "S-INJ:InjectionPeriodCounterM", dict(fmt=".2f")),
+        ], bsl)
         p.setLayout(bsl); p.setGeometry(700 + GAP, iy + 168, 400, 100)
 
         # --- OPS Messages ---
-        p, _ = self._make_panel("OPS Messages", 400, 90, tab_name)
-        opl = QtWidgets.QVBoxLayout(); opl.setContentsMargins(6, 20, 6, 4); opl.setSpacing(1)
-        for pv in ["OPS:message1","OPS:message2","OPS:message3","OPS:message4","OPS:message5","OPS:message6"]:
-            v = QtWidgets.QLabel(""); v.setStyleSheet("font:8pt;color:#cc0;"); self._register_rb(pv, v); opl.addWidget(v)
-        p.setLayout(opl); p.setGeometry(700 + GAP, iy + 272, 400, 90)
+        p, _ = self._make_panel("OPS Messages", 400, 130, tab_name)
+        opl = QtWidgets.QFormLayout(); opl.setContentsMargins(6, 20, 6, 4); opl.setSpacing(1)
+        self._register_pv_fields(p, [
+            ('rb', f"msg {i}:", f"ops_msg{i}", f"OPS:message{i}", {}) for i in range(1, 7)
+        ], opl)
+        p.setLayout(opl); p.setGeometry(700 + GAP, iy + 272, 400, 130)
 
         # --- Shaker ---
         p, _ = self._make_panel("Shaker", 360, 360, tab_name)
@@ -586,17 +706,8 @@ class Win(QtWidgets.QMainWindow):
             # Remove motor cards that belong to this panel
             panel_mcs = panel.findChildren(MC)
             self.mcs = [m for m in self.mcs if m not in panel_mcs]
-            # Remove shutter labels
-            panel_labels = set(id(w) for w in panel.findChildren(QtWidgets.QLabel))
-            self.shs = [(pv, lbl) for pv, lbl in self.shs if id(lbl) not in panel_labels]
-            # Remove readback labels
-            for pv in list(self._rb.keys()):
-                self._rb[pv] = [lbl for lbl in self._rb[pv] if id(lbl) not in panel_labels]
-                if not self._rb[pv]: del self._rb[pv]
-            # Remove special labels
-            for pv in list(self._special.keys()):
-                self._special[pv] = [lbl for lbl in self._special[pv] if id(lbl) not in panel_labels]
-                if not self._special[pv]: del self._special[pv]
+            # Remove PVField / ValveField registrations for this panel
+            self._pv_fields.pop(panel_key, None)
             panel.deleteLater()
 
     # ── tab operations ───────────────────────────────────────────────
@@ -800,16 +911,16 @@ class Win(QtWidgets.QMainWindow):
                 "_tab_label_fs": self._tab_label_font_size,
                 "_deleted_panels": self._deleted_panels,
                 "_panels": {}, "_tab_map": {}, "_buttons": {}, "_styles": {},
-                "_title_fonts": {}, "_titles": {}, "_mcs": {}, "_pv_fields": {}}
+                "_title_fonts": {}, "_titles": {}, "_mcs": {}, "_pv_fields": {},
+                "_custom_rows": self._custom_rows}
         # PV-field assignments — save PV per field_id per panel.
-        # Plain PVField → single string PV; ValveField → a dict with 3 PVs.
+        # Widgets that hold >1 PV (ValveField, PVField 'btn_pair') return a dict
+        # from get_pvs_dict(); plain single-PV fields save as a bare string.
         for panel_key, slot in self._pv_fields.items():
             out = {}
             for fid, f in slot.items():
-                if hasattr(f, "get_pvs_dict"):
-                    out[fid] = f.get_pvs_dict()
-                else:
-                    out[fid] = f.pv
+                d = f.get_pvs_dict() if hasattr(f, "get_pvs_dict") else None
+                out[fid] = d if d is not None else getattr(f, "pv", "")
             data["_pv_fields"][panel_key] = out
         for k, p in self._panels.items():
             g = p.geometry()
@@ -1011,6 +1122,17 @@ class Win(QtWidgets.QMainWindow):
                         mc._custom_label = True
                     lay.insertWidget(idx, mc)
                     self.mcs.append(mc)
+            # User-added PV rows (from 'Add PV Row...' in edit mode)
+            saved_custom = data.get("_custom_rows", {})
+            self._custom_rows = {}   # rebuild from the saved config below
+            for panel_key, rows in saved_custom.items():
+                p = self._panels.get(panel_key)
+                if p is None: continue
+                for row_cfg in rows:
+                    try:
+                        self._add_custom_pv_row(p, row_cfg, record=True)
+                    except Exception as ex:
+                        print(f"[LOAD] skipping bad custom row on {panel_key}: {ex}")
             # PV-field assignments (Energy, Valves, etc.) — override defaults
             # per field_id. Accept both the simple string form (plain PVField)
             # and the dict form (ValveField).
@@ -1041,31 +1163,16 @@ class Win(QtWidgets.QMainWindow):
     def _start_monitors(self):
         self._pve = PVEngine(self); self._pve.updated.connect(self._on_pv)
         pvs = set()
-        for spv, _ in self.shs:
-            if spv: pvs.add(spv)
         for m in self.mcs: pvs.update(m.get_pvs())
-        for pv in self._rb: pvs.add(pv)
-        # PVField rows (Energy panel, future extensions)
+        # All non-motor readbacks/setpoints/LEDs/combos come from PVFields now
         for slot in self._pv_fields.values():
             for f in slot.values():
                 pvs.update(f.monitored_pvs())
-        pvs.add("32id:TXMOptics:EnergyBusy"); pvs.add("32idbSP1:cam1:Acquire")
         print(f"[PV] monitoring {len(pvs)} PVs...")
         self._pve.monitor_many(list(pvs))
 
     @QtCore.pyqtSlot(str, str)
     def _on_pv(self, pv_name, value):
-        # Shutters — fan out to all labels
-        for spv, st_lbl in self.shs:
-            if spv == pv_name:
-                if value in ("1", "1.0"):
-                    st_lbl.setText("CLOSED")
-                    st_lbl.setStyleSheet("background:#c0392b;border:1px solid #e74c3c;border-radius:3px;font:bold 9pt;color:#fff;")
-                else:
-                    st_lbl.setText("OPEN")
-                    st_lbl.setStyleSheet("background:#27ae60;border:1px solid #2ecc71;border-radius:3px;font:bold 9pt;color:#fff;")
-                # Don't return — there may be duplicate labels on other tabs
-
         # Motors — update all copies
         for m in self.mcs:
             if pv_name.startswith(m.pv + "."):
@@ -1076,28 +1183,12 @@ class Win(QtWidgets.QMainWindow):
                 enabled = value in ("0", "0.0", "Enable", "Enabled")
                 m.set_enabled(enabled)
 
-        # Readback labels — update all copies
-        labels = self._rb.get(pv_name)
-        if labels:
-            for lbl in labels: lbl.setText(value)
-
-        # PVField rows (Energy panel, etc.)
+        # PVField / ValveField rows — fan out to every field bound to this PV
         for slot in self._pv_fields.values():
             for f in slot.values():
-                if f.pv == pv_name:
+                if getattr(f, "pv", None) == pv_name or \
+                   getattr(f, "status_pv", None) == pv_name:
                     f.update_value(value)
-
-        # Special indicators
-        specials = self._special.get(pv_name)
-        if specials:
-            if pv_name == "32id:TXMOptics:EnergyBusy":
-                ss = "color:#f39c12;font:12pt;" if value in ("1","1.0") else "color:#2ecc71;font:12pt;"
-            elif pv_name == "32idbSP1:cam1:Acquire":
-                ss = "color:#2ecc71;font:12pt;" if value in ("1","1.0") else "color:#555;font:12pt;"
-            else:
-                ss = ""
-            for lbl in specials:
-                if ss: lbl.setStyleSheet(ss)
 
     def closeEvent(self, event):
         self._save_layout()

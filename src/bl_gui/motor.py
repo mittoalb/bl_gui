@@ -151,8 +151,19 @@ class MC(QtWidgets.QFrame):
             menu.addAction("Font Size...", lambda: _change_font_size(self))
             menu.addSeparator()
             menu.addAction("Delete This Motor...", lambda: _delete_widget(self))
+            menu.addSeparator()
+            menu.addAction("Add PV Row here...", self._add_pv_row_to_panel)
         menu.exec_(e.globalPos())
         e.accept()
+
+    def _add_pv_row_to_panel(self):
+        """Locate the enclosing Panel and trigger the row-builder dialog."""
+        w = self.parent()
+        while w is not None and not hasattr(w, "key"):
+            w = w.parent()
+        win = self.window()
+        if w is not None and hasattr(win, "add_pv_row_dialog"):
+            win.add_pv_row_dialog(w)
 
     def mouseDoubleClickEvent(self, e):
         """Double-click anywhere on the card opens the full motor details dialog."""
