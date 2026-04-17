@@ -22,7 +22,10 @@ class Win(QtWidgets.QMainWindow):
     def __init__(self, allow_edit=False):
         super().__init__()
         self._allow_edit = allow_edit
-        self.setWindowTitle("Beamline Optics")
+        # Beamline name = currently loaded layout file's basename (no .json).
+        # This gets updated by main() if the user passes a layout file.
+        self._bl_name = os.path.splitext(os.path.basename(_lay_path()))[0]
+        self.setWindowTitle(self._bl_name)
         self.resize(1800, 1000)
         # All motor cards and shutter/readback labels across ALL tabs
         self.mcs: List[MC] = []
@@ -48,7 +51,9 @@ class Win(QtWidgets.QMainWindow):
 
         # ═══ TOP BAR ═══
         top = QtWidgets.QHBoxLayout(); top.setSpacing(6)
-        tl = QtWidgets.QLabel("Beamline Optics"); tl.setStyleSheet("font:bold 14pt;color:#73dfff;"); top.addWidget(tl)
+        self._title_lbl = QtWidgets.QLabel(self._bl_name)
+        self._title_lbl.setStyleSheet("font:bold 14pt;color:#73dfff;")
+        top.addWidget(self._title_lbl)
         top.addStretch()
         # Edit controls — only created if launched with 'edit' argument
         self._font_label_widget = QtWidgets.QLabel("Font:")
