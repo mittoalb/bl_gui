@@ -7,7 +7,7 @@ _IMG = "/home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/ad
 # (can be committed to git and deployed to other machines).
 # For editable installs (`pip install -e .`) this writes directly into the
 # git repo's src/bl_gui/layout.json.
-_LAY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "layout.json")
+_LAY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "layouts", "bl32id.json")
 
 _SS = """
 QMainWindow { background-color: #000000; }

@@ -9,7 +9,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from .motor import MC, GROUPS, _DEFAULT_TABS, _fs, _rb, _act, set_font_scale
 from .pv import PVEngine, caput_bg
-from .pv_field import PVField
+from .pv_field import PVField, ValveField
 from . import theme as _theme_mod
 from .theme import _IMG, _PANEL_SS, _PANEL_SS_EDIT, _SS
 
@@ -33,6 +33,8 @@ class Win(QtWidgets.QMainWindow):
         self.shs: List[tuple] = []          # (pv_name_or_None, QLabel)
         self._rb: Dict[str, List[QtWidgets.QLabel]] = {}   # pv -> [labels...]
         self._special: Dict[str, List[QtWidgets.QLabel]] = {}  # special indicators
+        # Valve status labels: list of (pv, QLabel) — shows ON/OFF, colour-coded
+        self.vlv: List[tuple] = []
         # PVField rows (Energy/BPM/etc.) indexed by panel_key -> {field_id: PVField}
         self._pv_fields: Dict[str, Dict[str, "PVField"]] = {}
         # panel_key -> Panel  (keys are "PanelName::TabName")
@@ -261,12 +263,12 @@ class Win(QtWidgets.QMainWindow):
         # per-beamline PV reassignment, and the PV is persisted in layout.json.
         energy_fields = [
             ('sp',  "Energy (keV):", "energy_sp",       "32id:TXMOptics:Energy",                   dict(placeholder="keV")),
-            ('rb',  "Bragg RBV:",    "bragg_rbv",       "32ida:BraggERdbkAO",                      {}),
+            ('rb',  "Bragg RBV:",    "bragg_rbv",       "32ida:BraggERdbkAO",                      dict(fmt=".3f")),
             ('sp',  "Detune (eV):",  "energy_detune",   "32id:TXMOptics:EnergyDetune",             {}),
             ('cmb', "Use Calib:",    "energy_usecalib", "32id:TXMOptics:EnergyUseCalibration",     dict(choices=["No", "Yes"])),
             ('sp',  "Cal File 1:",   "energy_calfile1", "32id:TXMOptics:EnergyCalibrationFileOne", dict(placeholder="calib file 1")),
             ('sp',  "Cal File 2:",   "energy_calfile2", "32id:TXMOptics:EnergyCalibrationFileTwo", dict(placeholder="calib file 2")),
-            ('rb',  "Und E (keV):",  "und_energy_rbv",  "S32ID:USID:EnergyM.VAL",                  {}),
+            ('rb',  "Und E (keV):",  "und_energy_rbv",  "S32ID:USID:EnergyM.VAL",                  dict(fmt=".3f")),
             ('btn', "Set Energy:",   "energy_set",      "32id:TXMOptics:EnergySet",                dict(button_text="Go", button_value=1)),
         ]
         self._register_pv_fields(p, energy_fields, el)
@@ -323,20 +325,32 @@ class Win(QtWidgets.QMainWindow):
         p, _ = self._make_panel("Valves", 320, 110, tab_name)
         vl = QtWidgets.QGridLayout(); vl.setContentsMargins(6, 22, 6, 4); vl.setSpacing(3)
         vl.setColumnMinimumWidth(0, 90)   # enough for "Granite X / Y"
-        for i,(lbl,on,off,st) in enumerate([
-            ("all","32idbSoft:PLC1:oC21","32idbSoft:PLC1:oC31","32idbSoft:PLC1:C1"),
-            ("Granite X","32idbSoft:PLC1:oC22","32idbSoft:PLC1:oC32","32idbSoft:PLC1:C2"),
-            ("Granite Y","32idbSoft:PLC1:oC23","32idbSoft:PLC1:oC33","32idbSoft:PLC1:C3")]):
+        valve_rows = [
+            # (field_id,       label,       status PV,             On PV,                  Off PV)
+            ("valve_all",       "all",       "32idbSoft:PLC1:C1", "32idbSoft:PLC1:oC21", "32idbSoft:PLC1:oC31"),
+            ("valve_granite_x", "Granite X", "32idbSoft:PLC1:C2", "32idbSoft:PLC1:oC22", "32idbSoft:PLC1:oC32"),
+            ("valve_granite_y", "Granite Y", "32idbSoft:PLC1:C3", "32idbSoft:PLC1:oC23", "32idbSoft:PLC1:oC33"),
+        ]
+        slot = self._pv_fields.setdefault(p.key, {})
+        for i, (fid, lbl, st, on, off) in enumerate(valve_rows):
             name_lbl = QtWidgets.QLabel(lbl)
             name_lbl.setMinimumWidth(90)
             name_lbl.setSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Preferred)
             vl.addWidget(name_lbl, i, 0)
-            v = _rb(); self._register_rb(st, v); vl.addWidget(v,i,1)
-            bo = QtWidgets.QPushButton("On"); bo.setFixedWidth(30); bo.setStyleSheet("background:#27ae60;color:#fff;font:8pt;padding:1px;")
-            bo.clicked.connect(partial(caput_bg,on,1)); vl.addWidget(bo,i,2)
-            bf = QtWidgets.QPushButton("Off"); bf.setFixedWidth(30); bf.setStyleSheet("background:#c0392b;color:#fff;font:8pt;padding:1px;")
-            bf.clicked.connect(partial(caput_bg,off,1)); vl.addWidget(bf,i,3)
+            vf = ValveField(status_pv=st, on_pv=on, off_pv=off, field_id=fid, parent=p)
+            vl.addWidget(vf, i, 1, 1, 3)
+            slot[fid] = vf
         p.setLayout(vl); p.setGeometry(1004 + GAP, iy, 320, 110)
+
+        # --- PLC Outputs (analog) ---
+        p, _ = self._make_panel("PLC Outputs", 320, 80, tab_name)
+        plc_form = QtWidgets.QFormLayout(); plc_form.setContentsMargins(6, 22, 6, 6); plc_form.setSpacing(4)
+        plc_fields = [
+            ('sp', "AO1 set (V):", "plc_ao1_sp", "32idbSoft:PLC1:ao1", dict(placeholder="0–10")),
+            ('rb', "AO1 RBV:",     "plc_ao1_rb", "32idbSoft:PLC1:ao1", {}),
+        ]
+        self._register_pv_fields(p, plc_fields, plc_form)
+        p.setLayout(plc_form); p.setGeometry(1004 + GAP, iy + 114, 320, 80)
 
         # --- BPM/EPID ---
         p, _ = self._make_panel("BPM/EPID", 400, 100, tab_name)
@@ -353,11 +367,16 @@ class Win(QtWidgets.QMainWindow):
         p.setLayout(epl); p.setGeometry(700 + GAP, iy + 64, 400, 100)
 
         # --- PV Save/Load ---
-        p, _ = self._make_panel("PV Save/Load", 220, 50, tab_name)
-        pvl = QtWidgets.QHBoxLayout(); pvl.setContentsMargins(6, 18, 6, 4)
-        pvl.addWidget(_act("Save", lambda: caput_bg("32id:TXMOptics:SaveAllPVs",1)))
-        pvl.addWidget(_act("Load", lambda: caput_bg("32id:TXMOptics:LoadAllPVs",1)))
-        p.setLayout(pvl); p.setGeometry(1104 + GAP, iy + 64, 220, 50)
+        p, _ = self._make_panel("PV Save/Load", 360, 90, tab_name)
+        pvl = QtWidgets.QFormLayout(); pvl.setContentsMargins(6, 22, 6, 4); pvl.setSpacing(4)
+        self._register_pv_fields(p, [
+            ('sp', "Filename:", "pvsr_file", "32id:TXMOptics:FileAllPVs", dict(placeholder="config file path")),
+        ], pvl)
+        btn_row = QtWidgets.QHBoxLayout(); btn_row.setSpacing(6)
+        btn_row.addWidget(_act("Save", lambda: caput_bg("32id:TXMOptics:SaveAllPVs", 1)))
+        btn_row.addWidget(_act("Load", lambda: caput_bg("32id:TXMOptics:LoadAllPVs", 1)))
+        pvl.addRow(btn_row)
+        p.setLayout(pvl); p.setGeometry(1104 + GAP, iy + 64, 360, 90)
 
         # --- Beam Status ---
         p, _ = self._make_panel("Beam Status", 400, 100, tab_name)
@@ -375,19 +394,30 @@ class Win(QtWidgets.QMainWindow):
         p.setLayout(opl); p.setGeometry(700 + GAP, iy + 272, 400, 90)
 
         # --- Shaker ---
-        p, _ = self._make_panel("Shaker", 300, 200, tab_name)
-        skl = QtWidgets.QGridLayout(); skl.setContentsMargins(6, 22, 6, 4); skl.setSpacing(3)
-        for i, (lbl, pv) in enumerate([
-            ("Freq:", "32idbShaker:shaker:frequency.VAL"), ("Time/Pt:", "32idbShaker:shaker:timePerPoint.VAL"),
-            ("Num Pts:", "32idbShaker:shaker:numPoints.VAL"), ("Amp:", "32idbShaker:shaker:ampMult.VAL"),
-            ("Offset:", "32idbShaker:shaker:ampOffset.VAL"), ("Phase:", "32idbShaker:shaker:phaseShift.VAL")]):
-            skl.addWidget(QtWidgets.QLabel(lbl), i, 0)
-            e = QtWidgets.QLineEdit(); e.setFixedWidth(70)
-            e.returnPressed.connect(partial(lambda pp, w: caput_bg(pp, w.text()), pv, e)); skl.addWidget(e, i, 1)
-        shk_run = QtWidgets.QComboBox(); shk_run.addItems(["Off", "On"])
-        shk_run.currentIndexChanged.connect(lambda i: caput_bg("32idbShaker:shaker:run", i))
-        skl.addWidget(QtWidgets.QLabel("Run:"), 6, 0); skl.addWidget(shk_run, 6, 1)
-        p.setLayout(skl); p.setGeometry(1104 + GAP, iy + 168, 300, 200)
+        p, _ = self._make_panel("Shaker", 360, 360, tab_name)
+        skl = QtWidgets.QFormLayout(); skl.setContentsMargins(6, 22, 6, 4); skl.setSpacing(4)
+        shaker_fields = [
+            # Shared
+            ('sp',  "Frequency:",      "shaker_freq",    "32idbShaker:shaker:frequency.VAL",    dict(placeholder="Hz")),
+            ('sp',  "Time / Point:",   "shaker_time",    "32idbShaker:shaker:timePerPoint.VAL", dict(placeholder="s")),
+            ('sp',  "Num Points:",     "shaker_npts",    "32idbShaker:shaker:numPoints.VAL",    {}),
+            # Function type — mbbo (Circle / Lissajous). Extra live states arrive
+            # from the PV itself get added dynamically by the combo.
+            ('cmb', "Function:",       "shaker_menu",    "32idbShaker:shakerMenu",              dict(choices=["Circle", "Lissajous"])),
+            # Run/Stop as explicit action buttons (shared PV, different values)
+            ('btn', "Run:",            "shaker_run",     "32idbShaker:shaker:run",              dict(button_text="Run",  button_value=1)),
+            ('btn', "Stop:",           "shaker_stop",    "32idbShaker:shaker:run",              dict(button_text="Stop", button_value=0)),
+            # Channel A
+            ('sp',  "A: Amp Mult:",    "shaker_A_amp",   "32idbShaker:shaker:A:ampMult.VAL",    {}),
+            ('sp',  "A: Amp Offset:",  "shaker_A_off",   "32idbShaker:shaker:A:ampOffset.VAL",  {}),
+            ('sp',  "A: Phase Shift:", "shaker_A_phase", "32idbShaker:shaker:A:phaseShift.VAL", {}),
+            # Channel B
+            ('sp',  "B: Amp Mult:",    "shaker_B_amp",   "32idbShaker:shaker:B:ampMult",        {}),
+            ('sp',  "B: Amp Offset:",  "shaker_B_off",   "32idbShaker:shaker:B:ampOffset.VAL",  {}),
+            ('sp',  "B: Freq Mult:",   "shaker_B_fmult", "32idbShaker:shaker:B:freqMult.VAL",   {}),
+        ]
+        self._register_pv_fields(p, shaker_fields, skl)
+        p.setLayout(skl); p.setGeometry(1104 + GAP, iy + 168, 360, 400)
 
         # --- Launchers ---
         p, _ = self._make_panel("Launchers", 500, 110, tab_name)
@@ -771,9 +801,16 @@ class Win(QtWidgets.QMainWindow):
                 "_deleted_panels": self._deleted_panels,
                 "_panels": {}, "_tab_map": {}, "_buttons": {}, "_styles": {},
                 "_title_fonts": {}, "_titles": {}, "_mcs": {}, "_pv_fields": {}}
-        # PV-field assignments (Energy panel etc.) — save PV per field_id per panel
+        # PV-field assignments — save PV per field_id per panel.
+        # Plain PVField → single string PV; ValveField → a dict with 3 PVs.
         for panel_key, slot in self._pv_fields.items():
-            data["_pv_fields"][panel_key] = {fid: f.pv for fid, f in slot.items()}
+            out = {}
+            for fid, f in slot.items():
+                if hasattr(f, "get_pvs_dict"):
+                    out[fid] = f.get_pvs_dict()
+                else:
+                    out[fid] = f.pv
+            data["_pv_fields"][panel_key] = out
         for k, p in self._panels.items():
             g = p.geometry()
             data["_panels"][k] = [g.x(), g.y(), g.width(), g.height()]
@@ -974,16 +1011,22 @@ class Win(QtWidgets.QMainWindow):
                         mc._custom_label = True
                     lay.insertWidget(idx, mc)
                     self.mcs.append(mc)
-            # PV-field assignments (Energy, etc.) — override defaults per field_id
+            # PV-field assignments (Energy, Valves, etc.) — override defaults
+            # per field_id. Accept both the simple string form (plain PVField)
+            # and the dict form (ValveField).
             pv_fields_saved = data.get("_pv_fields", {})
             for panel_key, fields in pv_fields_saved.items():
                 slot = self._pv_fields.get(panel_key)
                 if not slot:
                     continue
-                for fid, saved_pv in fields.items():
+                for fid, saved in fields.items():
                     f = slot.get(fid)
-                    if f is not None and isinstance(saved_pv, str):
-                        f.pv = saved_pv.strip()
+                    if f is None:
+                        continue
+                    if isinstance(saved, str) and hasattr(f, "pv"):
+                        f.pv = saved.strip()
+                    elif isinstance(saved, dict) and hasattr(f, "set_pvs_dict"):
+                        f.set_pvs_dict(saved)
             mc_total = sum(len(v) for v in mcs_saved.values())
             print(f"[LOAD] read {lay_path}  panels={len(data.get('_panels', {}))}  "
                   f"mcs={mc_total}  titles={len(data.get('_titles', {}))}  "

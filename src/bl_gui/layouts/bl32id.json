@@ -6,7 +6,7 @@
   ],
   "_tab_sizes": {
     "User Mode": [
-      1183,
+      1178,
       1305
     ],
     "Expert Mode": [
@@ -53,38 +53,38 @@
       104
     ],
     "Zone Plate::User Mode": [
-      640,
-      313,
+      641,
+      396,
       133,
       190
     ],
     "Bertrand Lens::User Mode": [
-      3,
-      312,
+      2,
+      396,
       248,
       190
     ],
     "Queensgate::User Mode": [
-      570,
-      607,
+      572,
+      656,
       248,
       190
     ],
     "Ensemble::User Mode": [
       254,
-      312,
+      396,
       132,
       190
     ],
     "In / Out::User Mode": [
       3,
-      507,
-      800,
+      590,
+      817,
       63
     ],
     "Energy::User Mode": [
-      821,
-      518,
+      434,
+      113,
       340,
       280
     ],
@@ -106,6 +106,12 @@
       320,
       110
     ],
+    "PLC Outputs::User Mode": [
+      2,
+      310,
+      231,
+      83
+    ],
     "PV Save/Load::User Mode": [
       572,
       1111,
@@ -125,34 +131,34 @@
       101
     ],
     "Shaker::User Mode": [
-      505,
-      111,
-      300,
-      200
+      836,
+      518,
+      325,
+      328
     ],
     "Launchers::User Mode": [
-      569,
-      929,
+      572,
+      979,
       591,
       125
     ],
     "Displays::User Mode": [
-      569,
-      800,
+      572,
+      850,
       592,
       126
     ],
     "Schematic::User Mode": [
       3,
-      570,
-      563,
-      633
+      656,
+      565,
+      543
     ],
     "ALL STOP::User Mode": [
-      999,
-      1071,
+      1000,
+      1106,
       161,
-      130
+      95
     ],
     "Shutters::Expert Mode": [
       3,
@@ -280,6 +286,12 @@
       260,
       110
     ],
+    "PLC Outputs::Expert Mode": [
+      895,
+      93,
+      191,
+      79
+    ],
     "BPM/EPID::Expert Mode": [
       1070,
       1080,
@@ -287,10 +299,10 @@
       100
     ],
     "PV Save/Load::Expert Mode": [
-      863,
-      169,
-      261,
-      79
+      860,
+      179,
+      264,
+      67
     ],
     "Beam Status::Expert Mode": [
       3,
@@ -329,8 +341,8 @@
       111
     ],
     "Bertrand Lens#3::User Mode": [
-      389,
-      312,
+      390,
+      396,
       248,
       190
     ],
@@ -360,6 +372,7 @@
     "Camera::User Mode": "User Mode",
     "Crop::User Mode": "User Mode",
     "Valves::User Mode": "User Mode",
+    "PLC Outputs::User Mode": "User Mode",
     "PV Save/Load::User Mode": "User Mode",
     "Beam Status::User Mode": "User Mode",
     "OPS Messages::User Mode": "User Mode",
@@ -389,6 +402,7 @@
     "Camera::Expert Mode": "Expert Mode",
     "Crop::Expert Mode": "Expert Mode",
     "Valves::Expert Mode": "Expert Mode",
+    "PLC Outputs::Expert Mode": "Expert Mode",
     "BPM/EPID::Expert Mode": "Expert Mode",
     "PV Save/Load::Expert Mode": "Expert Mode",
     "Beam Status::Expert Mode": "Expert Mode",
@@ -428,8 +442,8 @@
       "bg": "#c0392b",
       "fg": "#fff",
       "fs": 12,
-      "w": 130,
-      "h": 76
+      "w": 150,
+      "h": 60
     },
     "In / Out::Expert Mode|||PyStream": {
       "bg": "#ae5207",
@@ -452,6 +466,7 @@
     "Camera::User Mode": 9,
     "Crop::User Mode": 9,
     "Valves::User Mode": 9,
+    "PLC Outputs::User Mode": 9,
     "PV Save/Load::User Mode": 9,
     "Beam Status::User Mode": 9,
     "OPS Messages::User Mode": 9,
@@ -481,6 +496,7 @@
     "Camera::Expert Mode": 9,
     "Crop::Expert Mode": 9,
     "Valves::Expert Mode": 9,
+    "PLC Outputs::Expert Mode": 9,
     "BPM/EPID::Expert Mode": 9,
     "PV Save/Load::Expert Mode": 9,
     "Beam Status::Expert Mode": 9,
@@ -506,6 +522,7 @@
     "Camera::User Mode": "Camera",
     "Crop::User Mode": "Crop",
     "Valves::User Mode": "Valves",
+    "PLC Outputs::User Mode": "He Box",
     "PV Save/Load::User Mode": "PV Save/Load",
     "Beam Status::User Mode": "Beam Status",
     "OPS Messages::User Mode": "OPS Messages",
@@ -535,6 +552,7 @@
     "Camera::Expert Mode": "Camera",
     "Crop::Expert Mode": "Crop",
     "Valves::Expert Mode": "Valves",
+    "PLC Outputs::Expert Mode": "He Box",
     "BPM/EPID::Expert Mode": "BPM/EPID",
     "PV Save/Load::Expert Mode": "PV Save/Load",
     "Beam Status::Expert Mode": "Beam Status",
@@ -810,6 +828,47 @@
       "und_energy_rbv": "S32ID:USID:EnergyM.VAL",
       "energy_set": "32id:TXMOptics:EnergySet"
     },
+    "Valves::User Mode": {
+      "valve_all": {
+        "kind": "valve",
+        "status": "32idbSoft:PLC1:C1",
+        "on": "32idbSoft:PLC1:oC21",
+        "off": "32idbSoft:PLC1:oC31"
+      },
+      "valve_granite_x": {
+        "kind": "valve",
+        "status": "32idbSoft:PLC1:C2",
+        "on": "32idbSoft:PLC1:oC22",
+        "off": "32idbSoft:PLC1:oC32"
+      },
+      "valve_granite_y": {
+        "kind": "valve",
+        "status": "32idbSoft:PLC1:C3",
+        "on": "32idbSoft:PLC1:oC23",
+        "off": "32idbSoft:PLC1:oC33"
+      }
+    },
+    "PLC Outputs::User Mode": {
+      "plc_ao1_sp": "32idbSoft:PLC1:ao1",
+      "plc_ao1_rb": "32idbSoft:PLC1:ao1"
+    },
+    "PV Save/Load::User Mode": {
+      "pvsr_file": "32id:TXMOptics:FileAllPVs"
+    },
+    "Shaker::User Mode": {
+      "shaker_freq": "32idbShaker:shaker:frequency.VAL",
+      "shaker_time": "32idbShaker:shaker:timePerPoint.VAL",
+      "shaker_npts": "32idbShaker:shaker:numPoints.VAL",
+      "shaker_menu": "32idbShaker:shakerMenu",
+      "shaker_run": "32idbShaker:shaker:run",
+      "shaker_stop": "32idbShaker:shaker:run",
+      "shaker_A_amp": "32idbShaker:shaker:A:ampMult.VAL",
+      "shaker_A_off": "32idbShaker:shaker:A:ampOffset.VAL",
+      "shaker_A_phase": "32idbShaker:shaker:A:phaseShift.VAL",
+      "shaker_B_amp": "32idbShaker:shaker:B:ampMult",
+      "shaker_B_off": "32idbShaker:shaker:B:ampOffset.VAL",
+      "shaker_B_fmult": "32idbShaker:shaker:B:freqMult.VAL"
+    },
     "Energy::Expert Mode": {
       "energy_sp": "32id:TXMOptics:Energy",
       "bragg_rbv": "32ida:BraggERdbkAO",
@@ -819,6 +878,47 @@
       "energy_calfile2": "32id:TXMOptics:EnergyCalibrationFileTwo",
       "und_energy_rbv": "S32ID:USID:EnergyM.VAL",
       "energy_set": "32id:TXMOptics:EnergySet"
+    },
+    "Valves::Expert Mode": {
+      "valve_all": {
+        "kind": "valve",
+        "status": "32idbSoft:PLC1:C1",
+        "on": "32idbSoft:PLC1:oC21",
+        "off": "32idbSoft:PLC1:oC31"
+      },
+      "valve_granite_x": {
+        "kind": "valve",
+        "status": "32idbSoft:PLC1:C2",
+        "on": "32idbSoft:PLC1:oC22",
+        "off": "32idbSoft:PLC1:oC32"
+      },
+      "valve_granite_y": {
+        "kind": "valve",
+        "status": "32idbSoft:PLC1:C3",
+        "on": "32idbSoft:PLC1:oC23",
+        "off": "32idbSoft:PLC1:oC33"
+      }
+    },
+    "PLC Outputs::Expert Mode": {
+      "plc_ao1_sp": "32idbSoft:PLC1:ao1",
+      "plc_ao1_rb": "32idbSoft:PLC1:ao1"
+    },
+    "PV Save/Load::Expert Mode": {
+      "pvsr_file": "32id:TXMOptics:FileAllPVs"
+    },
+    "Shaker::Expert Mode": {
+      "shaker_freq": "32idbShaker:shaker:frequency.VAL",
+      "shaker_time": "32idbShaker:shaker:timePerPoint.VAL",
+      "shaker_npts": "32idbShaker:shaker:numPoints.VAL",
+      "shaker_menu": "32idbShaker:shakerMenu",
+      "shaker_run": "32idbShaker:shaker:run",
+      "shaker_stop": "32idbShaker:shaker:run",
+      "shaker_A_amp": "32idbShaker:shaker:A:ampMult.VAL",
+      "shaker_A_off": "32idbShaker:shaker:A:ampOffset.VAL",
+      "shaker_A_phase": "32idbShaker:shaker:A:phaseShift.VAL",
+      "shaker_B_amp": "32idbShaker:shaker:B:ampMult",
+      "shaker_B_off": "32idbShaker:shaker:B:ampOffset.VAL",
+      "shaker_B_fmult": "32idbShaker:shaker:B:freqMult.VAL"
     }
   }
 }
