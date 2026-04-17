@@ -9,6 +9,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from .motor import MC, GROUPS, _DEFAULT_TABS, _fs, _rb, _act, set_font_scale
 from .pv import PVEngine, caput_bg
+from .pv_field import PVField
 from . import theme as _theme_mod
 from .theme import _IMG, _PANEL_SS, _PANEL_SS_EDIT, _SS
 
@@ -32,6 +33,8 @@ class Win(QtWidgets.QMainWindow):
         self.shs: List[tuple] = []          # (pv_name_or_None, QLabel)
         self._rb: Dict[str, List[QtWidgets.QLabel]] = {}   # pv -> [labels...]
         self._special: Dict[str, List[QtWidgets.QLabel]] = {}  # special indicators
+        # PVField rows (Energy/BPM/etc.) indexed by panel_key -> {field_id: PVField}
+        self._pv_fields: Dict[str, Dict[str, "PVField"]] = {}
         # panel_key -> Panel  (keys are "PanelName::TabName")
         self._panels: Dict[str, Panel] = {}
         self._tab_canvases: Dict[str, QtWidgets.QWidget] = {}
@@ -68,25 +71,22 @@ class Win(QtWidgets.QMainWindow):
         self.font_lbl = QtWidgets.QLabel("100%"); self.font_lbl.setFixedWidth(36); self.font_lbl.setStyleSheet("font:8pt;"); top.addWidget(self.font_lbl)
         top.addSpacing(6)
 
-        self.edit_btn = QtWidgets.QPushButton("Edit Layout"); self.edit_btn.setFixedSize(100, 28); self.edit_btn.setCheckable(True)
-        self.edit_btn.setStyleSheet("QPushButton{background:#2d2d2d;color:#e0e0e0;font:9pt;border:1px solid #404040;border-radius:3px;}"
-                                    "QPushButton:checked{background:#f39c12;color:#000;font:bold 9pt;}")
-        self.edit_btn.toggled.connect(self._toggle_edit); top.addWidget(self.edit_btn)
-
+        # Edit-mode is now chosen at launch (`bl_gui edit`) — no in-GUI toggle.
         self.add_panel_btn = QtWidgets.QPushButton("+ Panel"); self.add_panel_btn.setFixedSize(70, 28)
         self.add_panel_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;border:1px solid #404040;border-radius:3px;")
-        self.add_panel_btn.clicked.connect(self._add_new_panel); self.add_panel_btn.setVisible(False); top.addWidget(self.add_panel_btn)
+        self.add_panel_btn.clicked.connect(self._add_new_panel)
+        top.addWidget(self.add_panel_btn)
 
         self.add_tab_btn = QtWidgets.QPushButton("+ Tab"); self.add_tab_btn.setFixedSize(60, 28)
         self.add_tab_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;border:1px solid #404040;border-radius:3px;")
-        self.add_tab_btn.clicked.connect(self._add_new_tab); self.add_tab_btn.setVisible(False); top.addWidget(self.add_tab_btn)
+        self.add_tab_btn.clicked.connect(self._add_new_tab)
+        top.addWidget(self.add_tab_btn)
 
-        # Hide all edit controls unless edit mode allowed
+        # Hide all edit controls unless edit mode was requested at launch
         if not self._allow_edit:
             self._font_label_widget.setVisible(False)
             self.font_slider.setVisible(False)
             self.font_lbl.setVisible(False)
-            self.edit_btn.setVisible(False)
             self.add_panel_btn.setVisible(False)
             self.add_tab_btn.setVisible(False)
 
@@ -116,6 +116,9 @@ class Win(QtWidgets.QMainWindow):
             if size:
                 self.resize(size[0], size[1])
             self._on_tab_changed(self.tab_widget.currentIndex())
+        # If launched with `bl_gui edit`, enter edit mode immediately.
+        if self._allow_edit:
+            QtCore.QTimer.singleShot(0, lambda: self._toggle_edit(True))
         QtCore.QTimer.singleShot(300, self._start_monitors)
 
     # ── helpers ───────────────────────────────────────────────────────
@@ -131,6 +134,25 @@ class Win(QtWidgets.QMainWindow):
     def _register_rb(self, pv, label):
         """Register a readback label for a PV (supports multiple labels per PV)."""
         self._rb.setdefault(pv, []).append(label)
+
+    def _register_pv_fields(self, panel, field_defs, form_layout):
+        """Build PVField rows, wire into form_layout, and register them with the window
+        so save/load + PV monitoring work.
+
+        field_defs: list of (kind, row_label, field_id, default_pv, options_dict)
+        """
+        panel_key = panel.key
+        slot = self._pv_fields.setdefault(panel_key, {})
+        for kind, row_label, field_id, default_pv, opts in field_defs:
+            f = PVField(kind=kind, pv=default_pv, field_id=field_id, parent=panel, **opts)
+            form_layout.addRow(row_label, f)
+            slot[field_id] = f
+
+    def _pv_field_rebind(self, field, old_pv, new_pv):
+        """Called by PVField._edit_pv_dialog after the user changes a PV.
+        Subscribes the new PV on the live engine."""
+        if hasattr(self, '_pve') and new_pv:
+            self._pve.monitor_many([new_pv])
 
     def _create_tab(self, name):
         canvas = QtWidgets.QWidget()
@@ -235,30 +257,25 @@ class Win(QtWidgets.QMainWindow):
         # --- Energy ---
         p, _ = self._make_panel("Energy", 340, 280, tab_name)
         el = QtWidgets.QFormLayout(); el.setContentsMargins(6, 22, 6, 6); el.setSpacing(4)
-        e_sp = QtWidgets.QLineEdit(); e_sp.setPlaceholderText("keV"); el.addRow("Energy (keV):", e_sp)
-        e_rbv = _rb(); self._register_rb("32ida:BraggERdbkAO", e_rbv); el.addRow("Bragg RBV:", e_rbv)
-        e_det = QtWidgets.QLineEdit(); el.addRow("Detune (eV):", e_det)
-        e_cal = QtWidgets.QComboBox(); e_cal.addItems(["No", "Yes"])
-        e_cal.currentIndexChanged.connect(lambda i: caput_bg("32id:TXMOptics:EnergyUseCalibration", i))
-        el.addRow("Use Calib:", e_cal)
-        e_calfile1 = QtWidgets.QLineEdit(); e_calfile1.setPlaceholderText("calib file 1")
-        e_calfile1.returnPressed.connect(lambda: caput_bg("32id:TXMOptics:EnergyCalibrationFileOne", e_calfile1.text()))
-        el.addRow("Cal File 1:", e_calfile1)
-        e_calfile2 = QtWidgets.QLineEdit(); e_calfile2.setPlaceholderText("calib file 2")
-        e_calfile2.returnPressed.connect(lambda: caput_bg("32id:TXMOptics:EnergyCalibrationFileTwo", e_calfile2.text()))
-        el.addRow("Cal File 2:", e_calfile2)
-        v = _rb(); self._register_rb("S32ID:USID:EnergyM.VAL", v); el.addRow("Und E (keV):", v)
+        # Every field is a PVField with a stable id → right-click allows
+        # per-beamline PV reassignment, and the PV is persisted in layout.json.
+        energy_fields = [
+            ('sp',  "Energy (keV):", "energy_sp",       "32id:TXMOptics:Energy",                   dict(placeholder="keV")),
+            ('rb',  "Bragg RBV:",    "bragg_rbv",       "32ida:BraggERdbkAO",                      {}),
+            ('sp',  "Detune (eV):",  "energy_detune",   "32id:TXMOptics:EnergyDetune",             {}),
+            ('cmb', "Use Calib:",    "energy_usecalib", "32id:TXMOptics:EnergyUseCalibration",     dict(choices=["No", "Yes"])),
+            ('sp',  "Cal File 1:",   "energy_calfile1", "32id:TXMOptics:EnergyCalibrationFileOne", dict(placeholder="calib file 1")),
+            ('sp',  "Cal File 2:",   "energy_calfile2", "32id:TXMOptics:EnergyCalibrationFileTwo", dict(placeholder="calib file 2")),
+            ('rb',  "Und E (keV):",  "und_energy_rbv",  "S32ID:USID:EnergyM.VAL",                  {}),
+            ('btn', "Set Energy:",   "energy_set",      "32id:TXMOptics:EnergySet",                dict(button_text="Go", button_value=1)),
+        ]
+        self._register_pv_fields(p, energy_fields, el)
+
+        # Busy indicator (special — coloured dot)
         e_busy = QtWidgets.QLabel("\u25CF"); e_busy.setStyleSheet("color:#555;font:12pt;")
         self._special.setdefault("32id:TXMOptics:EnergyBusy", []).append(e_busy)
         el.addRow("Busy:", e_busy)
-        def _set_energy(sp=e_sp, dt=e_det):
-            vv = sp.text().strip()
-            if not vv: return
-            caput_bg("32id:TXMOptics:Energy", vv)
-            dd = dt.text().strip()
-            if dd: caput_bg("32id:TXMOptics:EnergyDetune", dd)
-            caput_bg("32id:TXMOptics:EnergySet", 1)
-        el.addRow(_act("Set Energy", _set_energy))
+
         p.setLayout(el); p.setGeometry(700 + GAP, 84 + GAP, 340, 280)
 
         # --- Camera ---
@@ -572,10 +589,11 @@ class Win(QtWidgets.QMainWindow):
         # Edit controls only visible in edit-allowed mode on non-User tabs
         if self._allow_edit:
             is_user = (tab_name == "User Mode")
-            self.edit_btn.setVisible(not is_user)
             self.font_slider.setVisible(not is_user)
             self.font_lbl.setVisible(not is_user)
             self._font_label_widget.setVisible(not is_user)
+            self.add_panel_btn.setVisible(not is_user)
+            self.add_tab_btn.setVisible(not is_user)
 
     def _tab_context_menu(self, pos):
         if not self._allow_edit or not self._edit_mode: return
@@ -724,11 +742,16 @@ class Win(QtWidgets.QMainWindow):
                 if not isinstance(w, CfgButton): w.setEnabled(not on)
             for w in p.findChildren(QtWidgets.QLineEdit): w.setEnabled(not on)
             for w in p.findChildren(QtWidgets.QComboBox): w.setEnabled(not on)
+        # Enable "Edit PV..." right-click on each PVField while in edit mode
+        for slot in self._pv_fields.values():
+            for f in slot.values():
+                f.set_edit_mode(on)
         self.add_panel_btn.setVisible(on); self.add_tab_btn.setVisible(on)
         if on:
             self.statusBar().showMessage(
-                "EDIT MODE: drag/resize panels, right-click to add buttons, duplicate, delete, or move panels between tabs. "
-                "Right-click tab bar to rename/delete tabs.")
+                "EDIT MODE — drag/resize panels, right-click panels/motors/PV fields to edit. "
+                "Layout is saved automatically on window close."
+            )
             self.statusBar().setStyleSheet("background:#f39c12;color:#000;font:bold 9pt;")
         else:
             self._save_layout()
@@ -747,7 +770,10 @@ class Win(QtWidgets.QMainWindow):
                 "_tab_label_fs": self._tab_label_font_size,
                 "_deleted_panels": self._deleted_panels,
                 "_panels": {}, "_tab_map": {}, "_buttons": {}, "_styles": {},
-                "_title_fonts": {}, "_titles": {}, "_mcs": {}}
+                "_title_fonts": {}, "_titles": {}, "_mcs": {}, "_pv_fields": {}}
+        # PV-field assignments (Energy panel etc.) — save PV per field_id per panel
+        for panel_key, slot in self._pv_fields.items():
+            data["_pv_fields"][panel_key] = {fid: f.pv for fid, f in slot.items()}
         for k, p in self._panels.items():
             g = p.geometry()
             data["_panels"][k] = [g.x(), g.y(), g.width(), g.height()]
@@ -948,6 +974,16 @@ class Win(QtWidgets.QMainWindow):
                         mc._custom_label = True
                     lay.insertWidget(idx, mc)
                     self.mcs.append(mc)
+            # PV-field assignments (Energy, etc.) — override defaults per field_id
+            pv_fields_saved = data.get("_pv_fields", {})
+            for panel_key, fields in pv_fields_saved.items():
+                slot = self._pv_fields.get(panel_key)
+                if not slot:
+                    continue
+                for fid, saved_pv in fields.items():
+                    f = slot.get(fid)
+                    if f is not None and isinstance(saved_pv, str):
+                        f.pv = saved_pv.strip()
             mc_total = sum(len(v) for v in mcs_saved.values())
             print(f"[LOAD] read {lay_path}  panels={len(data.get('_panels', {}))}  "
                   f"mcs={mc_total}  titles={len(data.get('_titles', {}))}  "
@@ -966,6 +1002,10 @@ class Win(QtWidgets.QMainWindow):
             if spv: pvs.add(spv)
         for m in self.mcs: pvs.update(m.get_pvs())
         for pv in self._rb: pvs.add(pv)
+        # PVField rows (Energy panel, future extensions)
+        for slot in self._pv_fields.values():
+            for f in slot.values():
+                pvs.update(f.monitored_pvs())
         pvs.add("32id:TXMOptics:EnergyBusy"); pvs.add("32idbSP1:cam1:Acquire")
         print(f"[PV] monitoring {len(pvs)} PVs...")
         self._pve.monitor_many(list(pvs))
@@ -997,6 +1037,12 @@ class Win(QtWidgets.QMainWindow):
         labels = self._rb.get(pv_name)
         if labels:
             for lbl in labels: lbl.setText(value)
+
+        # PVField rows (Energy panel, etc.)
+        for slot in self._pv_fields.values():
+            for f in slot.values():
+                if f.pv == pv_name:
+                    f.update_value(value)
 
         # Special indicators
         specials = self._special.get(pv_name)

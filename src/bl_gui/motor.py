@@ -137,21 +137,33 @@ class MC(QtWidgets.QFrame):
         self._panel_edit_mode = bool(on)
 
     def contextMenuEvent(self, e):
-        """Show a per-motor edit menu when the owning panel is in edit mode."""
-        if not self._panel_edit_mode:
-            return super().contextMenuEvent(e)
-        # Imported lazily to avoid a circular import between motor <-> widgets.
-        from .widgets import _edit_widget, _duplicate_widget, _change_font_size, _delete_widget
+        """Right-click menu. 'Motor Details...' is always available (view + edit
+        modes); the edit-only entries only show when the panel is in edit mode."""
         menu = QtWidgets.QMenu(self)
         menu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;}"
                            "QMenu::item:selected{background:#1e5a8e;}")
-        menu.addAction("Edit This Motor...", lambda: _edit_widget(self))
-        menu.addAction("Duplicate This Motor", lambda: _duplicate_widget(self, None))
-        menu.addAction("Font Size...", lambda: _change_font_size(self))
-        menu.addSeparator()
-        menu.addAction("Delete This Motor...", lambda: _delete_widget(self))
+        menu.addAction("Motor Details...", self._open_debug)
+        if self._panel_edit_mode:
+            from .widgets import _edit_widget, _duplicate_widget, _change_font_size, _delete_widget
+            menu.addSeparator()
+            menu.addAction("Edit This Motor...", lambda: _edit_widget(self))
+            menu.addAction("Duplicate This Motor", lambda: _duplicate_widget(self, None))
+            menu.addAction("Font Size...", lambda: _change_font_size(self))
+            menu.addSeparator()
+            menu.addAction("Delete This Motor...", lambda: _delete_widget(self))
         menu.exec_(e.globalPos())
         e.accept()
+
+    def mouseDoubleClickEvent(self, e):
+        """Double-click anywhere on the card opens the full motor details dialog."""
+        self._open_debug()
+        super().mouseDoubleClickEvent(e)
+
+    def _open_debug(self):
+        from .motor_debug import MotorDetailsDialog
+        dlg = MotorDetailsDialog(self, parent=self)
+        dlg.setModal(False)
+        dlg.show()
 
 
 # ── Motor groups ──────────────────────────────────────────────────────────
