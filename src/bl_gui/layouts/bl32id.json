@@ -1,0 +1,781 @@
+{
+  "_font_scale": 71,
+  "_tabs": [
+    "User Mode",
+    "Expert Mode"
+  ],
+  "_tab_sizes": {
+    "User Mode": [
+      1183,
+      1305
+    ],
+    "Expert Mode": [
+      1488,
+      1290
+    ]
+  },
+  "_tab_label_fs": 8,
+  "_deleted_panels": [
+    "Nano Focus::User Mode",
+    "Beamstop::User Mode",
+    "Pinhole::User Mode",
+    "Condenser::User Mode",
+    "Phase Ring::User Mode",
+    "BPM/EPID::User Mode",
+    "Diffuser::User Mode",
+    "Detector::User Mode",
+    "Other::User Mode",
+    "Furnace::User Mode",
+    "Schematic::Expert Mode",
+    "Sample::User Mode",
+    "Nano Focus#1::Expert Mode",
+    "Nano Focus#2::Expert Mode",
+    "Nano Focus::Expert Mode",
+    "Bertrand Lens#1::User Mode"
+  ],
+  "_panels": {
+    "Shutters::User Mode": [
+      3,
+      111,
+      380,
+      80
+    ],
+    "Beam::User Mode": [
+      811,
+      5,
+      350,
+      80
+    ],
+    "Presets::User Mode": [
+      810,
+      91,
+      351,
+      104
+    ],
+    "Zone Plate::User Mode": [
+      640,
+      313,
+      133,
+      190
+    ],
+    "Bertrand Lens::User Mode": [
+      3,
+      312,
+      248,
+      190
+    ],
+    "Queensgate::User Mode": [
+      570,
+      607,
+      248,
+      190
+    ],
+    "Ensemble::User Mode": [
+      254,
+      312,
+      132,
+      190
+    ],
+    "In / Out::User Mode": [
+      3,
+      507,
+      800,
+      63
+    ],
+    "Energy::User Mode": [
+      821,
+      518,
+      340,
+      280
+    ],
+    "Camera::User Mode": [
+      811,
+      202,
+      350,
+      246
+    ],
+    "Crop::User Mode": [
+      811,
+      451,
+      350,
+      63
+    ],
+    "Valves::User Mode": [
+      3,
+      196,
+      320,
+      110
+    ],
+    "PV Save/Load::User Mode": [
+      572,
+      1111,
+      372,
+      88
+    ],
+    "Beam Status::User Mode": [
+      3,
+      4,
+      400,
+      100
+    ],
+    "OPS Messages::User Mode": [
+      408,
+      4,
+      398,
+      101
+    ],
+    "Shaker::User Mode": [
+      505,
+      111,
+      300,
+      200
+    ],
+    "Launchers::User Mode": [
+      569,
+      929,
+      591,
+      125
+    ],
+    "Displays::User Mode": [
+      569,
+      800,
+      592,
+      126
+    ],
+    "Schematic::User Mode": [
+      3,
+      570,
+      563,
+      633
+    ],
+    "ALL STOP::User Mode": [
+      999,
+      1071,
+      161,
+      130
+    ],
+    "Shutters::Expert Mode": [
+      3,
+      105,
+      380,
+      80
+    ],
+    "Beam::Expert Mode": [
+      810,
+      4,
+      350,
+      80
+    ],
+    "Presets::Expert Mode": [
+      387,
+      106,
+      200,
+      80
+    ],
+    "Condenser::Expert Mode": [
+      508,
+      871,
+      596,
+      190
+    ],
+    "Zone Plate::Expert Mode": [
+      516,
+      671,
+      364,
+      190
+    ],
+    "Phase Ring::Expert Mode": [
+      1107,
+      871,
+      364,
+      190
+    ],
+    "Detector::Expert Mode": [
+      3,
+      255,
+      343,
+      194
+    ],
+    "Sample::Expert Mode": [
+      649,
+      454,
+      248,
+      190
+    ],
+    "Pinhole::Expert Mode": [
+      5,
+      871,
+      248,
+      190
+    ],
+    "Beamstop::Expert Mode": [
+      256,
+      871,
+      248,
+      190
+    ],
+    "Diffuser::Expert Mode": [
+      1251,
+      672,
+      132,
+      190
+    ],
+    "Bertrand Lens::Expert Mode": [
+      265,
+      671,
+      248,
+      190
+    ],
+    "Furnace::Expert Mode": [
+      884,
+      672,
+      364,
+      190
+    ],
+    "Queensgate::Expert Mode": [
+      495,
+      255,
+      249,
+      195
+    ],
+    "Ensemble::Expert Mode": [
+      515,
+      454,
+      132,
+      190
+    ],
+    "Other::Expert Mode": [
+      265,
+      454,
+      248,
+      190
+    ],
+    "In / Out::Expert Mode": [
+      3,
+      189,
+      700,
+      60
+    ],
+    "Energy::Expert Mode": [
+      1130,
+      375,
+      340,
+      280
+    ],
+    "Camera::Expert Mode": [
+      1130,
+      121,
+      340,
+      250
+    ],
+    "Crop::Expert Mode": [
+      590,
+      111,
+      300,
+      60
+    ],
+    "Valves::Expert Mode": [
+      3,
+      454,
+      320,
+      110
+    ],
+    "BPM/EPID::Expert Mode": [
+      1070,
+      1080,
+      400,
+      100
+    ],
+    "PV Save/Load::Expert Mode": [
+      2,
+      783,
+      261,
+      79
+    ],
+    "Beam Status::Expert Mode": [
+      3,
+      4,
+      400,
+      100
+    ],
+    "OPS Messages::Expert Mode": [
+      408,
+      4,
+      399,
+      101
+    ],
+    "Shaker::Expert Mode": [
+      822,
+      223,
+      300,
+      200
+    ],
+    "Launchers::Expert Mode": [
+      4,
+      1069,
+      500,
+      110
+    ],
+    "Displays::Expert Mode": [
+      506,
+      1068,
+      513,
+      111
+    ],
+    "ALL STOP::Expert Mode": [
+      1294,
+      5,
+      176,
+      111
+    ],
+    "Bertrand Lens#3::User Mode": [
+      389,
+      312,
+      248,
+      190
+    ],
+    "Queensgate#4::Expert Mode": [
+      348,
+      255,
+      144,
+      194
+    ]
+  },
+  "_tab_map": {
+    "Shutters::User Mode": "User Mode",
+    "Beam::User Mode": "User Mode",
+    "Presets::User Mode": "User Mode",
+    "Zone Plate::User Mode": "User Mode",
+    "Bertrand Lens::User Mode": "User Mode",
+    "Queensgate::User Mode": "User Mode",
+    "Ensemble::User Mode": "User Mode",
+    "In / Out::User Mode": "User Mode",
+    "Energy::User Mode": "User Mode",
+    "Camera::User Mode": "User Mode",
+    "Crop::User Mode": "User Mode",
+    "Valves::User Mode": "User Mode",
+    "PV Save/Load::User Mode": "User Mode",
+    "Beam Status::User Mode": "User Mode",
+    "OPS Messages::User Mode": "User Mode",
+    "Shaker::User Mode": "User Mode",
+    "Launchers::User Mode": "User Mode",
+    "Displays::User Mode": "User Mode",
+    "Schematic::User Mode": "User Mode",
+    "ALL STOP::User Mode": "User Mode",
+    "Shutters::Expert Mode": "Expert Mode",
+    "Beam::Expert Mode": "Expert Mode",
+    "Presets::Expert Mode": "Expert Mode",
+    "Condenser::Expert Mode": "Expert Mode",
+    "Zone Plate::Expert Mode": "Expert Mode",
+    "Phase Ring::Expert Mode": "Expert Mode",
+    "Detector::Expert Mode": "Expert Mode",
+    "Sample::Expert Mode": "Expert Mode",
+    "Pinhole::Expert Mode": "Expert Mode",
+    "Beamstop::Expert Mode": "Expert Mode",
+    "Diffuser::Expert Mode": "Expert Mode",
+    "Bertrand Lens::Expert Mode": "Expert Mode",
+    "Furnace::Expert Mode": "Expert Mode",
+    "Queensgate::Expert Mode": "Expert Mode",
+    "Ensemble::Expert Mode": "Expert Mode",
+    "Other::Expert Mode": "Expert Mode",
+    "In / Out::Expert Mode": "Expert Mode",
+    "Energy::Expert Mode": "Expert Mode",
+    "Camera::Expert Mode": "Expert Mode",
+    "Crop::Expert Mode": "Expert Mode",
+    "Valves::Expert Mode": "Expert Mode",
+    "BPM/EPID::Expert Mode": "Expert Mode",
+    "PV Save/Load::Expert Mode": "Expert Mode",
+    "Beam Status::Expert Mode": "Expert Mode",
+    "OPS Messages::Expert Mode": "Expert Mode",
+    "Shaker::Expert Mode": "Expert Mode",
+    "Launchers::Expert Mode": "Expert Mode",
+    "Displays::Expert Mode": "Expert Mode",
+    "ALL STOP::Expert Mode": "Expert Mode",
+    "Bertrand Lens#3::User Mode": "User Mode",
+    "Queensgate#4::Expert Mode": "Expert Mode"
+  },
+  "_buttons": {},
+  "_styles": {
+    "Presets::User Mode|||Nano": {
+      "bg": "#ae5d01",
+      "fg": "#fff",
+      "fs": 11,
+      "w": 166,
+      "h": 34
+    },
+    "Presets::User Mode|||Micro": {
+      "bg": "#001aae",
+      "fg": "#fff",
+      "fs": 11,
+      "w": 165,
+      "h": 34
+    },
+    "In / Out::User Mode|||PyStream": {
+      "bg": "#ae6600",
+      "fg": "#fff",
+      "fs": 12,
+      "w": 150,
+      "h": 40
+    },
+    "ALL STOP::User Mode|||ALL STOP": {
+      "bg": "#c0392b",
+      "fg": "#fff",
+      "fs": 12,
+      "w": 130,
+      "h": 76
+    },
+    "In / Out::Expert Mode|||PyStream": {
+      "bg": "#ae5207",
+      "fg": "#fff",
+      "fs": 10,
+      "w": 150,
+      "h": 40
+    }
+  },
+  "_title_fonts": {
+    "Shutters::User Mode": 9,
+    "Beam::User Mode": 9,
+    "Presets::User Mode": 9,
+    "Zone Plate::User Mode": 9,
+    "Bertrand Lens::User Mode": 9,
+    "Queensgate::User Mode": 9,
+    "Ensemble::User Mode": 9,
+    "In / Out::User Mode": 9,
+    "Energy::User Mode": 9,
+    "Camera::User Mode": 9,
+    "Crop::User Mode": 9,
+    "Valves::User Mode": 9,
+    "PV Save/Load::User Mode": 9,
+    "Beam Status::User Mode": 9,
+    "OPS Messages::User Mode": 9,
+    "Shaker::User Mode": 9,
+    "Launchers::User Mode": 9,
+    "Displays::User Mode": 9,
+    "Schematic::User Mode": 9,
+    "ALL STOP::User Mode": 9,
+    "Shutters::Expert Mode": 7,
+    "Beam::Expert Mode": 9,
+    "Presets::Expert Mode": 9,
+    "Condenser::Expert Mode": 9,
+    "Zone Plate::Expert Mode": 9,
+    "Phase Ring::Expert Mode": 9,
+    "Detector::Expert Mode": 7,
+    "Sample::Expert Mode": 9,
+    "Pinhole::Expert Mode": 9,
+    "Beamstop::Expert Mode": 9,
+    "Diffuser::Expert Mode": 9,
+    "Bertrand Lens::Expert Mode": 9,
+    "Furnace::Expert Mode": 9,
+    "Queensgate::Expert Mode": 9,
+    "Ensemble::Expert Mode": 9,
+    "Other::Expert Mode": 9,
+    "In / Out::Expert Mode": 9,
+    "Energy::Expert Mode": 9,
+    "Camera::Expert Mode": 9,
+    "Crop::Expert Mode": 9,
+    "Valves::Expert Mode": 9,
+    "BPM/EPID::Expert Mode": 9,
+    "PV Save/Load::Expert Mode": 9,
+    "Beam Status::Expert Mode": 9,
+    "OPS Messages::Expert Mode": 9,
+    "Shaker::Expert Mode": 9,
+    "Launchers::Expert Mode": 9,
+    "Displays::Expert Mode": 9,
+    "ALL STOP::Expert Mode": 9,
+    "Bertrand Lens#3::User Mode": 9,
+    "Queensgate#4::Expert Mode": 9
+  },
+  "_titles": {
+    "Shutters::User Mode": "Shutters",
+    "Beam::User Mode": "Beam",
+    "Presets::User Mode": "Presets",
+    "Zone Plate::User Mode": "Zone Plate",
+    "Bertrand Lens::User Mode": "Granite Pos",
+    "Queensgate::User Mode": "Queensgate",
+    "Ensemble::User Mode": "Rotation",
+    "In / Out::User Mode": "In / Out",
+    "Energy::User Mode": "Energy",
+    "Camera::User Mode": "Camera",
+    "Crop::User Mode": "Crop",
+    "Valves::User Mode": "Valves",
+    "PV Save/Load::User Mode": "PV Save/Load",
+    "Beam Status::User Mode": "Beam Status",
+    "OPS Messages::User Mode": "OPS Messages",
+    "Shaker::User Mode": "Shaker",
+    "Launchers::User Mode": "Launchers",
+    "Displays::User Mode": "Displays",
+    "Schematic::User Mode": "Schematic",
+    "ALL STOP::User Mode": "ALL STOP",
+    "Shutters::Expert Mode": "Shutters",
+    "Beam::Expert Mode": "Beam",
+    "Presets::Expert Mode": "Presets",
+    "Condenser::Expert Mode": "Condenser",
+    "Zone Plate::Expert Mode": "Zone Plate",
+    "Phase Ring::Expert Mode": "Phase Ring",
+    "Detector::Expert Mode": "Detector",
+    "Sample::Expert Mode": "Sample",
+    "Pinhole::Expert Mode": "Pinhole",
+    "Beamstop::Expert Mode": "Beamstop",
+    "Diffuser::Expert Mode": "Diffuser",
+    "Bertrand Lens::Expert Mode": "Beam Stop",
+    "Furnace::Expert Mode": "Furnace",
+    "Queensgate::Expert Mode": "Queensgate",
+    "Ensemble::Expert Mode": "Rotation",
+    "Other::Expert Mode": "Granite Pos",
+    "In / Out::Expert Mode": "In / Out",
+    "Energy::Expert Mode": "Energy",
+    "Camera::Expert Mode": "Camera",
+    "Crop::Expert Mode": "Crop",
+    "Valves::Expert Mode": "Valves",
+    "BPM/EPID::Expert Mode": "BPM/EPID",
+    "PV Save/Load::Expert Mode": "PV Save/Load",
+    "Beam Status::Expert Mode": "Beam Status",
+    "OPS Messages::Expert Mode": "OPS Messages",
+    "Shaker::Expert Mode": "Shaker",
+    "Launchers::Expert Mode": "Launchers",
+    "Displays::Expert Mode": "Displays",
+    "ALL STOP::Expert Mode": "ALL STOP",
+    "Bertrand Lens#3::User Mode": "Sample Pos",
+    "Queensgate#4::Expert Mode": "Det Rot"
+  },
+  "_mcs": {
+    "Zone Plate::User Mode": [
+      {
+        "label": "FZP Z Focus",
+        "pv": "32idbTXM:mcs2:c1:m15",
+        "custom": true
+      }
+    ],
+    "Bertrand Lens::User Mode": [
+      {
+        "label": "Granite X",
+        "pv": "32idbTXM:nf:m4",
+        "custom": true
+      },
+      {
+        "label": "Granite Y",
+        "pv": "32idbSoft:m5",
+        "custom": true
+      }
+    ],
+    "Queensgate::User Mode": [
+      {
+        "label": "Queensgate CH1",
+        "pv": "32idQG:m1",
+        "custom": true
+      },
+      {
+        "label": "Queensgate CH2",
+        "pv": "32idQG:m2",
+        "custom": true
+      }
+    ],
+    "Ensemble::User Mode": [
+      {
+        "label": "Rotation",
+        "pv": "32idbTXM:ens:c1:m1",
+        "custom": false
+      }
+    ],
+    "Condenser::Expert Mode": [
+      {
+        "label": "Cond Pitch",
+        "pv": "32idbTXM:mcs2:c1:m1",
+        "custom": false
+      },
+      {
+        "label": "Cond Y",
+        "pv": "32idbTXM:mcs2:c1:m2",
+        "custom": false
+      },
+      {
+        "label": "Beamstop Y",
+        "pv": "32idbTXM:mcs2:c1:m3",
+        "custom": false
+      },
+      {
+        "label": "Pinhole X",
+        "pv": "32idbTXM:mcs2:c1:m4",
+        "custom": false
+      },
+      {
+        "label": "Pinhole Y",
+        "pv": "32idbTXM:mcs2:c1:m5",
+        "custom": false
+      }
+    ],
+    "Zone Plate::Expert Mode": [
+      {
+        "label": "X",
+        "pv": "32idbTXM:mcs2:c1:m6",
+        "custom": false
+      },
+      {
+        "label": "BPMX",
+        "pv": "32idbTXM:mcs2:c1:m7",
+        "custom": false
+      },
+      {
+        "label": "BPMY",
+        "pv": "32idbTXM:mcs2:c1:m8",
+        "custom": false
+      }
+    ],
+    "Phase Ring::Expert Mode": [
+      {
+        "label": "Scint Yaw",
+        "pv": "32idbTXM:mcs2:c2:m1",
+        "custom": false
+      },
+      {
+        "label": "Scint Pitch",
+        "pv": "32idbTXM:mcs2:c2:m2",
+        "custom": false
+      },
+      {
+        "label": "Scint focus",
+        "pv": "32idbTXM:mcs2:c2:m3",
+        "custom": false
+      }
+    ],
+    "Detector::Expert Mode": [
+      {
+        "label": "Det X",
+        "pv": "32idbSoft:m3",
+        "custom": true
+      },
+      {
+        "label": "Det Y",
+        "pv": "32idbSoft:m4",
+        "custom": true
+      },
+      {
+        "label": "Det Z",
+        "pv": "32idbSoft:m1",
+        "custom": true
+      }
+    ],
+    "Sample::Expert Mode": [
+      {
+        "label": "Sample TopX",
+        "pv": "32idbTXM:mcs:c2:m1",
+        "custom": true
+      },
+      {
+        "label": "Sample TopZ",
+        "pv": "32idbTXM:mcs:c2:m2",
+        "custom": true
+      }
+    ],
+    "Pinhole::Expert Mode": [
+      {
+        "label": "ZP X new",
+        "pv": "32idbTXM:mcs2:c1:m13",
+        "custom": false
+      },
+      {
+        "label": "ZP Y new",
+        "pv": "32idbTXM:mcs2:c1:m14",
+        "custom": false
+      }
+    ],
+    "Beamstop::Expert Mode": [
+      {
+        "label": "ZP Z new",
+        "pv": "32idbTXM:mcs2:c1:m15",
+        "custom": false
+      },
+      {
+        "label": "Phase ring 1",
+        "pv": "32idbTXM:mcs2:c3:m1",
+        "custom": false
+      }
+    ],
+    "Diffuser::Expert Mode": [
+      {
+        "label": "Phase ring 1",
+        "pv": "32idbTXM:mcs2:c3:m2",
+        "custom": false
+      }
+    ],
+    "Bertrand Lens::Expert Mode": [
+      {
+        "label": "Sample Top X",
+        "pv": "32idbTXM:mcs:c2:m1",
+        "custom": false
+      },
+      {
+        "label": "Sample Top Z",
+        "pv": "32idbTXM:mcs:c2:m2",
+        "custom": false
+      }
+    ],
+    "Furnace::Expert Mode": [
+      {
+        "label": "Det X",
+        "pv": "32idbSoft:m3",
+        "custom": false
+      },
+      {
+        "label": "Det Y",
+        "pv": "32idbSoft:m4",
+        "custom": false
+      },
+      {
+        "label": "Sample Y granite",
+        "pv": "32idbSoft:m5",
+        "custom": false
+      }
+    ],
+    "Queensgate::Expert Mode": [
+      {
+        "label": "Queensgate CH1",
+        "pv": "32idQG:m1",
+        "custom": false
+      },
+      {
+        "label": "Queensgate CH2",
+        "pv": "32idQG:m2",
+        "custom": false
+      }
+    ],
+    "Ensemble::Expert Mode": [
+      {
+        "label": "Rotation",
+        "pv": "32idbTXM:ens:c1:m1",
+        "custom": false
+      }
+    ],
+    "Other::Expert Mode": [
+      {
+        "label": "Granite X",
+        "pv": "32idbTXM:nf:m4",
+        "custom": true
+      },
+      {
+        "label": "Granite Y",
+        "pv": "32idbSoft:m5",
+        "custom": true
+      }
+    ],
+    "Bertrand Lens#3::User Mode": [
+      {
+        "label": "Sample TopX",
+        "pv": "32idbTXM:mcs:c2:m1",
+        "custom": true
+      },
+      {
+        "label": "Sample TopZ",
+        "pv": "32idbTXM:mcs:c2:m2",
+        "custom": true
+      }
+    ],
+    "Queensgate#4::Expert Mode": [
+      {
+        "label": "Det Rot",
+        "pv": "32idbTXM:nf:m2",
+        "custom": true
+      }
+    ]
+  }
+}

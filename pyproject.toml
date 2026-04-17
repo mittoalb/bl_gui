@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bl_gui"
+version = "0.3.0"
+description = "Beamline Optics Control GUI (PyQt5 + pvaccess) — generalised from APS 32-ID-B TXM GUI"
+readme = "README.md"
+authors = [{ name = "Alberto Mittone", email = "amittone@anl.gov" }]
+requires-python = ">=3.8"
+license = { text = "MIT" }
+dependencies = [
+    "PyQt5>=5.15",
+    "pvapy",
+]
+
+[project.scripts]
+bl_gui = "bl_gui.main_window:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.package-data]
+bl_gui = ["layout.json", "layouts/*.json"]
