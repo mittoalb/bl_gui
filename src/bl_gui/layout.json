@@ -1,5 +1,5 @@
 {
-  "_font_scale": 71,
+  "_font_scale": 50,
   "_tabs": [
     "User Mode",
     "Expert Mode"
@@ -179,8 +179,8 @@
       190
     ],
     "Zone Plate::Expert Mode": [
-      516,
-      671,
+      256,
+      676,
       364,
       190
     ],
@@ -215,20 +215,20 @@
       190
     ],
     "Diffuser::Expert Mode": [
-      1251,
-      672,
+      989,
+      676,
       132,
       190
     ],
     "Bertrand Lens::Expert Mode": [
-      265,
-      671,
+      5,
+      676,
       248,
       190
     ],
     "Furnace::Expert Mode": [
-      884,
-      672,
+      622,
+      676,
       364,
       190
     ],
@@ -277,7 +277,7 @@
     "Valves::Expert Mode": [
       3,
       454,
-      320,
+      260,
       110
     ],
     "BPM/EPID::Expert Mode": [
@@ -287,8 +287,8 @@
       100
     ],
     "PV Save/Load::Expert Mode": [
-      2,
-      783,
+      863,
+      169,
       261,
       79
     ],
@@ -305,8 +305,8 @@
       101
     ],
     "Shaker::Expert Mode": [
-      822,
-      223,
+      825,
+      252,
       300,
       200
     ],
@@ -339,6 +339,12 @@
       255,
       144,
       194
+    ],
+    "Beam Stop#5::Expert Mode": [
+      1188,
+      671,
+      248,
+      190
     ]
   },
   "_tab_map": {
@@ -392,7 +398,8 @@
     "Displays::Expert Mode": "Expert Mode",
     "ALL STOP::Expert Mode": "Expert Mode",
     "Bertrand Lens#3::User Mode": "User Mode",
-    "Queensgate#4::Expert Mode": "Expert Mode"
+    "Queensgate#4::Expert Mode": "Expert Mode",
+    "Beam Stop#5::Expert Mode": "Expert Mode"
   },
   "_buttons": {},
   "_styles": {
@@ -483,7 +490,8 @@
     "Displays::Expert Mode": 9,
     "ALL STOP::Expert Mode": 9,
     "Bertrand Lens#3::User Mode": 9,
-    "Queensgate#4::Expert Mode": 9
+    "Queensgate#4::Expert Mode": 9,
+    "Beam Stop#5::Expert Mode": 9
   },
   "_titles": {
     "Shutters::User Mode": "Shutters",
@@ -536,7 +544,8 @@
     "Displays::Expert Mode": "Displays",
     "ALL STOP::Expert Mode": "ALL STOP",
     "Bertrand Lens#3::User Mode": "Sample Pos",
-    "Queensgate#4::Expert Mode": "Det Rot"
+    "Queensgate#4::Expert Mode": "Det Rot",
+    "Beam Stop#5::Expert Mode": "B <---> C"
   },
   "_mcs": {
     "Zone Plate::User Mode": [
@@ -776,6 +785,40 @@
         "pv": "32idbTXM:nf:m2",
         "custom": true
       }
+    ],
+    "Beam Stop#5::Expert Mode": [
+      {
+        "label": "TXM X",
+        "pv": "32idbSoft:m9",
+        "custom": true
+      },
+      {
+        "label": "Flying Pipe X",
+        "pv": "32idbSoft:m10",
+        "custom": true
+      }
     ]
+  },
+  "_pv_fields": {
+    "Energy::User Mode": {
+      "energy_sp": "32id:TXMOptics:Energy",
+      "bragg_rbv": "32ida:BraggERdbkAO",
+      "energy_detune": "32id:TXMOptics:EnergyDetune",
+      "energy_usecalib": "32id:TXMOptics:EnergyUseCalibration",
+      "energy_calfile1": "32id:TXMOptics:EnergyCalibrationFileOne",
+      "energy_calfile2": "32id:TXMOptics:EnergyCalibrationFileTwo",
+      "und_energy_rbv": "S32ID:USID:EnergyM.VAL",
+      "energy_set": "32id:TXMOptics:EnergySet"
+    },
+    "Energy::Expert Mode": {
+      "energy_sp": "32id:TXMOptics:Energy",
+      "bragg_rbv": "32ida:BraggERdbkAO",
+      "energy_detune": "32id:TXMOptics:EnergyDetune",
+      "energy_usecalib": "32id:TXMOptics:EnergyUseCalibration",
+      "energy_calfile1": "32id:TXMOptics:EnergyCalibrationFileOne",
+      "energy_calfile2": "32id:TXMOptics:EnergyCalibrationFileTwo",
+      "und_energy_rbv": "S32ID:USID:EnergyM.VAL",
+      "energy_set": "32id:TXMOptics:EnergySet"
+    }
   }
 }
