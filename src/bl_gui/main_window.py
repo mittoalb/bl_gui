@@ -1,6 +1,7 @@
 """Main application window (beamline optics GUI) and entry point."""
 import json
 import os
+import subprocess
 import sys
 from typing import Dict, List
 from functools import partial

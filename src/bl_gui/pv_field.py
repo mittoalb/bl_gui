@@ -324,7 +324,21 @@ class ValveField(QtWidgets.QWidget):
 
     def _fire(self, pv):
         if pv:
+            print(f"[VALVE] {self.field_id}: fire -> {pv}")
             caput_bg(pv, 1)
+            # Immediate tentative feedback so the user sees the click landed
+            # even if the PLC status PV takes a while (or never) to confirm.
+            if pv == self.on_pv:
+                self._show_pending(True)
+            elif pv == self.off_pv:
+                self._show_pending(False)
+
+    def _show_pending(self, going_on):
+        self.status_lbl.setText("ON?" if going_on else "OFF?")
+        self.status_lbl.setStyleSheet(
+            "background:#2980b9;color:#fff;font:bold 10pt;"
+            "border:1px solid #3a95d8;border-radius:2px;padding:2px 6px;"
+        )
 
     # ── PV interface used by the window ──────────────────────────────
     def monitored_pvs(self):
@@ -339,6 +353,7 @@ class ValveField(QtWidgets.QWidget):
             on = float(v) != 0.0
         except (ValueError, TypeError):
             on = lv in ("on", "open", "true", "high", "yes", "1")
+        print(f"[VALVE] {self.field_id}: status={value!r} -> {'ON' if on else 'OFF'}")
         if on:
             self.status_lbl.setText("ON")
             self.status_lbl.setStyleSheet(
@@ -513,9 +528,22 @@ class ToggleField(QtWidgets.QWidget):
 
     def _on_click(self):
         if self._is_open and self.close_pv:
+            print(f"[SHUTTER] {self.field_id}: fire -> {self.close_pv}")
             caput_bg(self.close_pv, self._close_value)
+            self._show_pending("closing")
         elif (not self._is_open) and self.open_pv:
+            print(f"[SHUTTER] {self.field_id}: fire -> {self.open_pv}")
             caput_bg(self.open_pv, self._open_value)
+            self._show_pending("opening")
+
+    def _show_pending(self, label):
+        # Immediate visual feedback — the button turns blue with a '...'
+        # marker until the status PV confirms the real state.
+        self.btn.setText(f"{label}...")
+        self.btn.setStyleSheet(
+            "background:#2980b9;color:#fff;font:bold 11pt;"
+            "border:1px solid #3a95d8;border-radius:3px;padding:4px;"
+        )
 
     # ── PV interface ─────────────────────────────────────────────────
     def monitored_pvs(self):
@@ -540,6 +568,8 @@ class ToggleField(QtWidgets.QWidget):
                 open_now = False
         self._is_open = bool(open_now)
         self._restyle()
+        print(f"[SHUTTER] {self.field_id}: status={value!r} -> "
+              f"{'OPEN' if self._is_open else 'CLOSED'}")
 
     @property
     def pv(self):

@@ -7,7 +7,7 @@
   "_tab_sizes": {
     "User Mode": [
       1178,
-      1305
+      1306
     ],
     "Expert Mode": [
       1488,
@@ -570,272 +570,329 @@
       {
         "label": "FZP Z Focus",
         "pv": "32idbTXM:mcs2:c1:m15",
-        "custom": true
+        "custom": true,
+        "twv": ""
       }
     ],
     "Bertrand Lens::User Mode": [
       {
         "label": "Granite X",
         "pv": "32idbTXM:nf:m4",
-        "custom": true
+        "custom": true,
+        "twv": ""
       },
       {
         "label": "Granite Y",
         "pv": "32idbSoft:m5",
-        "custom": true
+        "custom": true,
+        "twv": ""
       }
     ],
     "Queensgate::User Mode": [
       {
         "label": "Queensgate CH1",
         "pv": "32idQG:m1",
-        "custom": true
+        "custom": true,
+        "twv": ""
       },
       {
         "label": "Queensgate CH2",
         "pv": "32idQG:m2",
-        "custom": true
+        "custom": true,
+        "twv": ""
       }
     ],
     "Ensemble::User Mode": [
       {
         "label": "Rotation",
         "pv": "32idbTXM:ens:c1:m1",
-        "custom": false
+        "custom": false,
+        "twv": "0"
       }
     ],
     "Condenser::Expert Mode": [
       {
         "label": "Cond Pitch",
         "pv": "32idbTXM:mcs2:c1:m1",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "Cond Y",
         "pv": "32idbTXM:mcs2:c1:m2",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "Beamstop Y",
         "pv": "32idbTXM:mcs2:c1:m3",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "Pinhole X",
         "pv": "32idbTXM:mcs2:c1:m4",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "Pinhole Y",
         "pv": "32idbTXM:mcs2:c1:m5",
-        "custom": false
+        "custom": false,
+        "twv": ""
       }
     ],
     "Zone Plate::Expert Mode": [
       {
         "label": "X",
         "pv": "32idbTXM:mcs2:c1:m6",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "BPMX",
         "pv": "32idbTXM:mcs2:c1:m7",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "BPMY",
         "pv": "32idbTXM:mcs2:c1:m8",
-        "custom": false
+        "custom": false,
+        "twv": ""
       }
     ],
     "Phase Ring::Expert Mode": [
       {
         "label": "Scint Yaw",
         "pv": "32idbTXM:mcs2:c2:m1",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "Scint Pitch",
         "pv": "32idbTXM:mcs2:c2:m2",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "Scint focus",
         "pv": "32idbTXM:mcs2:c2:m3",
-        "custom": false
+        "custom": false,
+        "twv": ""
       }
     ],
     "Detector::Expert Mode": [
       {
         "label": "Det X",
         "pv": "32idbSoft:m3",
-        "custom": true
+        "custom": true,
+        "twv": ""
       },
       {
         "label": "Det Y",
         "pv": "32idbSoft:m4",
-        "custom": true
+        "custom": true,
+        "twv": ""
       },
       {
         "label": "Det Z",
         "pv": "32idbSoft:m1",
-        "custom": true
+        "custom": true,
+        "twv": ""
       }
     ],
     "Sample::Expert Mode": [
       {
         "label": "Sample TopX",
         "pv": "32idbTXM:mcs:c2:m1",
-        "custom": true
+        "custom": true,
+        "twv": ""
       },
       {
         "label": "Sample TopZ",
         "pv": "32idbTXM:mcs:c2:m2",
-        "custom": true
+        "custom": true,
+        "twv": ""
       }
     ],
     "Pinhole::Expert Mode": [
       {
         "label": "ZP X new",
         "pv": "32idbTXM:mcs2:c1:m13",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "ZP Y new",
         "pv": "32idbTXM:mcs2:c1:m14",
-        "custom": false
+        "custom": false,
+        "twv": ""
       }
     ],
     "Beamstop::Expert Mode": [
       {
         "label": "ZP Z new",
         "pv": "32idbTXM:mcs2:c1:m15",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "Phase ring 1",
         "pv": "32idbTXM:mcs2:c3:m1",
-        "custom": false
+        "custom": false,
+        "twv": ""
       }
     ],
     "Diffuser::Expert Mode": [
       {
         "label": "Phase ring 1",
         "pv": "32idbTXM:mcs2:c3:m2",
-        "custom": false
+        "custom": false,
+        "twv": ""
       }
     ],
     "Bertrand Lens::Expert Mode": [
       {
         "label": "Sample Top X",
         "pv": "32idbTXM:mcs:c2:m1",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "Sample Top Z",
         "pv": "32idbTXM:mcs:c2:m2",
-        "custom": false
+        "custom": false,
+        "twv": ""
       }
     ],
     "Furnace::Expert Mode": [
       {
         "label": "Det X",
         "pv": "32idbSoft:m3",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "Det Y",
         "pv": "32idbSoft:m4",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "Sample Y granite",
         "pv": "32idbSoft:m5",
-        "custom": false
+        "custom": false,
+        "twv": ""
       }
     ],
     "Queensgate::Expert Mode": [
       {
         "label": "Queensgate CH1",
         "pv": "32idQG:m1",
-        "custom": false
+        "custom": false,
+        "twv": ""
       },
       {
         "label": "Queensgate CH2",
         "pv": "32idQG:m2",
-        "custom": false
+        "custom": false,
+        "twv": ""
       }
     ],
     "Ensemble::Expert Mode": [
       {
         "label": "Rotation",
         "pv": "32idbTXM:ens:c1:m1",
-        "custom": false
+        "custom": false,
+        "twv": ""
       }
     ],
     "Other::Expert Mode": [
       {
         "label": "Granite X",
         "pv": "32idbTXM:nf:m4",
-        "custom": true
+        "custom": true,
+        "twv": ""
       },
       {
         "label": "Granite Y",
         "pv": "32idbSoft:m5",
-        "custom": true
+        "custom": true,
+        "twv": ""
       }
     ],
     "Bertrand Lens#3::User Mode": [
       {
         "label": "Sample TopX",
         "pv": "32idbTXM:mcs:c2:m1",
-        "custom": true
+        "custom": true,
+        "twv": ""
       },
       {
         "label": "Sample TopZ",
         "pv": "32idbTXM:mcs:c2:m2",
-        "custom": true
+        "custom": true,
+        "twv": ""
       }
     ],
     "Queensgate#4::Expert Mode": [
       {
         "label": "Det Rot",
         "pv": "32idbTXM:nf:m2",
-        "custom": true
+        "custom": true,
+        "twv": ""
       }
     ],
     "Beam Stop#5::Expert Mode": [
       {
         "label": "TXM X",
         "pv": "32idbSoft:m9",
-        "custom": true
+        "custom": true,
+        "twv": ""
       },
       {
         "label": "Flying Pipe X",
         "pv": "32idbSoft:m10",
-        "custom": true
+        "custom": true,
+        "twv": ""
       }
     ]
   },
   "_pv_fields": {
     "Shutters::User Mode": {
       "shtr_A": {
-        "kind": "valve",
+        "kind": "toggle",
         "status": "PB:32ID:STA_A_FES_CLSD_PL",
-        "on": "32idb:rshtrA:Open.PROC",
-        "off": "32idb:rshtrA:Close.PROC"
+        "open": "",
+        "close": "",
+        "label": "A-Stn",
+        "open_text": "Open",
+        "close_text": "Close",
+        "open_value": 1,
+        "close_value": 1
       },
       "shtr_B": {
-        "kind": "valve",
+        "kind": "toggle",
         "status": "PB:32ID:STA_B_SBS_CLSD_PL",
-        "on": "32idb:rshtrB:Open.PROC",
-        "off": "32idb:rshtrB:Close.PROC"
+        "open": "",
+        "close": "",
+        "label": "B-Stn",
+        "open_text": "Open",
+        "close_text": "Close",
+        "open_value": 1,
+        "close_value": 1
       },
       "shtr_U": {
-        "kind": "valve",
+        "kind": "toggle",
         "status": "",
-        "on": "32idbTXM:uniblitz:control",
-        "off": "32idbTXM:uniblitz:control"
+        "open": "",
+        "close": "",
+        "label": "Uniblitz",
+        "open_text": "Open",
+        "close_text": "Close",
+        "open_value": 1,
+        "close_value": 1
       }
     },
     "Beam::User Mode": {
@@ -917,19 +974,28 @@
         "kind": "valve",
         "status": "32idbSoft:PLC1:C1",
         "on": "32idbSoft:PLC1:oC21",
-        "off": "32idbSoft:PLC1:oC31"
+        "off": "32idbSoft:PLC1:oC31",
+        "label": "all",
+        "on_text": "On",
+        "off_text": "Off"
       },
       "valve_granite_x": {
         "kind": "valve",
         "status": "32idbSoft:PLC1:C2",
         "on": "32idbSoft:PLC1:oC22",
-        "off": "32idbSoft:PLC1:oC32"
+        "off": "32idbSoft:PLC1:oC32",
+        "label": "Granite X",
+        "on_text": "On",
+        "off_text": "Off"
       },
       "valve_granite_y": {
         "kind": "valve",
         "status": "32idbSoft:PLC1:C3",
         "on": "32idbSoft:PLC1:oC23",
-        "off": "32idbSoft:PLC1:oC33"
+        "off": "32idbSoft:PLC1:oC33",
+        "label": "Granite Y",
+        "on_text": "On",
+        "off_text": "Off"
       }
     },
     "PLC Outputs::User Mode": {
@@ -968,22 +1034,37 @@
     },
     "Shutters::Expert Mode": {
       "shtr_A": {
-        "kind": "valve",
+        "kind": "toggle",
         "status": "PB:32ID:STA_A_FES_CLSD_PL",
-        "on": "32idb:rshtrA:Open.PROC",
-        "off": "32idb:rshtrA:Close.PROC"
+        "open": "",
+        "close": "",
+        "label": "A-Stn",
+        "open_text": "Open",
+        "close_text": "Close",
+        "open_value": 1,
+        "close_value": 1
       },
       "shtr_B": {
-        "kind": "valve",
+        "kind": "toggle",
         "status": "PB:32ID:STA_B_SBS_CLSD_PL",
-        "on": "32idb:rshtrB:Open.PROC",
-        "off": "32idb:rshtrB:Close.PROC"
+        "open": "",
+        "close": "",
+        "label": "B-Stn",
+        "open_text": "Open",
+        "close_text": "Close",
+        "open_value": 1,
+        "close_value": 1
       },
       "shtr_U": {
-        "kind": "valve",
+        "kind": "toggle",
         "status": "",
-        "on": "32idbTXM:uniblitz:control",
-        "off": "32idbTXM:uniblitz:control"
+        "open": "",
+        "close": "",
+        "label": "Uniblitz",
+        "open_text": "Open",
+        "close_text": "Close",
+        "open_value": 1,
+        "close_value": 1
       }
     },
     "Beam::Expert Mode": {
@@ -1065,19 +1146,28 @@
         "kind": "valve",
         "status": "32idbSoft:PLC1:C1",
         "on": "32idbSoft:PLC1:oC21",
-        "off": "32idbSoft:PLC1:oC31"
+        "off": "32idbSoft:PLC1:oC31",
+        "label": "all",
+        "on_text": "On",
+        "off_text": "Off"
       },
       "valve_granite_x": {
         "kind": "valve",
         "status": "32idbSoft:PLC1:C2",
         "on": "32idbSoft:PLC1:oC22",
-        "off": "32idbSoft:PLC1:oC32"
+        "off": "32idbSoft:PLC1:oC32",
+        "label": "Granite X",
+        "on_text": "On",
+        "off_text": "Off"
       },
       "valve_granite_y": {
         "kind": "valve",
         "status": "32idbSoft:PLC1:C3",
         "on": "32idbSoft:PLC1:oC23",
-        "off": "32idbSoft:PLC1:oC33"
+        "off": "32idbSoft:PLC1:oC33",
+        "label": "Granite Y",
+        "on_text": "On",
+        "off_text": "Off"
       }
     },
     "PLC Outputs::Expert Mode": {

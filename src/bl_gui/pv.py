@@ -89,8 +89,13 @@ def caput_bg(pv, val, t=5.0):
     # costs ~200 ms but is hard-bounded by the timeout and can never hang.
     def _do():
         try:
-            subprocess.run(["caput", pv, str(val)],
-                           capture_output=True, timeout=t)
-        except Exception:
-            pass
+            r = subprocess.run(["caput", pv, str(val)],
+                               capture_output=True, timeout=t, text=True)
+            if r.returncode != 0:
+                print(f"[CAPUT] {pv}={val} rc={r.returncode} "
+                      f"stderr={r.stderr.strip()!r}")
+        except subprocess.TimeoutExpired:
+            print(f"[CAPUT] {pv}={val} TIMEOUT after {t}s")
+        except Exception as e:
+            print(f"[CAPUT] {pv}={val} EXC {type(e).__name__}: {e}")
     _pool.submit(_do)
