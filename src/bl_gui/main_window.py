@@ -1173,8 +1173,15 @@ class Win(QtWidgets.QMainWindow):
         for slot in self._pv_fields.values():
             for f in slot.values():
                 pvs.update(f.monitored_pvs())
-        print(f"[PV] monitoring {len(pvs)} PVs...")
-        self._pve.monitor_many(list(pvs))
+        pv_list = list(pvs)
+        print(f"[PV] monitoring {len(pv_list)} PVs...")
+        # Do the monitor setup off the GUI thread. Each pvaccess Channel()
+        # and startMonitor() call can block on CA discovery (especially if
+        # some IOCs are down), and serially subscribing 300+ PVs on the
+        # main thread freezes the window for seconds to minutes.
+        import threading
+        threading.Thread(target=self._pve.monitor_many, args=(pv_list,),
+                         daemon=True, name="pv-monitor-setup").start()
 
     @QtCore.pyqtSlot(str, str)
     def _on_pv(self, pv_name, value):
@@ -1202,23 +1209,30 @@ class Win(QtWidgets.QMainWindow):
 
 
 class _PressFlash(QtCore.QObject):
-    """App-wide filter that tints any button for ~200 ms when it's pressed, so
-    the user can see whether a click registered even if the GUI then stalls
-    (e.g. an MEDM launch taking over the foreground)."""
+    """App-wide filter that paints a semi-transparent yellow overlay on any
+    button for ~200 ms when it's pressed, so the user can see whether a click
+    registered even if the GUI then stalls (e.g. an MEDM launch grabbing the
+    foreground). An overlay child widget is used instead of a graphics effect
+    because many buttons in this app have inline stylesheets that suppress
+    QGraphicsColorizeEffect rendering."""
     def eventFilter(self, obj, ev):
-        t = ev.type()
         if isinstance(obj, QtWidgets.QAbstractButton):
+            t = ev.type()
             if t in (QtCore.QEvent.MouseButtonPress, QtCore.QEvent.KeyPress):
                 if t == QtCore.QEvent.KeyPress and ev.key() not in (
                         QtCore.Qt.Key_Space, QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
                     return False
-                eff = QtWidgets.QGraphicsColorizeEffect(obj)
-                eff.setColor(QtGui.QColor("#ffea00"))
-                eff.setStrength(0.85)
-                obj.setGraphicsEffect(eff)
-                QtCore.QTimer.singleShot(
-                    200, lambda o=obj: o.setGraphicsEffect(None) if o is not None else None
+                overlay = QtWidgets.QFrame(obj)
+                overlay.setObjectName("_pressFlash")
+                overlay.setStyleSheet(
+                    "#_pressFlash{background-color:rgba(255,234,0,180);"
+                    "border:2px solid #ff8800;border-radius:3px;}"
                 )
+                overlay.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+                overlay.setGeometry(0, 0, obj.width(), obj.height())
+                overlay.show()
+                overlay.raise_()
+                QtCore.QTimer.singleShot(200, overlay.deleteLater)
         return False
 
 
