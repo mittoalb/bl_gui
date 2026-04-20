@@ -79,18 +79,23 @@ class PVEngine(QtCore.QObject):
             self._channels.clear()
 
 
-_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ca")
+_pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="ca")
 
 
-def caput_bg(pv, val, t=10.0):
+def caput_bg(pv, val, t=5.0):
+    # Bounded subprocess caput as the primary path. pvaccess.Channel.put()
+    # has no timeout and was observed to wedge on flaky PLC/valve IOCs,
+    # which fed through the worker pool and stalled the GUI. A subprocess
+    # costs ~200 ms but is hard-bounded by the timeout and can never hang.
     def _do():
         try:
-            ch = Channel(pv, CA)
-            ch.put(val)
-        except Exception:
-            try:
-                subprocess.run(["caput", pv, str(val)],
-                               capture_output=True, timeout=t)
-            except Exception:
-                pass
+            r = subprocess.run(["caput", pv, str(val)],
+                               capture_output=True, timeout=t, text=True)
+            if r.returncode != 0:
+                print(f"[CAPUT] {pv}={val} rc={r.returncode} "
+                      f"stderr={r.stderr.strip()!r}")
+        except subprocess.TimeoutExpired:
+            print(f"[CAPUT] {pv}={val} TIMEOUT after {t}s")
+        except Exception as e:
+            print(f"[CAPUT] {pv}={val} EXC {type(e).__name__}: {e}")
     _pool.submit(_do)

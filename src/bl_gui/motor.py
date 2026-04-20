@@ -46,9 +46,10 @@ class MC(QtWidgets.QFrame):
         self.btn_twr = QtWidgets.QPushButton("\u25C0")
         self.btn_twr.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         self.btn_twr.clicked.connect(lambda: caput_bg(f"{self.pv}.TWR", 1)); tw.addWidget(self.btn_twr)
-        self.twv = QtWidgets.QLineEdit("0.1"); self.twv.setAlignment(QtCore.Qt.AlignCenter)
+        self.twv = QtWidgets.QLineEdit(""); self.twv.setAlignment(QtCore.Qt.AlignCenter)
+        self.twv.setPlaceholderText("step")
         self.twv.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        self.twv.returnPressed.connect(lambda: caput_bg(f"{self.pv}.TWV", self.twv.text())); tw.addWidget(self.twv)
+        self.twv.returnPressed.connect(self._on_twv_return); tw.addWidget(self.twv)
         self.btn_twf = QtWidgets.QPushButton("\u25B6")
         self.btn_twf.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         self.btn_twf.clicked.connect(lambda: caput_bg(f"{self.pv}.TWF", 1)); tw.addWidget(self.btn_twf)
@@ -66,6 +67,16 @@ class MC(QtWidgets.QFrame):
         L.addWidget(self.btn_able)
         self.lim = QtWidgets.QFrame(); self.lim.setFixedHeight(3); self.lim.setStyleSheet("background:#404040;"); L.addWidget(self.lim)
         self._apply_fonts()
+
+    def _on_twv_return(self):
+        # Push the new step to the IOC *and* persist it to the layout file
+        # right now, so the value survives even if the GUI is killed hard
+        # (no clean closeEvent).
+        caput_bg(f"{self.pv}.TWV", self.twv.text())
+        win = self.window()
+        if win is not None and hasattr(win, "_save_layout"):
+            try: win._save_layout()
+            except Exception as e: print(f"[TWV] save failed: {e}")
 
     def _toggle_enable(self):
         # Flip state locally and write to <pv>_able (APS convention: 0=Enable, 1=Disable)
@@ -151,8 +162,19 @@ class MC(QtWidgets.QFrame):
             menu.addAction("Font Size...", lambda: _change_font_size(self))
             menu.addSeparator()
             menu.addAction("Delete This Motor...", lambda: _delete_widget(self))
+            menu.addSeparator()
+            menu.addAction("Add PV Row here...", self._add_pv_row_to_panel)
         menu.exec_(e.globalPos())
         e.accept()
+
+    def _add_pv_row_to_panel(self):
+        """Locate the enclosing Panel and trigger the row-builder dialog."""
+        w = self.parent()
+        while w is not None and not hasattr(w, "key"):
+            w = w.parent()
+        win = self.window()
+        if w is not None and hasattr(win, "add_pv_row_dialog"):
+            win.add_pv_row_dialog(w)
 
     def mouseDoubleClickEvent(self, e):
         """Double-click anywhere on the card opens the full motor details dialog."""

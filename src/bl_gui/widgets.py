@@ -94,6 +94,7 @@ class Panel(QtWidgets.QFrame):
         menu = QtWidgets.QMenu(self)
         menu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;} QMenu::item:selected{background:#1e5a8e;}")
         menu.addAction("Add Button...", self._add_button)
+        menu.addAction("Add PV Row...", self._add_pv_row)
         menu.addAction("Rename Panel...", self._rename_panel)
         menu.addAction("Panel Title Font...", self._change_title_font)
         menu.addAction("Duplicate Panel", self._duplicate_panel)
@@ -147,6 +148,11 @@ class Panel(QtWidgets.QFrame):
                 btn.move(10, 30)
             btn.show()
             self.custom_buttons.append(btn)
+
+    def _add_pv_row(self):
+        win = self.window()
+        if hasattr(win, 'add_pv_row_dialog'):
+            win.add_pv_row_dialog(self)
 
     def _rename_panel(self):
         text, ok = QtWidgets.QInputDialog.getText(
