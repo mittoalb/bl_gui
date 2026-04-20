@@ -82,19 +82,15 @@ class PVEngine(QtCore.QObject):
 _pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="ca")
 
 
-def caput_bg(pv, val, t=10.0):
-    # One fresh Channel per put. Reusing Channels across workers caused
-    # shutter/PLC puts to silently fail, so we take the small overhead of a
-    # new Channel each call in exchange for reliability. A larger worker pool
-    # (16) absorbs bursts so the GUI doesn't stall while puts are in flight.
+def caput_bg(pv, val, t=5.0):
+    # Bounded subprocess caput as the primary path. pvaccess.Channel.put()
+    # has no timeout and was observed to wedge on flaky PLC/valve IOCs,
+    # which fed through the worker pool and stalled the GUI. A subprocess
+    # costs ~200 ms but is hard-bounded by the timeout and can never hang.
     def _do():
         try:
-            ch = Channel(pv, CA)
-            ch.put(val)
+            subprocess.run(["caput", pv, str(val)],
+                           capture_output=True, timeout=t)
         except Exception:
-            try:
-                subprocess.run(["caput", pv, str(val)],
-                               capture_output=True, timeout=t)
-            except Exception:
-                pass
+            pass
     _pool.submit(_do)
