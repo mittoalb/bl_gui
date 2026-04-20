@@ -104,7 +104,7 @@ class MC(QtWidgets.QFrame):
         self._apply_fonts()
 
     def get_pvs(self):
-        base = [f"{self.pv}.{f}" for f in ("RBV","DMOV","MOVN","DESC","EGU","HLS","LLS","LVIO","TWV")]
+        base = [f"{self.pv}.{f}" for f in ("RBV","DMOV","MOVN","DESC","EGU","HLS","LLS","LVIO")]
         base.append(f"{self.pv}_able")
         return base
 
@@ -119,11 +119,6 @@ class MC(QtWidgets.QFrame):
         elif field == "EGU": self.egu.setText(value)
         elif field == "MOVN": self._movn = value; self._update_status()
         elif field == "DMOV": self._dmov = value; self._update_status()
-        elif field == "TWV":
-            # Don't overwrite the user's in-progress typing.
-            if not self.twv.hasFocus():
-                try: self.twv.setText(f"{float(value):g}")
-                except (ValueError, TypeError): self.twv.setText(str(value))
         elif field in ("HLS", "LLS", "LVIO"):
             setattr(self, f"_{field.lower()}", value)
             hit = any(getattr(self, f"_{f.lower()}", "0") in ("1", "1.0") for f in ("HLS", "LLS", "LVIO"))
