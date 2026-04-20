@@ -46,7 +46,8 @@ class MC(QtWidgets.QFrame):
         self.btn_twr = QtWidgets.QPushButton("\u25C0")
         self.btn_twr.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         self.btn_twr.clicked.connect(lambda: caput_bg(f"{self.pv}.TWR", 1)); tw.addWidget(self.btn_twr)
-        self.twv = QtWidgets.QLineEdit("0.1"); self.twv.setAlignment(QtCore.Qt.AlignCenter)
+        self.twv = QtWidgets.QLineEdit(""); self.twv.setAlignment(QtCore.Qt.AlignCenter)
+        self.twv.setPlaceholderText("step")
         self.twv.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         self.twv.returnPressed.connect(lambda: caput_bg(f"{self.pv}.TWV", self.twv.text())); tw.addWidget(self.twv)
         self.btn_twf = QtWidgets.QPushButton("\u25B6")
@@ -103,7 +104,7 @@ class MC(QtWidgets.QFrame):
         self._apply_fonts()
 
     def get_pvs(self):
-        base = [f"{self.pv}.{f}" for f in ("RBV","DMOV","MOVN","DESC","EGU","HLS","LLS","LVIO")]
+        base = [f"{self.pv}.{f}" for f in ("RBV","DMOV","MOVN","DESC","EGU","HLS","LLS","LVIO","TWV")]
         base.append(f"{self.pv}_able")
         return base
 
@@ -118,6 +119,11 @@ class MC(QtWidgets.QFrame):
         elif field == "EGU": self.egu.setText(value)
         elif field == "MOVN": self._movn = value; self._update_status()
         elif field == "DMOV": self._dmov = value; self._update_status()
+        elif field == "TWV":
+            # Don't overwrite the user's in-progress typing.
+            if not self.twv.hasFocus():
+                try: self.twv.setText(f"{float(value):g}")
+                except (ValueError, TypeError): self.twv.setText(str(value))
         elif field in ("HLS", "LLS", "LVIO"):
             setattr(self, f"_{field.lower()}", value)
             hit = any(getattr(self, f"_{f.lower()}", "0") in ("1", "1.0") for f in ("HLS", "LLS", "LVIO"))

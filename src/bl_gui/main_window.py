@@ -938,7 +938,8 @@ class Win(QtWidgets.QMainWindow):
             panel_mcs = p.findChildren(MC)
             if panel_mcs:
                 data["_mcs"][k] = [
-                    {"label": mc._label, "pv": mc.pv, "custom": bool(mc._custom_label)}
+                    {"label": mc._label, "pv": mc.pv, "custom": bool(mc._custom_label),
+                     "twv": mc.twv.text()}
                     for mc in panel_mcs
                 ]
             for btn in p.findChildren(QtWidgets.QPushButton):
@@ -1030,6 +1031,8 @@ class Win(QtWidgets.QMainWindow):
                 for md in mc_list:
                     mc = MC(md.get("label", ""), md.get("pv", ""))
                     mc._custom_label = bool(md.get("custom"))
+                    saved_twv = md.get("twv")
+                    if saved_twv: mc.twv.setText(saved_twv)
                     lay.addWidget(mc)
                     self.mcs.append(mc)
                 lay.addStretch()
@@ -1120,6 +1123,8 @@ class Win(QtWidgets.QMainWindow):
                     mc = MC(mc_data.get("label", ""), mc_data.get("pv", ""))
                     if mc_data.get("custom"):
                         mc._custom_label = True
+                    saved_twv = mc_data.get("twv")
+                    if saved_twv: mc.twv.setText(saved_twv)
                     lay.insertWidget(idx, mc)
                     self.mcs.append(mc)
             # User-added PV rows (from 'Add PV Row...' in edit mode)
@@ -1196,6 +1201,27 @@ class Win(QtWidgets.QMainWindow):
         event.accept()
 
 
+class _PressFlash(QtCore.QObject):
+    """App-wide filter that tints any button for ~200 ms when it's pressed, so
+    the user can see whether a click registered even if the GUI then stalls
+    (e.g. an MEDM launch taking over the foreground)."""
+    def eventFilter(self, obj, ev):
+        t = ev.type()
+        if isinstance(obj, QtWidgets.QAbstractButton):
+            if t in (QtCore.QEvent.MouseButtonPress, QtCore.QEvent.KeyPress):
+                if t == QtCore.QEvent.KeyPress and ev.key() not in (
+                        QtCore.Qt.Key_Space, QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+                    return False
+                eff = QtWidgets.QGraphicsColorizeEffect(obj)
+                eff.setColor(QtGui.QColor("#ffea00"))
+                eff.setStrength(0.85)
+                obj.setGraphicsEffect(eff)
+                QtCore.QTimer.singleShot(
+                    200, lambda o=obj: o.setGraphicsEffect(None) if o is not None else None
+                )
+        return False
+
+
 def main():
     """Command line:
         bl_gui                          # default layout, view-only
@@ -1229,6 +1255,7 @@ def main():
         print(f"[CONFIG] using layout: {_theme_mod._LAY}")
 
     app = QtWidgets.QApplication(sys.argv); app.setApplicationName("Beamline GUI")
+    _press_flash = _PressFlash(app); app.installEventFilter(_press_flash)
     w = Win(allow_edit=allow_edit); w.show()
     app.aboutToQuit.connect(w.close)
     sys.exit(app.exec_())
