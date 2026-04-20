@@ -80,37 +80,17 @@ class PVEngine(QtCore.QObject):
 
 
 _pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="ca")
-_put_channels: Dict[str, Channel] = {}
-_put_pv_locks: Dict[str, threading.Lock] = {}
-_put_locks_guard = threading.Lock()
-
-
-def _get_put_channel(pv: str):
-    # Reuse one Channel per PV: creating a new pvaccess Channel on every caput
-    # leaks CA resources and, under heavy use, wedges the CA client — which
-    # appears to the user as the GUI getting stuck. Per-PV locks so a slow
-    # Channel() call for a sluggish IOC (e.g. PLC) can't block puts to every
-    # other PV.
-    ch = _put_channels.get(pv)
-    if ch is not None:
-        return ch
-    with _put_locks_guard:
-        lock = _put_pv_locks.get(pv)
-        if lock is None:
-            lock = threading.Lock()
-            _put_pv_locks[pv] = lock
-    with lock:
-        ch = _put_channels.get(pv)
-        if ch is None:
-            ch = Channel(pv, CA)
-            _put_channels[pv] = ch
-        return ch
 
 
 def caput_bg(pv, val, t=10.0):
+    # One fresh Channel per put. Reusing Channels across workers caused
+    # shutter/PLC puts to silently fail, so we take the small overhead of a
+    # new Channel each call in exchange for reliability. A larger worker pool
+    # (16) absorbs bursts so the GUI doesn't stall while puts are in flight.
     def _do():
         try:
-            _get_put_channel(pv).put(val)
+            ch = Channel(pv, CA)
+            ch.put(val)
         except Exception:
             try:
                 subprocess.run(["caput", pv, str(val)],
