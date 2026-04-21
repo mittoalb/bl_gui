@@ -462,7 +462,8 @@ class ValveField(QtWidgets.QWidget):
         except (ValueError, TypeError):
             on = lv in ("on", "open", "true", "high", "yes", "1",
                         "run", "running", "active", "busy", "start",
-                        "started", "enable", "enabled")
+                        "started", "enable", "enabled",
+                        "acquire", "acquiring")
         if self._invert_status:
             on = not on
         print(f"[VALVE] {self.field_id}: status={value!r} -> {'ON' if on else 'OFF'}")
@@ -718,7 +719,8 @@ class ToggleField(QtWidgets.QWidget):
         except (ValueError, TypeError):
             on = lv in ("on", "open", "true", "high", "yes", "1",
                         "run", "running", "active", "busy", "start",
-                        "started", "enable", "enabled")
+                        "started", "enable", "enabled",
+                        "acquire", "acquiring")
         if self._invert_status:
             on = not on
         self._is_open = bool(on)
