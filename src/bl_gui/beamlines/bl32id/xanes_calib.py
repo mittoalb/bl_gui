@@ -16,6 +16,12 @@ import subprocess
 
 from PyQt5 import QtCore, QtWidgets
 
+try:
+    import pyqtgraph as _pg
+    _HAVE_PG = True
+except Exception:
+    _HAVE_PG = False
+
 
 _CALIB_FILE = os.path.expanduser("~/.bl_gui/bl32id_zp_calibration.json")
 
@@ -78,7 +84,7 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
         self.setWindowFlag(QtCore.Qt.Window, True)
         self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
         self.setWindowTitle("ZP Energy Calibration — bl32-ID")
-        self.resize(760, 560)
+        self.resize(1120, 600)
         central = QtWidgets.QWidget(); self.setCentralWidget(central)
 
         cfg = load_config()
@@ -113,7 +119,40 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
         self.table.setHorizontalHeaderLabels(
             ["Energy [eV]", "X [mm]", "Y [mm]", "Z [mm]"])
         self.table.horizontalHeader().setStretchLastSection(True)
-        V.addWidget(self.table, 1)
+        # Re-plot whenever the table content changes (add / edit / remove).
+        self.table.itemChanged.connect(self._refresh_plot)
+
+        # Split the middle area: table on the left, plot on the right.
+        mid = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        mid.addWidget(self.table)
+        if _HAVE_PG:
+            _pg.setConfigOptions(antialias=True)
+            self.plot = _pg.PlotWidget()
+            self.plot.setBackground("#1e1e1e")
+            self.plot.showGrid(x=True, y=True, alpha=0.3)
+            self.plot.setLabel("bottom", "Energy [eV]")
+            self.plot.setLabel("left", "Position [mm]")
+            self.plot.addLegend(offset=(10, 10))
+            self._curve_x = self.plot.plot([], [], pen=_pg.mkPen("#3498db", width=2),
+                                           symbol="o", symbolBrush="#3498db",
+                                           symbolSize=8, name="X")
+            self._curve_y = self.plot.plot([], [], pen=_pg.mkPen("#2ecc71", width=2),
+                                           symbol="s", symbolBrush="#2ecc71",
+                                           symbolSize=8, name="Y")
+            self._curve_z = self.plot.plot([], [], pen=_pg.mkPen("#e74c3c", width=2),
+                                           symbol="t", symbolBrush="#e74c3c",
+                                           symbolSize=8, name="Z")
+            mid.addWidget(self.plot)
+            mid.setStretchFactor(0, 1)
+            mid.setStretchFactor(1, 2)
+        else:
+            self.plot = None
+            fallback = QtWidgets.QLabel(
+                "Install pyqtgraph to see the calibration curve.")
+            fallback.setAlignment(QtCore.Qt.AlignCenter)
+            fallback.setStyleSheet("color:#888;font-style:italic;padding:20px;")
+            mid.addWidget(fallback)
+        V.addWidget(mid, 1)
         for p in cfg.get("points", []):
             # Legacy formats:
             #   len==4 with ZP focus: [E, ZP, X, Z]  → fold ZP into Z if
@@ -160,14 +199,55 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
     # ── Table helpers ───────────────────────────────────────────────────
     def _append_row(self, e_eV, x_mm=None, y_mm=None, z_mm=None):
         r = self.table.rowCount()
-        self.table.insertRow(r)
-        self.table.setItem(r, 0, QtWidgets.QTableWidgetItem(f"{float(e_eV):.3f}"))
-        if x_mm is not None:
-            self.table.setItem(r, 1, QtWidgets.QTableWidgetItem(f"{float(x_mm):.6f}"))
-        if y_mm is not None:
-            self.table.setItem(r, 2, QtWidgets.QTableWidgetItem(f"{float(y_mm):.6f}"))
-        if z_mm is not None:
-            self.table.setItem(r, 3, QtWidgets.QTableWidgetItem(f"{float(z_mm):.6f}"))
+        # itemChanged fires during setItem — suppress refresh per-cell
+        # and do it once at the end.
+        self.table.blockSignals(True)
+        try:
+            self.table.insertRow(r)
+            self.table.setItem(r, 0, QtWidgets.QTableWidgetItem(f"{float(e_eV):.3f}"))
+            if x_mm is not None:
+                self.table.setItem(r, 1, QtWidgets.QTableWidgetItem(f"{float(x_mm):.6f}"))
+            if y_mm is not None:
+                self.table.setItem(r, 2, QtWidgets.QTableWidgetItem(f"{float(y_mm):.6f}"))
+            if z_mm is not None:
+                self.table.setItem(r, 3, QtWidgets.QTableWidgetItem(f"{float(z_mm):.6f}"))
+        finally:
+            self.table.blockSignals(False)
+        self._refresh_plot()
+
+    def _refresh_plot(self, *_):
+        """Rebuild the three (E, axis-value) line series from the current
+        table content. Missing cells just drop out of their curve."""
+        if not _HAVE_PG or self.plot is None:
+            return
+        xs_x, ys_x = [], []
+        xs_y, ys_y = [], []
+        xs_z, ys_z = [], []
+        for r in range(self.table.rowCount()):
+            def _get(c):
+                it = self.table.item(r, c)
+                if it is None or not it.text().strip():
+                    return None
+                try: return float(it.text())
+                except ValueError: return None
+            e = _get(0)
+            if e is None:
+                continue
+            vx, vy, vz = _get(1), _get(2), _get(3)
+            if vx is not None: xs_x.append(e); ys_x.append(vx)
+            if vy is not None: xs_y.append(e); ys_y.append(vy)
+            if vz is not None: xs_z.append(e); ys_z.append(vz)
+        # Sort each series by energy so the lines don't zigzag.
+        def _sort(xs, ys):
+            if not xs: return xs, ys
+            order = sorted(range(len(xs)), key=lambda i: xs[i])
+            return [xs[i] for i in order], [ys[i] for i in order]
+        xs_x, ys_x = _sort(xs_x, ys_x)
+        xs_y, ys_y = _sort(xs_y, ys_y)
+        xs_z, ys_z = _sort(xs_z, ys_z)
+        self._curve_x.setData(xs_x, ys_x)
+        self._curve_y.setData(xs_y, ys_y)
+        self._curve_z.setData(xs_z, ys_z)
 
     def _collect_points(self):
         pts = []
@@ -220,6 +300,7 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
                       reverse=True)
         for r in rows:
             self.table.removeRow(r)
+        self._refresh_plot()
 
     def _on_clear(self):
         if self.table.rowCount() == 0:
@@ -228,6 +309,7 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
                 self, "Clear calibration table", "Delete all rows?"
         ) == QtWidgets.QMessageBox.Yes:
             self.table.setRowCount(0)
+            self._refresh_plot()
 
     def _save_and_close(self):
         if self._do_save():
