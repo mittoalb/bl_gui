@@ -59,14 +59,14 @@ class PVField(QtWidgets.QWidget):
             w.setStyleSheet(
                 "QLineEdit{background:#2c3e50;color:#ecf0f1;"
                 "border:1px solid #3498db;border-radius:3px;"
-                "padding:4px 6px;font:10pt monospace;}"
+                "padding:4px 6px;font:10pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
                 "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}")
             if self._placeholder:
                 w.setPlaceholderText(self._placeholder)
             w.returnPressed.connect(self._on_sp_return)
         elif self.kind == 'rb':
             w = QtWidgets.QLabel("---")
-            w.setStyleSheet("color:#2ecc71;font:bold 10pt monospace;")
+            w.setStyleSheet("color:#2ecc71;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;")
         elif self.kind == 'cmb':
             w = QtWidgets.QComboBox()
             if self._choices:

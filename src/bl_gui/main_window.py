@@ -418,11 +418,11 @@ class Win(QtWidgets.QMainWindow):
         energy_sp._inner.setStyleSheet(
             "QLineEdit{background:#2c3e50;color:#ecf0f1;"
             "border:1px solid #3498db;border-radius:3px;"
-            "padding:4px 8px;font:bold 15pt monospace;}"
+            "padding:4px 8px;font:bold 15pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
             "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}")
         bragg_rb._inner.setMinimumHeight(36)
         bragg_rb._inner.setStyleSheet(
-            "color:#2ecc71;background:transparent;font:bold 15pt monospace;padding:4px 6px;")
+            "color:#2ecc71;background:transparent;font:bold 15pt 'Liberation Mono','DejaVu Sans Mono',monospace;padding:4px 6px;")
         energy_go._inner.setMinimumHeight(36)
         energy_go._inner.setStyleSheet(
             "background:#27ae60;color:#fff;font:bold 13pt;"
@@ -515,7 +515,7 @@ class Win(QtWidgets.QMainWindow):
         exp_edit.setStyleSheet(
             "QLineEdit{background:#2c3e50;color:#ecf0f1;"
             "border:1px solid #3498db;border-radius:3px;"
-            "padding:4px 8px;font:bold 14pt monospace;}"
+            "padding:4px 8px;font:bold 14pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
             "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}")
         # AreaDetector binning needs SizeX/SizeY to be recomputed from the
         # sensor's max size when BinX/BinY change (same logic as pystream's
@@ -1444,6 +1444,11 @@ def main():
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
 
     app = QtWidgets.QApplication(sys.argv); app.setApplicationName("Beamline GUI")
+    # App-wide UI font — Cantarell is GNOME's clean humanist sans (far less
+    # cartoon-ish than the PyQt5 default), DejaVu Sans / sans-serif fallbacks.
+    _ui_font = QtGui.QFont("Cantarell", 9)
+    _ui_font.setStyleStrategy(QtGui.QFont.PreferAntialias)
+    app.setFont(_ui_font)
     _press_flash = _PressFlash(app); app.installEventFilter(_press_flash)
     w = Win(allow_edit=allow_edit); w.show()
     app.aboutToQuit.connect(w.close)

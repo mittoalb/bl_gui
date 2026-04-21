@@ -76,7 +76,7 @@ class MotorDetailsDialog(QtWidgets.QDialog):
             "QGroupBox::title{subcontrol-origin:margin;left:8px;padding:0 4px;}"
             "QLabel{color:#e0e0e0;background:transparent;}"
             "QLineEdit,QComboBox{background:#2d2d2d;color:#e0e0e0;padding:2px 5px;"
-            "border:1px solid #404040;border-radius:3px;font:9pt monospace;}"
+            "border:1px solid #404040;border-radius:3px;font:9pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
             "QPushButton{background:#2d2d2d;color:#e0e0e0;padding:4px 10px;"
             "border:1px solid #404040;border-radius:3px;}"
             "QPushButton:hover{background:#3a3a3a;}"
@@ -133,7 +133,7 @@ class MotorDetailsDialog(QtWidgets.QDialog):
     def _make_field(self, sfx, kind):
         if kind == "ro":
             w = QtWidgets.QLabel("---")
-            w.setStyleSheet("color:#2ecc71;font:bold 10pt monospace;padding:2px 4px;"
+            w.setStyleSheet("color:#2ecc71;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;padding:2px 4px;"
                             "background:#000;border:1px solid #333;border-radius:2px;")
             self._fields[sfx] = w
             return w

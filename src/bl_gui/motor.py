@@ -103,7 +103,7 @@ class MC(QtWidgets.QFrame):
     def _apply_fonts(self):
         sd=_fs(9); sr=_fs(12); sv=_fs(10); st=_fs(8); sb=_fs(8); stw=_fs(8)
         self.desc.setStyleSheet(f"background:#1e5a8e;color:#fff;font:bold {sd}pt;padding:2px;border-radius:2px;")
-        self.rbv.setStyleSheet(f"background:#000000;color:#2ecc71;font:bold {sr}pt monospace;padding:3px;border:1px solid #333;border-radius:2px;")
+        self.rbv.setStyleSheet(f"background:#000000;color:#2ecc71;font:bold {sr}pt 'Liberation Mono','DejaVu Sans Mono',monospace;padding:3px;border:1px solid #333;border-radius:2px;")
         self.val.setStyleSheet(f"font:{sv}pt;"); self.twv.setStyleSheet(f"font:{st}pt;")
         self.btn_twr.setStyleSheet(f"font:{stw}pt;padding:0 2px;"); self.btn_twf.setStyleSheet(f"font:{stw}pt;padding:0 2px;")
         self.btn_twr.setFixedWidth(max(18, _fs(18))); self.btn_twf.setFixedWidth(max(18, _fs(18)))
@@ -227,7 +227,7 @@ _DEFAULT_TABS = ["User Mode", "Expert Mode"]
 
 def _rb():
     lbl = QtWidgets.QLabel("---")
-    lbl.setStyleSheet("color:#2ecc71;font:bold 10pt monospace;")
+    lbl.setStyleSheet("color:#2ecc71;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;")
     return lbl
 
 
