@@ -1250,18 +1250,19 @@ class Win(QtWidgets.QMainWindow):
                 cols = getattr(p, "_grid_cols", None)
                 defaults = getattr(p, "_cfg_btn_defaults", None)
                 default_specs = getattr(p, "_default_btn_specs", [])
-                # Merge: if the saved list is missing any default label,
-                # append the default spec. Ensures that newly-added built-in
-                # entries (e.g. "Softglue") show up for users with existing
-                # saves, without wiping their customisations.
+                # Merge: if the saved list is missing any default button,
+                # append it. Match by label OR action — if the user renamed
+                # or retargeted a default, we must NOT re-inject it.
                 saved_labels = {bd.get("label") for bd in btn_list}
+                saved_actions = {bd.get("action") for bd in btn_list}
                 merged = list(btn_list)
                 for lbl, cmd in default_specs:
-                    if lbl not in saved_labels:
-                        merged.append({"label": lbl, "type": "shell", "action": cmd,
-                                       "bg": defaults[0] if defaults else "#2d2d2d",
-                                       "fg": defaults[1] if defaults else "#e0e0e0",
-                                       "font_size": defaults[2] if defaults else 9})
+                    if lbl in saved_labels or cmd in saved_actions:
+                        continue
+                    merged.append({"label": lbl, "type": "shell", "action": cmd,
+                                   "bg": defaults[0] if defaults else "#2d2d2d",
+                                   "fg": defaults[1] if defaults else "#e0e0e0",
+                                   "font_size": defaults[2] if defaults else 9})
                 for idx, bd in enumerate(merged):
                     btn = CfgButton.from_dict(bd, p)
                     btn.setMinimumHeight(34)
