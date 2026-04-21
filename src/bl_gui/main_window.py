@@ -442,7 +442,6 @@ class Win(QtWidgets.QMainWindow):
             ('sp',  "Detune (eV):",  "energy_detune",   "32id:TXMOptics:EnergyDetune",             {}),
             ('sp',  "Cal File 1:",   "energy_calfile1", "32id:TXMOptics:EnergyCalibrationFileOne", dict(placeholder="calib file 1")),
             ('sp',  "Cal File 2:",   "energy_calfile2", "32id:TXMOptics:EnergyCalibrationFileTwo", dict(placeholder="calib file 2")),
-            ('rb',  "Und E (keV):",  "und_energy_rbv",  "S32ID:USID:EnergyM.VAL",                  dict(fmt=".3f")),
         ]
         self._register_pv_fields(p, energy_fields, el)
 
@@ -649,9 +648,11 @@ class Win(QtWidgets.QMainWindow):
         p.setLayout(skl); p.setGeometry(1104 + GAP, iy + 168, 360, 400)
 
         # --- Launchers ---
-        p, _ = self._make_panel("Launchers", 500, 110, tab_name)
-        ll2 = QtWidgets.QGridLayout(); ll2.setContentsMargins(6, 22, 6, 4); ll2.setSpacing(3)
+        p, _ = self._make_panel("Launchers", 560, 150, tab_name)
+        ll2 = QtWidgets.QGridLayout(); ll2.setContentsMargins(6, 22, 6, 6); ll2.setSpacing(5)
         p._grid_cols = 4  # used by _load_layout to restore positions
+        _launcher_ss = ("background:#4a6a8a;color:#fff;font:bold 10pt;"
+                        "padding:8px 10px;border:1px solid #5d7ea0;border-radius:4px;")
         launchers = [
             ("ImageJ","/home/beams/USERTXM/Software/ImageJ/ImageJ.sh"),
             ("Detector","/home/beams/USERTXM/epics/synApps/support/32idbSP1/iocBoot/ioc32idbSP1/softioc/32idbSP1.sh medm"),
@@ -663,15 +664,18 @@ class Win(QtWidgets.QMainWindow):
             ("Shaker","/net/s32dserv/xorApps/epics/synApps_6_3/ioc/32idbShaker/start_MEDM_32idbShaker")]
         for i, (lbl, cmd) in enumerate(launchers):
             b = CfgButton(lbl, action_type="shell", action=cmd, parent=p)
-            b.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;padding:3px 6px;border:1px solid #404040;border-radius:3px;")
+            b.setStyleSheet(_launcher_ss)
+            b.setMinimumHeight(34)
             ll2.addWidget(b, i // 4, i % 4)
             p.custom_buttons.append(b)
-        p.setLayout(ll2); p.setGeometry(0, iy + 64, 500, 110)
+        p.setLayout(ll2); p.setGeometry(0, iy + 64, 560, 150)
 
         # --- Displays ---
-        p, _ = self._make_panel("Displays", 500, 80, tab_name)
-        dl = QtWidgets.QGridLayout(); dl.setContentsMargins(6, 22, 6, 4); dl.setSpacing(3)
+        p, _ = self._make_panel("Displays", 560, 150, tab_name)
+        dl = QtWidgets.QGridLayout(); dl.setContentsMargins(6, 22, 6, 6); dl.setSpacing(5)
         p._grid_cols = 3  # used by _load_layout to restore positions
+        _display_ss = ("background:#1e6a3e;color:#fff;font:bold 10pt;"
+                       "padding:8px 10px;border:1px solid #27ae60;border-radius:4px;")
         displays = [
             ("XANES","medm -x -macro 'P=32id:,R=TXMOptics:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/xanes.adl &"),
             ("Furnace","medm -x /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/Furnace.adl &"),
@@ -683,10 +687,11 @@ class Win(QtWidgets.QMainWindow):
             ("CSS/BPM","/net/s32dserv/xorApps/epics/synApps_6_0/ioc/32idcBPM/iocBoot/iocbpm/32idcBPM.sh css")]
         for i, (lbl, cmd) in enumerate(displays):
             b = CfgButton(lbl, action_type="shell", action=cmd, parent=p)
-            b.setStyleSheet("background:#1e5a8e;color:#fff;font:9pt;padding:3px 6px;border:1px solid #2980b9;border-radius:3px;")
+            b.setStyleSheet(_display_ss)
+            b.setMinimumHeight(34)
             p.custom_buttons.append(b)
             dl.addWidget(b, i // 3, i % 3)
-        p.setLayout(dl); p.setGeometry(0, iy + 178, 500, 80)
+        p.setLayout(dl); p.setGeometry(0, iy + 220, 560, 150)
 
         # --- Schematic ---
         if os.path.isfile(_IMG):
