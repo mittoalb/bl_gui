@@ -299,10 +299,64 @@ class Win(QtWidgets.QMainWindow):
                 field.setParent(None); field.deleteLater()
 
     def _pv_field_rebind(self, field, old_pv, new_pv):
-        """Called by PVField._edit_pv_dialog after the user changes a PV.
-        Subscribes the new PV on the live engine."""
+        """Called by PVField / ValveField / ToggleField after the user
+        changes a PV. Subscribes the new PV on the live engine AND
+        propagates the change to the matching widget in every other tab
+        so edits made in User Mode immediately reflect in Expert Mode
+        (and vice-versa)."""
         if hasattr(self, '_pve') and new_pv:
             self._pve.monitor_many([new_pv])
+        self._propagate_field_change(field)
+
+    def _propagate_field_change(self, source):
+        """Copy the full state of ``source`` onto every other field with
+        the same field_id living in a sibling tab's copy of the same
+        panel. Panel keys are ``"<Base>::<Tab>"`` so we match on the
+        ``Base`` component."""
+        fid = getattr(source, "field_id", None)
+        if not fid:
+            return
+        # Locate the source's panel key.
+        src_key = None
+        for key, slot in self._pv_fields.items():
+            if slot.get(fid) is source:
+                src_key = key; break
+        if src_key is None:
+            return
+        src_base = src_key.split("::")[0]
+        # Snapshot source state for efficient copying.
+        src_dict = source.get_pvs_dict() if hasattr(source, "get_pvs_dict") else None
+        src_pv = getattr(source, "pv", None)
+
+        for key, slot in self._pv_fields.items():
+            if key == src_key:
+                continue
+            if key.split("::")[0] != src_base:
+                continue
+            sibling = slot.get(fid)
+            if sibling is None or sibling is source:
+                continue
+            if src_dict is not None and hasattr(sibling, "set_pvs_dict"):
+                sibling.set_pvs_dict(src_dict)
+            elif src_pv is not None and hasattr(sibling, "pv"):
+                sibling.pv = src_pv
+            # If it's a simple sp/rb QLineEdit/QLabel inside the PVField,
+            # mirror its text too so the other tab's view updates visually.
+            if hasattr(source, "_inner") and hasattr(sibling, "_inner"):
+                try:
+                    s_txt = source._inner.text() if hasattr(source._inner, "text") else None
+                except Exception:
+                    s_txt = None
+                if s_txt is not None:
+                    try:
+                        sibling._inner.blockSignals(True)
+                        if hasattr(sibling._inner, "setText"):
+                            sibling._inner.setText(s_txt)
+                    except Exception:
+                        pass
+                    finally:
+                        try: sibling._inner.blockSignals(False)
+                        except Exception: pass
 
     def _create_tab(self, name):
         canvas = QtWidgets.QWidget()
