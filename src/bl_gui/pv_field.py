@@ -558,7 +558,8 @@ class ToggleField(QtWidgets.QWidget):
 
     def __init__(self, status_pv, open_pv, close_pv, field_id,
                  label_text="", open_text="Open", close_text="Close",
-                 open_value=1, close_value=1, parent=None):
+                 open_value=1, close_value=1,
+                 pulse=False, invert_status=False, parent=None):
         super().__init__(parent)
         self.field_id = field_id
         self.status_pv = (status_pv or "").strip()
@@ -571,6 +572,13 @@ class ToggleField(QtWidgets.QWidget):
         self._close_value = close_value
         self._is_open = False
         self._edit_mode = False
+        # Edge-triggered PLCs need a 1,0 pulse so the next click works; normal
+        # bi/bo records must not be pulsed (a 0 follow-up immediately reverses
+        # the action). Default off — enable explicitly for pulsed outputs.
+        self._pulse = bool(pulse)
+        # For records like CLSD_PL where 1=closed/0=open, the "state is on"
+        # interpretation is inverted. Shutter users set invert_status=True.
+        self._invert_status = bool(invert_status)
 
         L = QtWidgets.QVBoxLayout(self)
         L.setContentsMargins(2, 2, 2, 2); L.setSpacing(2)
@@ -605,55 +613,37 @@ class ToggleField(QtWidgets.QWidget):
 
     def _on_click(self):
         if self._is_open and self.close_pv:
-            print(f"[SHUTTER] {self.field_id}: fire -> {self.close_pv}  (pulse)")
-            self._pulse(self.close_pv, self._close_value)
-            self._show_pending("closing")
+            self._fire(self.close_pv, self._close_value)
         elif (not self._is_open) and self.open_pv:
-            print(f"[SHUTTER] {self.field_id}: fire -> {self.open_pv}  (pulse)")
-            self._pulse(self.open_pv, self._open_value)
-            self._show_pending("opening")
+            self._fire(self.open_pv, self._open_value)
 
-    def _pulse(self, pv, val):
-        # Write the trigger value then clear to 0 after 300 ms. Trigger bits
-        # on edge-triggered PLCs latch — without the clear, the next click
-        # does nothing.
+    def _fire(self, pv, val):
+        print(f"[TOGGLE] {self.field_id}: caput {pv} {val}")
         caput_bg(pv, val)
-        QtCore.QTimer.singleShot(300, lambda p=pv: caput_bg(p, 0))
-
-    def _show_pending(self, label):
-        # Immediate visual feedback — the button turns blue with a '...'
-        # marker until the status PV confirms the real state.
-        self.btn.setText(f"{label}...")
-        self.btn.setStyleSheet(
-            "background:#2980b9;color:#fff;font:bold 11pt;"
-            "border:1px solid #3a95d8;border-radius:3px;padding:4px;"
-        )
+        if self._pulse:
+            QtCore.QTimer.singleShot(300, lambda p=pv: caput_bg(p, 0))
 
     # ── PV interface ─────────────────────────────────────────────────
     def monitored_pvs(self):
         return [self.status_pv] if self.status_pv else []
 
     def update_value(self, value):
-        """Update state from status PV. Most APS shutter 'CLSD_PL' records
-        use 1 = closed (i.e. beam NOT present). Users can invert the
-        interpretation via the edit dialog later if needed."""
-        v = str(value).strip().lower()
-        # Heuristic: open/true/1/etc → OPEN; close/closed/0 → CLOSED
+        """Update state from status PV. Standard semantic: truthy (1/Yes/On/
+        Open/True/High) = state ON, falsy = OFF. For inverted records like
+        CLSD_PL (1=closed), pass invert_status=True to the constructor."""
+        v = str(value).strip()
+        lv = v.lower()
+        on = False
         try:
-            num = float(v)
-            # Treat numeric 0 as "closed" for SBS/FES CLSD_PL semantics too
-            open_now = (num == 0.0)
+            on = float(v) != 0.0
         except (ValueError, TypeError):
-            if v in ("open", "on", "true", "high", "1"):
-                open_now = True
-            elif v in ("closed", "close", "off", "false", "low", "0"):
-                open_now = False
-            else:
-                open_now = False
-        self._is_open = bool(open_now)
+            on = lv in ("on", "open", "true", "high", "yes", "1")
+        if self._invert_status:
+            on = not on
+        self._is_open = bool(on)
         self._restyle()
-        print(f"[SHUTTER] {self.field_id}: status={value!r} -> "
-              f"{'OPEN' if self._is_open else 'CLOSED'}")
+        print(f"[TOGGLE] {self.field_id}: status={value!r} -> "
+              f"{'ON' if self._is_open else 'OFF'}")
 
     @property
     def pv(self):

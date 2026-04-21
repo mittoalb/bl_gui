@@ -400,13 +400,32 @@ class Win(QtWidgets.QMainWindow):
         p.setLayout(iol); p.setGeometry(0, iy, 760, 70)
 
         # --- Energy ---
-        p, _ = self._make_panel("Energy", 340, 280, tab_name)
+        p, _ = self._make_panel("Energy", 380, 300, tab_name)
         el = QtWidgets.QFormLayout(); el.setContentsMargins(6, 22, 6, 6); el.setSpacing(4)
-        # Every field is a PVField with a stable id → right-click allows
-        # per-beamline PV reassignment, and the PV is persisted in layout.json.
+
+        # Top row: big Energy setpoint + Bragg readback side-by-side — this
+        # is the main user-facing control so they must be easy to read.
+        slot = self._pv_fields.setdefault(p.key, {})
+        energy_sp = PVField(kind='sp', pv="32id:TXMOptics:Energy",
+                            field_id="energy_sp", placeholder="keV", parent=p)
+        bragg_rb  = PVField(kind='rb', pv="32ida:BraggERdbkAO",
+                            field_id="bragg_rbv", fmt=".3f", parent=p)
+        energy_sp._inner.setMinimumHeight(36)
+        energy_sp._inner.setStyleSheet("font:bold 15pt;padding:4px 6px;")
+        bragg_rb._inner.setMinimumHeight(36)
+        bragg_rb._inner.setStyleSheet(
+            "color:#2ecc71;font:bold 15pt monospace;padding:4px 6px;")
+        row = QtWidgets.QWidget()
+        hl = QtWidgets.QHBoxLayout(row); hl.setContentsMargins(0, 0, 0, 0); hl.setSpacing(6)
+        hl.addWidget(energy_sp, 1); hl.addWidget(bragg_rb, 1)
+        el.addRow("Energy (keV):", row)
+        slot["energy_sp"] = energy_sp
+        slot["bragg_rbv"] = bragg_rb
+
+        # Every remaining field is a PVField with a stable id → right-click
+        # allows per-beamline PV reassignment, and the PV is persisted in
+        # layout.json.
         energy_fields = [
-            ('sp',  "Energy (keV):", "energy_sp",       "32id:TXMOptics:Energy",                   dict(placeholder="keV")),
-            ('rb',  "Bragg RBV:",    "bragg_rbv",       "32ida:BraggERdbkAO",                      dict(fmt=".3f")),
             ('sp',  "Detune (eV):",  "energy_detune",   "32id:TXMOptics:EnergyDetune",             {}),
             ('sp',  "Cal File 1:",   "energy_calfile1", "32id:TXMOptics:EnergyCalibrationFileOne", dict(placeholder="calib file 1")),
             ('sp',  "Cal File 2:",   "energy_calfile2", "32id:TXMOptics:EnergyCalibrationFileTwo", dict(placeholder="calib file 2")),
@@ -448,7 +467,7 @@ class Win(QtWidgets.QMainWindow):
         calib_btn.clicked.connect(lambda: xanes_calib.launch(self))
         el.addRow("Calibration:", calib_btn)
 
-        p.setLayout(el); p.setGeometry(700 + GAP, 84 + GAP, 340, 280)
+        p.setLayout(el); p.setGeometry(700 + GAP, 84 + GAP, 380, 300)
 
         # --- Camera ---
         p, _ = self._make_panel("Camera", 340, 180, tab_name)
