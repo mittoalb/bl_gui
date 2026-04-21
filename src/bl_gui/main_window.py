@@ -434,26 +434,29 @@ class Win(QtWidgets.QMainWindow):
         p.setLayout(el); p.setGeometry(700 + GAP, 84 + GAP, 340, 280)
 
         # --- Camera ---
-        p, _ = self._make_panel("Camera", 340, 200, tab_name)
-        cl = QtWidgets.QFormLayout(); cl.setContentsMargins(6, 22, 6, 6); cl.setSpacing(3)
+        p, _ = self._make_panel("Camera", 340, 180, tab_name)
+        cl = QtWidgets.QFormLayout(); cl.setContentsMargins(6, 22, 6, 6); cl.setSpacing(4)
         self._register_pv_fields(p, [
             ('btn', "Start:",    "cam_start",    "32idbSP1:cam1:Acquire",         dict(button_text="Start", button_value=1)),
             ('btn', "Stop:",     "cam_stop",     "32idbSP1:cam1:Acquire",         dict(button_text="Stop",  button_value=0)),
             ('sp',  "Exp (s):",  "cam_exp_sp",   "32idbSP1:cam1:AcquireTime",     dict(placeholder="sec")),
-            ('rb',  "Exp RBV:",  "cam_exp_rb",   "32idbSP1:cam1:AcquireTime_RBV", dict(fmt=".3f")),
             ('rb',  "Size X:",   "cam_sizex",    "32idbSP1:cam1:SizeX_RBV",       {}),
             ('rb',  "Size Y:",   "cam_sizey",    "32idbSP1:cam1:SizeY_RBV",       {}),
             ('sp',  "Bin X:",    "cam_binx",     "32idbSP1:cam1:BinX",            dict(placeholder="1")),
             ('sp',  "Bin Y:",    "cam_biny",     "32idbSP1:cam1:BinY",            dict(placeholder="1")),
         ], cl)
+        cam_slot = self._pv_fields[p.key]
+        # Make the exposure-time field noticeably bigger (main user control).
+        exp_edit = cam_slot['cam_exp_sp']._inner
+        exp_edit.setMinimumHeight(32)
+        exp_edit.setStyleSheet("font:bold 14pt;padding:4px 8px;")
         # AreaDetector binning needs SizeX/SizeY to be recomputed from the
         # sensor's max size when BinX/BinY change (same logic as pystream's
-        # "Apply Binning" button). Hook the Enter key on both bin fields to
-        # run the full apply sequence automatically.
-        cam_slot = self._pv_fields[p.key]
+        # "Apply Binning" button). Hook Enter on both bin fields to run the
+        # full apply sequence automatically.
         cam_slot['cam_binx']._inner.returnPressed.connect(self._apply_cam_binning)
         cam_slot['cam_biny']._inner.returnPressed.connect(self._apply_cam_binning)
-        p.setLayout(cl); p.setGeometry(700 + GAP + 344, 84 + GAP, 340, 200)
+        p.setLayout(cl); p.setGeometry(700 + GAP + 344, 84 + GAP, 340, 180)
 
         # --- Crop ---
         p, _ = self._make_panel("Crop", 360, 100, tab_name)
