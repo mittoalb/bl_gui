@@ -590,6 +590,13 @@ class Win(QtWidgets.QMainWindow):
         try: energy_go._inner.clicked.disconnect()
         except TypeError: pass
         energy_go._inner.clicked.connect(self._on_set_energy)
+        # Enforce 6.5-12 keV range on the SP: hijack returnPressed so
+        # out-of-range values never reach caput.
+        try: energy_sp._inner.returnPressed.disconnect()
+        except TypeError: pass
+        energy_sp._inner.returnPressed.connect(
+            lambda e=energy_sp: self._on_energy_sp_return(e))
+        energy_sp._inner.setToolTip("Allowed range: 6.5 – 12 keV")
 
         # Every remaining field is a PVField with a stable id → right-click
         # allows per-beamline PV reassignment, and the PV is persisted in
@@ -671,23 +678,23 @@ class Win(QtWidgets.QMainWindow):
         # --- Camera ---
         p, _ = self._make_panel("Camera", 340, 180, tab_name)
         cl = QtWidgets.QFormLayout(); cl.setContentsMargins(6, 22, 6, 6); cl.setSpacing(4)
-        # Start + Stop on a single row — main acquisition controls.
+        # Start + Stop as a two-button ValveField in highlight mode so the
+        # currently-active side is bright and the other dim.
         cam_slot = self._pv_fields.setdefault(p.key, {})
-        cam_start = PVField(kind='btn', pv="32idbSP1:cam1:Acquire",
-                            field_id="cam_start", button_text="Start",
-                            button_value=1, parent=p)
-        cam_stop = PVField(kind='btn', pv="32idbSP1:cam1:Acquire",
-                           field_id="cam_stop", button_text="Stop",
-                           button_value=0, parent=p)
-        cam_start._inner.setMinimumHeight(32)
-        cam_stop._inner.setMinimumHeight(32)
-        ctrl_row = QtWidgets.QWidget()
-        ctrl_hl = QtWidgets.QHBoxLayout(ctrl_row)
-        ctrl_hl.setContentsMargins(0, 0, 0, 0); ctrl_hl.setSpacing(6)
-        ctrl_hl.addWidget(cam_start, 1); ctrl_hl.addWidget(cam_stop, 1)
-        cl.addRow("Acquire:", ctrl_row)
-        cam_slot["cam_start"] = cam_start
-        cam_slot["cam_stop"] = cam_stop
+        cam_run = ValveField(
+            status_pv="32idbSP1:cam1:Acquire",
+            on_pv="32idbSP1:cam1:Acquire",
+            off_pv="32idbSP1:cam1:Acquire",
+            field_id="cam_run",
+            label_text="",
+            on_text="Start", off_text="Stop",
+            on_value=1, off_value=0,
+            pulse=False, btn_width=80,
+            highlight_buttons=True, parent=p,
+        )
+        cam_run.name_lbl.hide()
+        cl.addRow("Acquire:", cam_run)
+        cam_slot["cam_run"] = cam_run
         self._register_pv_fields(p, [
             ('sp',  "Exp (s):",  "cam_exp_sp",   "32idbSP1:cam1:AcquireTime",     dict(placeholder="sec")),
             ('rb',  "Size X:",   "cam_sizex",    "32idbSP1:cam1:SizeX_RBV",       {}),
@@ -1721,6 +1728,31 @@ class Win(QtWidgets.QMainWindow):
                 self._style_qgmax_button(b, running=running)
             if not running:
                 self.statusBar().showMessage("QGMax: done.", 3000)
+
+    # Energy range guard (keV) enforced by the GUI on the Energy SP field.
+    _ENERGY_MIN_KEV = 6.5
+    _ENERGY_MAX_KEV = 12.0
+
+    def _on_energy_sp_return(self, sp_field):
+        """Validate Energy SP against [6.5, 12] keV before caput. On
+        out-of-range, clamp the text back to the last valid value and
+        pop a warning — no caput happens."""
+        txt = sp_field._inner.text().strip()
+        try:
+            val = float(txt)
+        except ValueError:
+            QtWidgets.QMessageBox.warning(
+                self, "Energy invalid", f"{txt!r} is not a number.")
+            return
+        if val < self._ENERGY_MIN_KEV or val > self._ENERGY_MAX_KEV:
+            QtWidgets.QMessageBox.warning(
+                self, "Energy out of range",
+                f"Energy must be between {self._ENERGY_MIN_KEV} and "
+                f"{self._ENERGY_MAX_KEV} keV (you entered {val}).")
+            return
+        # Normal PVField caput path (same as _on_sp_return does).
+        print(f"[SP] {sp_field.field_id}: caput {sp_field.pv} {txt!r}")
+        caput_bg(sp_field.pv, txt)
 
     def _move_motors_from_plugin(self):
         """Linear-interpolate X/Y/Z/QG-V/QG-H at the current Energy SP
