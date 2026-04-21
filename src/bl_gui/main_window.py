@@ -512,7 +512,22 @@ class Win(QtWidgets.QMainWindow):
         calib_btn.clicked.connect(lambda: xanes_calib.launch(self))
         el.addRow("Calibration:", calib_btn)
 
-        p.setLayout(el); p.setGeometry(700 + GAP, 84 + GAP, 380, 300)
+        # Manual "Generate Cal Files" — regenerates Energy_*keV.txt files
+        # at target ± range using the ZP calibration table, without
+        # triggering EnergySet. Useful when the user wants to refresh the
+        # files without changing energy.
+        gen_btn = QtWidgets.QPushButton("Generate Cal Files")
+        gen_btn.setStyleSheet(
+            "background:#8e44ad;color:#fff;font:bold 9pt;"
+            "border:1px solid #9b59b6;border-radius:3px;padding:4px 10px;")
+        gen_btn.setToolTip(
+            "Writes Energy_<E±range>keV.txt files from the ZP calibration "
+            "table and sets EnergyCalibrationFileOne/Two. Does NOT change "
+            "energy.")
+        gen_btn.clicked.connect(self._apply_zp_calib_from_plugin)
+        el.addRow("Cal Files:", gen_btn)
+
+        p.setLayout(el); p.setGeometry(700 + GAP, 84 + GAP, 380, 340)
 
         # --- Camera ---
         p, _ = self._make_panel("Camera", 340, 180, tab_name)
