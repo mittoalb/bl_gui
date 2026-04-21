@@ -285,7 +285,7 @@ class ValveField(QtWidgets.QWidget):
 
     def __init__(self, status_pv, on_pv, off_pv, field_id,
                  label_text="", on_text="On", off_text="Off",
-                 pulse=True, parent=None):
+                 pulse=True, btn_width=38, parent=None):
         super().__init__(parent)
         self.field_id = field_id
         self.status_pv = (status_pv or "").strip()
@@ -317,13 +317,16 @@ class ValveField(QtWidgets.QWidget):
         self.status_lbl.setMinimumWidth(50)
         L.addWidget(self.status_lbl, 1)
 
-        self.btn_on = QtWidgets.QPushButton(on_text); self.btn_on.setFixedWidth(38)
-        self.btn_on.setStyleSheet("background:#27ae60;color:#fff;font:8pt;padding:1px;")
+        fs = 8 if btn_width <= 50 else 10
+        self.btn_on = QtWidgets.QPushButton(on_text); self.btn_on.setFixedWidth(btn_width)
+        self.btn_on.setStyleSheet(
+            f"background:#27ae60;color:#fff;font:bold {fs}pt;padding:4px;")
         self.btn_on.clicked.connect(lambda: self._fire(self.on_pv))
         L.addWidget(self.btn_on)
 
-        self.btn_off = QtWidgets.QPushButton(off_text); self.btn_off.setFixedWidth(38)
-        self.btn_off.setStyleSheet("background:#c0392b;color:#fff;font:8pt;padding:1px;")
+        self.btn_off = QtWidgets.QPushButton(off_text); self.btn_off.setFixedWidth(btn_width)
+        self.btn_off.setStyleSheet(
+            f"background:#c0392b;color:#fff;font:bold {fs}pt;padding:4px;")
         self.btn_off.clicked.connect(lambda: self._fire(self.off_pv))
         L.addWidget(self.btn_off)
 
@@ -390,16 +393,18 @@ class ValveField(QtWidgets.QWidget):
         }
 
     def set_pvs_dict(self, d):
+        # Accept legacy toggle-style keys (open/close/open_text/close_text)
+        # so shutter rows saved before ValveField unification still load.
         self.status_pv = (d.get("status") or "").strip()
-        self.on_pv = (d.get("on") or "").strip()
-        self.off_pv = (d.get("off") or "").strip()
+        self.on_pv = (d.get("on") or d.get("open") or "").strip()
+        self.off_pv = (d.get("off") or d.get("close") or "").strip()
         if "label" in d:
             self.label_text = d["label"] or ""
             self.name_lbl.setText(self.label_text)
-        if "on_text" in d and d["on_text"]:
-            self.btn_on.setText(d["on_text"])
-        if "off_text" in d and d["off_text"]:
-            self.btn_off.setText(d["off_text"])
+        t_on = d.get("on_text") or d.get("open_text")
+        if t_on: self.btn_on.setText(t_on)
+        t_off = d.get("off_text") or d.get("close_text")
+        if t_off: self.btn_off.setText(t_off)
 
     # ── Edit mode (right-click to change all 3 PVs) ──────────────────
     def set_edit_mode(self, on):

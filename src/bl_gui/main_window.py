@@ -299,9 +299,9 @@ class Win(QtWidgets.QMainWindow):
     def _build_all_panels(self, tab_name):
         x, y = 0, 0; GAP = 4
 
-        # --- Shutters (separate Open / Close buttons) ---
-        p, _ = self._make_panel("Shutters", 400, 120, tab_name)
-        lay = QtWidgets.QVBoxLayout(); lay.setContentsMargins(6, 22, 6, 4); lay.setSpacing(4)
+        # --- Shutters (status + separate Open / Close buttons per row) ---
+        p, _ = self._make_panel("Shutters", 460, 160, tab_name)
+        lay = QtWidgets.QVBoxLayout(); lay.setContentsMargins(6, 22, 6, 6); lay.setSpacing(6)
         shutter_rows = [
             # (field_id, label, status PV, Open PV, Close PV)
             ("shtr_A", "A-Stn",    "PB:32ID:STA_A_FES_CLSD_PL", "32idb:rshtrA:Open.PROC",     "32idb:rshtrA:Close.PROC"),
@@ -312,10 +312,10 @@ class Win(QtWidgets.QMainWindow):
         for fid, lbl, st_pv, o_pv, c_pv in shutter_rows:
             vf = ValveField(status_pv=st_pv, on_pv=o_pv, off_pv=c_pv, field_id=fid,
                             label_text=lbl, on_text="Open", off_text="Close",
-                            pulse=False, parent=p)
+                            pulse=False, btn_width=80, parent=p)
             lay.addWidget(vf)
             slot[fid] = vf
-        p.setLayout(lay); p.setGeometry(x, y, 400, 120); x += 404
+        p.setLayout(lay); p.setGeometry(x, y, 460, 160); x += 464
 
         # --- Beam Info ---
         p, _ = self._make_panel("Beam", 350, 90, tab_name)
