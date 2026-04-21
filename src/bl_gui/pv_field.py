@@ -107,7 +107,9 @@ class PVField(QtWidgets.QWidget):
     # ── Signals to PV ────────────────────────────────────────────────
     def _on_sp_return(self):
         if self.pv:
-            caput_bg(self.pv, self._inner.text())
+            val = self._inner.text()
+            print(f"[SP] {self.field_id}: caput {self.pv} {val!r}")
+            caput_bg(self.pv, val)
 
     def _on_cmb_changed(self, idx):
         if self.pv and idx >= 0:
