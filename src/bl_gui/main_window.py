@@ -651,6 +651,7 @@ class Win(QtWidgets.QMainWindow):
         # --- Launchers ---
         p, _ = self._make_panel("Launchers", 500, 110, tab_name)
         ll2 = QtWidgets.QGridLayout(); ll2.setContentsMargins(6, 22, 6, 4); ll2.setSpacing(3)
+        p._grid_cols = 4  # used by _load_layout to restore positions
         launchers = [
             ("ImageJ","/home/beams/USERTXM/Software/ImageJ/ImageJ.sh"),
             ("Detector","/home/beams/USERTXM/epics/synApps/support/32idbSP1/iocBoot/ioc32idbSP1/softioc/32idbSP1.sh medm"),
@@ -670,6 +671,7 @@ class Win(QtWidgets.QMainWindow):
         # --- Displays ---
         p, _ = self._make_panel("Displays", 500, 80, tab_name)
         dl = QtWidgets.QGridLayout(); dl.setContentsMargins(6, 22, 6, 4); dl.setSpacing(3)
+        p._grid_cols = 3  # used by _load_layout to restore positions
         displays = [
             ("XANES","medm -x -macro 'P=32id:,R=TXMOptics:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/xanes.adl &"),
             ("Furnace","medm -x /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/Furnace.adl &"),
@@ -1191,11 +1193,16 @@ class Win(QtWidgets.QMainWindow):
                         lay.removeWidget(existing)
                     existing.setParent(None); existing.deleteLater()
                 p.custom_buttons.clear()
-                for bd in btn_list:
+                cols = getattr(p, "_grid_cols", None)
+                for idx, bd in enumerate(btn_list):
                     btn = CfgButton.from_dict(bd, p)
                     lay = p.layout()
-                    if lay: lay.addWidget(btn)
-                    else: btn.move(10, 30)
+                    if isinstance(lay, QtWidgets.QGridLayout) and cols:
+                        lay.addWidget(btn, idx // cols, idx % cols)
+                    elif lay:
+                        lay.addWidget(btn)
+                    else:
+                        btn.move(10, 30)
                     btn.show(); p.custom_buttons.append(btn)
             # Per-button styles
             styles = data.get("_styles", {})
