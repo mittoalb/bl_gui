@@ -122,6 +122,15 @@ class Win(QtWidgets.QMainWindow):
             QtCore.QTimer.singleShot(0, lambda: self._toggle_edit(True))
         QtCore.QTimer.singleShot(300, self._start_monitors)
 
+        # Keyboard zoom: Ctrl+=, Ctrl+-, Ctrl+0 to boost/shrink/reset font
+        # scale without needing to see the top-bar slider.
+        for keys, delta in (("Ctrl+=", +10), ("Ctrl++", +10), ("Ctrl+-", -10)):
+            sc = QtWidgets.QShortcut(QtGui.QKeySequence(keys), self)
+            sc.activated.connect(lambda d=delta: self.font_slider.setValue(
+                max(50, min(200, self.font_slider.value() + d))))
+        sc0 = QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+0"), self)
+        sc0.activated.connect(lambda: self.font_slider.setValue(100))
+
     # ── helpers ───────────────────────────────────────────────────────
 
     def _unique_key(self, base, tab_name):
@@ -398,6 +407,16 @@ class Win(QtWidgets.QMainWindow):
         self._register_pv_fields(p, [
             ('led', "Busy:", "energy_busy_led", "32id:TXMOptics:EnergyBusy", {}),
         ], el)
+
+        # Zone-plate / energy calibration table (opens the external xanes_gui
+        # GUI_2D window). Kept as a plain launcher button — no PV binding.
+        from .beamlines.bl32id import xanes_calib
+        calib_btn = QtWidgets.QPushButton("ZP Calibration...")
+        calib_btn.setStyleSheet(
+            "background:#1e5a8e;color:#fff;font:bold 9pt;"
+            "border:1px solid #2980b9;border-radius:3px;padding:4px 10px;")
+        calib_btn.clicked.connect(lambda: xanes_calib.launch(self))
+        el.addRow("Calibration:", calib_btn)
 
         p.setLayout(el); p.setGeometry(700 + GAP, 84 + GAP, 340, 280)
 
@@ -1270,6 +1289,11 @@ def main():
             sys.exit(2)
         _theme_mod._LAY = os.path.abspath(chosen)
         print(f"[CONFIG] using layout: {_theme_mod._LAY}")
+
+    # HiDPI scaling — makes the GUI adapt to the display DPI so text stays
+    # readable when viewing across monitors of very different sizes.
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
 
     app = QtWidgets.QApplication(sys.argv); app.setApplicationName("Beamline GUI")
     _press_flash = _PressFlash(app); app.installEventFilter(_press_flash)
