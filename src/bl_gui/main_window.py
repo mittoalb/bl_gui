@@ -122,6 +122,15 @@ class Win(QtWidgets.QMainWindow):
             QtCore.QTimer.singleShot(0, lambda: self._toggle_edit(True))
         QtCore.QTimer.singleShot(300, self._start_monitors)
 
+        # Explicit save: Ctrl+S / menu. The GUI no longer auto-saves the
+        # layout on close — this is the only way a save happens outside of
+        # exiting edit mode, preventing accidental overwrites.
+        menubar = self.menuBar()
+        file_menu = menubar.addMenu("File")
+        save_action = file_menu.addAction("Save Layout")
+        save_action.setShortcut(QtGui.QKeySequence("Ctrl+S"))
+        save_action.triggered.connect(self._explicit_save_layout)
+
         # Keyboard zoom: Ctrl+=, Ctrl+-, Ctrl+0 to boost/shrink/reset font
         # scale without needing to see the top-bar slider.
         for keys, delta in (("Ctrl+=", +10), ("Ctrl++", +10), ("Ctrl+-", -10)):
@@ -1225,9 +1234,21 @@ class Win(QtWidgets.QMainWindow):
                     f.update_value(value)
 
     def closeEvent(self, event):
-        self._save_layout()
+        # DO NOT auto-save the layout here. Closing the GUI must not
+        # overwrite a user's hand-edited layout.json. Use the explicit
+        # 'Save Layout' action (Ctrl+S) or the edit-mode exit to save.
         if hasattr(self, '_pve'): self._pve.stop_all()
         event.accept()
+
+    def _explicit_save_layout(self):
+        """User-triggered save — the ONLY way the layout file gets written
+        outside of the edit-mode exit. Shows a confirmation in the status
+        bar so the user sees it happened."""
+        self._save_layout()
+        try:
+            self.statusBar().showMessage(f"Saved layout to {_lay_path()}", 4000)
+        except Exception:
+            pass
 
 
 class _PressFlash(QtCore.QObject):

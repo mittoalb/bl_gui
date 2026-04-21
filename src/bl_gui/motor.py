@@ -75,14 +75,10 @@ class MC(QtWidgets.QFrame):
         self._apply_fonts()
 
     def _on_twv_return(self):
-        # Push the new step to the IOC *and* persist it to the layout file
-        # right now, so the value survives even if the GUI is killed hard
-        # (no clean closeEvent).
+        # Push the new step to the IOC. Do NOT touch the layout file — any
+        # layout save must be triggered explicitly by the user so we don't
+        # stomp on hand-edited bl32id.json.
         caput_bg(f"{self.pv}.TWV", self.twv.text())
-        win = self.window()
-        if win is not None and hasattr(win, "_save_layout"):
-            try: win._save_layout()
-            except Exception as e: print(f"[TWV] save failed: {e}")
 
     def _toggle_enable(self):
         # Flip state locally and write to <pv>_able (APS convention: 0=Enable, 1=Disable)
