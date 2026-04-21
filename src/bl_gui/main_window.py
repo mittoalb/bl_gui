@@ -697,7 +697,8 @@ class Win(QtWidgets.QMainWindow):
             ("TomoScan","medm -x -macro 'P=32id:,R=TomoScan:,BEAMLINE=tomoScan_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &"),
             ("TomoStep","medm -x -macro 'P=32id:,R=TomoScanStep:,BEAMLINE=tomoScanStep_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &"),
             ("TomoStream","medm -x -macro 'P=32id:,R=TomoScanStream:,BEAMLINE=tomoScanStream_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &"),
-            ("CSS/BPM","/net/s32dserv/xorApps/epics/synApps_6_0/ioc/32idcBPM/iocBoot/iocbpm/32idcBPM.sh css")]
+            ("CSS/BPM","/net/s32dserv/xorApps/epics/synApps_6_0/ioc/32idcBPM/iocBoot/iocbpm/32idcBPM.sh css"),
+            ("Softglue","medm -x -macro 'P=32idSoftGlueZynq:' /home/beams19/USERTXM/epics/synApps/support/softGlueZynq/softGlueZynqApp/op/adl/softGlueZynq_top.adl &")]
         bg_d, fg_d, fs_d = p._cfg_btn_defaults
         for i, (lbl, cmd) in enumerate(displays):
             b = CfgButton(lbl, action_type="shell", action=cmd,
