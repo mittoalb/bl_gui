@@ -320,7 +320,7 @@ class ValveField(QtWidgets.QWidget):
                  status_on_text=None, status_off_text=None,
                  on_value=1, off_value=1,
                  pulse=True, btn_width=38, invert_status=False,
-                 vertical=False, parent=None):
+                 vertical=False, highlight_buttons=False, parent=None):
         super().__init__(parent)
         self.field_id = field_id
         self.status_pv = (status_pv or "").strip()
@@ -345,6 +345,11 @@ class ValveField(QtWidgets.QWidget):
         # on_value=1, off_value=0.
         self._on_value = on_value
         self._off_value = off_value
+        # Highlight-mode: hide the status label and instead render the
+        # "active" button brightly / the inactive one dim. Useful for a
+        # Run/Stop pair where we want to see at a glance which state is
+        # current without a separate label.
+        self._highlight_buttons = bool(highlight_buttons)
 
         if vertical:
             # Column layout: name on top, status below, Open/Close buttons
@@ -455,10 +460,34 @@ class ValveField(QtWidgets.QWidget):
         try:
             on = float(v) != 0.0
         except (ValueError, TypeError):
-            on = lv in ("on", "open", "true", "high", "yes", "1")
+            on = lv in ("on", "open", "true", "high", "yes", "1",
+                        "run", "running", "active", "busy", "start",
+                        "started", "enable", "enabled")
         if self._invert_status:
             on = not on
         print(f"[VALVE] {self.field_id}: status={value!r} -> {'ON' if on else 'OFF'}")
+        if self._highlight_buttons:
+            # Hide the status label; active button bright, inactive dim.
+            self.status_lbl.hide()
+            active_on = (
+                "background:#27ae60;color:#fff;font:bold 10pt;padding:4px;"
+                "border:2px solid #2ecc71;border-radius:3px;")
+            inactive_on = (
+                "background:#1e3d2a;color:#888;font:10pt;padding:4px;"
+                "border:1px solid #2c5e41;border-radius:3px;")
+            active_off = (
+                "background:#c0392b;color:#fff;font:bold 10pt;padding:4px;"
+                "border:2px solid #e74c3c;border-radius:3px;")
+            inactive_off = (
+                "background:#4a1b15;color:#888;font:10pt;padding:4px;"
+                "border:1px solid #7a2a22;border-radius:3px;")
+            if on:
+                self.btn_on.setStyleSheet(active_on)
+                self.btn_off.setStyleSheet(inactive_off)
+            else:
+                self.btn_on.setStyleSheet(inactive_on)
+                self.btn_off.setStyleSheet(active_off)
+            return
         if on:
             self.status_lbl.setText(self._status_on_text)
             self.status_lbl.setStyleSheet(
@@ -687,7 +716,9 @@ class ToggleField(QtWidgets.QWidget):
         try:
             on = float(v) != 0.0
         except (ValueError, TypeError):
-            on = lv in ("on", "open", "true", "high", "yes", "1")
+            on = lv in ("on", "open", "true", "high", "yes", "1",
+                        "run", "running", "active", "busy", "start",
+                        "started", "enable", "enabled")
         if self._invert_status:
             on = not on
         self._is_open = bool(on)

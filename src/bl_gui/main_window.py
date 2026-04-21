@@ -829,23 +829,23 @@ class Win(QtWidgets.QMainWindow):
             ('sp',  "B: Freq Mult:",   "shaker_B_fmult", "32idbShaker:shaker:B:freqMult.VAL",   {}),
         ]
         self._register_pv_fields(p, shaker_fields, skl)
-        # Single state-aware run/stop toggle. Green RUNNING when the run
-        # PV is non-zero, red STOPPED otherwise. Click toggles.
-        shaker_toggle = ToggleField(
+        # Run / Stop as a two-button pair. highlight_buttons=True makes
+        # the active side bright and the inactive one dim so you can see
+        # the current state at a glance.
+        shaker_run = ValveField(
             status_pv="32idbShaker:shaker:run",
-            open_pv="32idbShaker:shaker:run",
-            close_pv="32idbShaker:shaker:run",
+            on_pv="32idbShaker:shaker:run",
+            off_pv="32idbShaker:shaker:run",
             field_id="shaker_run",
             label_text="",
-            open_text="RUNNING",   # shown when status is ON (green)
-            close_text="STOPPED",  # shown when status is OFF (red)
-            open_value=1, close_value=0,
-            state_label=True,
-            parent=p,
+            on_text="Run", off_text="Stop",
+            on_value=1, off_value=0,
+            pulse=False, btn_width=80,
+            highlight_buttons=True, parent=p,
         )
-        shaker_toggle.name_lbl.hide()
-        skl.addRow("Shaker:", shaker_toggle)
-        self._pv_fields[p.key]["shaker_run"] = shaker_toggle
+        shaker_run.name_lbl.hide()
+        skl.addRow("Shaker:", shaker_run)
+        self._pv_fields[p.key]["shaker_run"] = shaker_run
         p.setLayout(skl); p.setGeometry(1104 + GAP, iy + 168, 360, 400)
 
         # --- Launchers ---
