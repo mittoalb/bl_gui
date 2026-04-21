@@ -92,32 +92,18 @@ class MC(QtWidgets.QFrame):
         caput_bg(f"{self.pv}.TWV", self.twv.text())
 
     def _on_set_position(self):
-        """Redefine this motor's position WITHOUT moving — same as EPICS
-        motor record's SET-mode sequence. Asks for a new value, confirms,
-        then writes .SET=1 → .VAL=new → .SET=0."""
-        cur_rbv = self.rbv.text()
-        try: current = float(cur_rbv)
+        """Redefine position via EPICS .SET=1 → .VAL → .SET=0."""
+        try: current = float(self.rbv.text())
         except (ValueError, TypeError): current = 0.0
         new_val, ok = QtWidgets.QInputDialog.getDouble(
-            self, f"SET — {self._label}",
-            f"{self.pv}\nCurrent RBV: {cur_rbv}\n\n"
-            "Redefine current position as  (does NOT move the motor):",
+            self, f"SET — {self._label}", "New position:",
             current, -1e9, 1e9, 6)
         if not ok:
-            return
-        ans = QtWidgets.QMessageBox.warning(
-            self, "Confirm SET",
-            f"Redefine {self.pv} position to {new_val} ?\n\n"
-            "This changes the readback WITHOUT moving the motor.\n"
-            "It cannot be undone automatically — be sure.",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel,
-            QtWidgets.QMessageBox.Cancel)
-        if ans != QtWidgets.QMessageBox.Yes:
             return
         caput_bg(f"{self.pv}.SET", 1)
         QtCore.QTimer.singleShot(200, lambda p=self.pv, v=new_val: caput_bg(f"{p}.VAL", v))
         QtCore.QTimer.singleShot(700, lambda p=self.pv: caput_bg(f"{p}.SET", 0))
-        print(f"[SET] {self.pv}: redefining RBV from {cur_rbv} to {new_val}")
+        print(f"[SET] {self.pv} -> {new_val}")
 
     def _toggle_enable(self):
         # Flip state locally and write to <pv>_able (APS convention: 0=Enable, 1=Disable)
