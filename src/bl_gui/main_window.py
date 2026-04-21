@@ -15,9 +15,26 @@ from . import theme as _theme_mod
 from .theme import _IMG, _PANEL_SS, _PANEL_SS_EDIT, _SS
 
 
-def _lay_path():
-    """Return the current layout-file path (may be overridden by main() CLI)."""
+def _bundled_lay_path():
+    """Path to the beamline default layout bundled with the package
+    (and committed to git). Used as a read-only template."""
     return _theme_mod._LAY
+
+
+def _user_lay_path():
+    """Per-user layout override path: ~/.bl_gui/<bl_name>.json.
+    Every save writes here so one user's layout cannot overwrite another's,
+    and the shared beamline template in the repo stays pristine."""
+    bl_name = os.path.splitext(os.path.basename(_theme_mod._LAY))[0]
+    return os.path.expanduser(f"~/.bl_gui/{bl_name}.json")
+
+
+def _lay_path():
+    """Layout path actually used by load/save: prefer the user override
+    (if it exists) on load; save always goes there so the bundled copy
+    is never touched by a user session."""
+    u = _user_lay_path()
+    return u if os.path.isfile(u) else _bundled_lay_path()
 from .widgets import CfgButton, Panel, _ButtonEditFilter, _change_font_size, _duplicate_widget, _edit_widget
 
 class Win(QtWidgets.QMainWindow):
@@ -666,6 +683,10 @@ class Win(QtWidgets.QMainWindow):
         # re-applies these after loading saved buttons so stale saved colors
         # can't override the current visual scheme.
         p._cfg_btn_defaults = ("#2980b9", "#ffffff", 10)
+        p._default_btn_specs = []  # populated below — used on load to auto-fill
+                                    # any default buttons missing from the user's
+                                    # saved list (so new defaults appear for users
+                                    # with existing saves).
         launchers = [
             ("ImageJ","/home/beams/USERTXM/Software/ImageJ/ImageJ.sh"),
             ("Detector","/home/beams/USERTXM/epics/synApps/support/32idbSP1/iocBoot/ioc32idbSP1/softioc/32idbSP1.sh medm"),
@@ -676,6 +697,7 @@ class Win(QtWidgets.QMainWindow):
             ("Web Cams","firefox 10.54.102.97 &"),
             ("Shaker","/net/s32dserv/xorApps/epics/synApps_6_3/ioc/32idbShaker/start_MEDM_32idbShaker")]
         bg_l, fg_l, fs_l = p._cfg_btn_defaults
+        p._default_btn_specs = list(launchers)
         for i, (lbl, cmd) in enumerate(launchers):
             b = CfgButton(lbl, action_type="shell", action=cmd,
                           bg=bg_l, fg=fg_l, font_size=fs_l, parent=p)
@@ -689,6 +711,7 @@ class Win(QtWidgets.QMainWindow):
         dl = QtWidgets.QGridLayout(); dl.setContentsMargins(6, 22, 6, 6); dl.setSpacing(5)
         p._grid_cols = 3  # used by _load_layout to restore positions
         p._cfg_btn_defaults = ("#27ae60", "#ffffff", 10)
+        p._default_btn_specs = []  # filled right below
         displays = [
             ("XANES","medm -x -macro 'P=32id:,R=TXMOptics:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/xanes.adl &"),
             ("Furnace","medm -x /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/Furnace.adl &"),
@@ -700,6 +723,7 @@ class Win(QtWidgets.QMainWindow):
             ("CSS/BPM","/net/s32dserv/xorApps/epics/synApps_6_0/ioc/32idcBPM/iocBoot/iocbpm/32idcBPM.sh css"),
             ("Softglue","medm -x -macro 'P=32idSoftGlueZynq:' /home/beams19/USERTXM/epics/synApps/support/softGlueZynq/softGlueZynqApp/op/adl/softGlueZynq_top.adl &")]
         bg_d, fg_d, fs_d = p._cfg_btn_defaults
+        p._default_btn_specs = list(displays)
         for i, (lbl, cmd) in enumerate(displays):
             b = CfgButton(lbl, action_type="shell", action=cmd,
                           bg=bg_d, fg=fg_d, font_size=fs_d, parent=p)
@@ -1082,8 +1106,11 @@ class Win(QtWidgets.QMainWindow):
                     btn_id = f"{k}|||{btn.text()}"
                     data["_styles"][btn_id] = {"bg": bg, "fg": btn.property("_custom_fg"),
                         "fs": btn.property("_custom_fs"), "w": btn.width(), "h": btn.height()}
-        lay_path = _lay_path()
+        # Always save to the per-user path — never overwrite the shared
+        # bundled template. Create ~/.bl_gui/ on demand.
+        lay_path = _user_lay_path()
         try:
+            os.makedirs(os.path.dirname(lay_path), exist_ok=True)
             with open(lay_path, "w") as f: json.dump(data, f, indent=2)
             mc_total = sum(len(v) for v in data["_mcs"].values())
             print(f"[SAVE] wrote {lay_path}  panels={len(data['_panels'])}  mcs={mc_total}  "
@@ -1217,12 +1244,22 @@ class Win(QtWidgets.QMainWindow):
                 p.custom_buttons.clear()
                 cols = getattr(p, "_grid_cols", None)
                 defaults = getattr(p, "_cfg_btn_defaults", None)
-                for idx, bd in enumerate(btn_list):
+                default_specs = getattr(p, "_default_btn_specs", [])
+                # Merge: if the saved list is missing any default label,
+                # append the default spec. Ensures that newly-added built-in
+                # entries (e.g. "Softglue") show up for users with existing
+                # saves, without wiping their customisations.
+                saved_labels = {bd.get("label") for bd in btn_list}
+                merged = list(btn_list)
+                for lbl, cmd in default_specs:
+                    if lbl not in saved_labels:
+                        merged.append({"label": lbl, "type": "shell", "action": cmd,
+                                       "bg": defaults[0] if defaults else "#2d2d2d",
+                                       "fg": defaults[1] if defaults else "#e0e0e0",
+                                       "font_size": defaults[2] if defaults else 9})
+                for idx, bd in enumerate(merged):
                     btn = CfgButton.from_dict(bd, p)
                     btn.setMinimumHeight(34)
-                    # Force the panel-wide default visual style onto every
-                    # loaded button — otherwise a long-ago save's gray bg
-                    # keeps overriding new defaults forever.
                     if defaults:
                         btn._bg, btn._fg, btn._font_size = defaults
                         btn._apply_style()
@@ -1377,7 +1414,7 @@ class Win(QtWidgets.QMainWindow):
         bar so the user sees it happened."""
         self._save_layout()
         try:
-            self.statusBar().showMessage(f"Saved layout to {_lay_path()}", 4000)
+            self.statusBar().showMessage(f"Saved layout to {_user_lay_path()}", 4000)
         except Exception:
             pass
 
