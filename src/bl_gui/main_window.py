@@ -411,10 +411,14 @@ class Win(QtWidgets.QMainWindow):
         bragg_rb  = PVField(kind='rb', pv="32ida:BraggERdbkAO",
                             field_id="bragg_rbv", fmt=".3f", parent=p)
         energy_sp._inner.setMinimumHeight(36)
-        energy_sp._inner.setStyleSheet("font:bold 15pt;padding:4px 6px;")
+        energy_sp._inner.setStyleSheet(
+            "QLineEdit{background:#2c3e50;color:#ecf0f1;"
+            "border:1px solid #3498db;border-radius:3px;"
+            "padding:4px 8px;font:bold 15pt monospace;}"
+            "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}")
         bragg_rb._inner.setMinimumHeight(36)
         bragg_rb._inner.setStyleSheet(
-            "color:#2ecc71;font:bold 15pt monospace;padding:4px 6px;")
+            "color:#2ecc71;background:transparent;font:bold 15pt monospace;padding:4px 6px;")
         row = QtWidgets.QWidget()
         hl = QtWidgets.QHBoxLayout(row); hl.setContentsMargins(0, 0, 0, 0); hl.setSpacing(6)
         hl.addWidget(energy_sp, 1); hl.addWidget(bragg_rb, 1)
@@ -450,7 +454,7 @@ class Win(QtWidgets.QMainWindow):
             label_text="",
             open_text="Enable",
             close_text="Disable",
-            open_value=1, close_value=0,
+            open_value="Yes", close_value="No",
             parent=p,
         )
         use_calib.name_lbl.hide()
@@ -485,7 +489,11 @@ class Win(QtWidgets.QMainWindow):
         # Make the exposure-time field noticeably bigger (main user control).
         exp_edit = cam_slot['cam_exp_sp']._inner
         exp_edit.setMinimumHeight(32)
-        exp_edit.setStyleSheet("font:bold 14pt;padding:4px 8px;")
+        exp_edit.setStyleSheet(
+            "QLineEdit{background:#2c3e50;color:#ecf0f1;"
+            "border:1px solid #3498db;border-radius:3px;"
+            "padding:4px 8px;font:bold 14pt monospace;}"
+            "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}")
         # AreaDetector binning needs SizeX/SizeY to be recomputed from the
         # sensor's max size when BinX/BinY change (same logic as pystream's
         # "Apply Binning" button). Hook Enter on both bin fields to run the

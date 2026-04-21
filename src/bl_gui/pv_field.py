@@ -54,6 +54,13 @@ class PVField(QtWidgets.QWidget):
 
         if self.kind == 'sp':
             w = QtWidgets.QLineEdit()
+            # Distinct bluish background so editable fields are obviously
+            # different from read-only readbacks / labels.
+            w.setStyleSheet(
+                "QLineEdit{background:#2c3e50;color:#ecf0f1;"
+                "border:1px solid #3498db;border-radius:3px;"
+                "padding:4px 6px;font:10pt monospace;}"
+                "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}")
             if self._placeholder:
                 w.setPlaceholderText(self._placeholder)
             w.returnPressed.connect(self._on_sp_return)
