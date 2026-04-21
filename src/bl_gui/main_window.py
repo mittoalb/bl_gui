@@ -1444,10 +1444,11 @@ def main():
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
 
     app = QtWidgets.QApplication(sys.argv); app.setApplicationName("Beamline GUI")
-    # App-wide UI font — Cantarell is GNOME's clean humanist sans (far less
-    # cartoon-ish than the PyQt5 default), DejaVu Sans / sans-serif fallbacks.
-    _ui_font = QtGui.QFont("Cantarell", 9)
+    # App-wide UI font — DejaVu Sans is the crispest readable sans on APS
+    # workstations. Liberation Sans / Noto Sans as fallbacks.
+    _ui_font = QtGui.QFont("DejaVu Sans", 9)
     _ui_font.setStyleStrategy(QtGui.QFont.PreferAntialias)
+    _ui_font.setStyleHint(QtGui.QFont.SansSerif)
     app.setFont(_ui_font)
     _press_flash = _PressFlash(app); app.installEventFilter(_press_flash)
     w = Win(allow_edit=allow_edit); w.show()
