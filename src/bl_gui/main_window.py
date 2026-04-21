@@ -651,8 +651,10 @@ class Win(QtWidgets.QMainWindow):
         p, _ = self._make_panel("Launchers", 560, 150, tab_name)
         ll2 = QtWidgets.QGridLayout(); ll2.setContentsMargins(6, 22, 6, 6); ll2.setSpacing(5)
         p._grid_cols = 4  # used by _load_layout to restore positions
-        _launcher_ss = ("background:#2980b9;color:#fff;font:bold 10pt;"
-                        "padding:8px 10px;border:1px solid #5dade2;border-radius:4px;")
+        # Panel-wide CfgButton defaults (bg, fg, font_size). _load_layout
+        # re-applies these after loading saved buttons so stale saved colors
+        # can't override the current visual scheme.
+        p._cfg_btn_defaults = ("#2980b9", "#ffffff", 10)
         launchers = [
             ("ImageJ","/home/beams/USERTXM/Software/ImageJ/ImageJ.sh"),
             ("Detector","/home/beams/USERTXM/epics/synApps/support/32idbSP1/iocBoot/ioc32idbSP1/softioc/32idbSP1.sh medm"),
@@ -662,9 +664,10 @@ class Win(QtWidgets.QMainWindow):
             ("Web IOCs","/home/beams/USERTXM/scripts/ioc_page.sh"),
             ("Web Cams","firefox 10.54.102.97 &"),
             ("Shaker","/net/s32dserv/xorApps/epics/synApps_6_3/ioc/32idbShaker/start_MEDM_32idbShaker")]
+        bg_l, fg_l, fs_l = p._cfg_btn_defaults
         for i, (lbl, cmd) in enumerate(launchers):
-            b = CfgButton(lbl, action_type="shell", action=cmd, parent=p)
-            b.setStyleSheet(_launcher_ss)
+            b = CfgButton(lbl, action_type="shell", action=cmd,
+                          bg=bg_l, fg=fg_l, font_size=fs_l, parent=p)
             b.setMinimumHeight(34)
             ll2.addWidget(b, i // 4, i % 4)
             p.custom_buttons.append(b)
@@ -674,8 +677,7 @@ class Win(QtWidgets.QMainWindow):
         p, _ = self._make_panel("Displays", 560, 150, tab_name)
         dl = QtWidgets.QGridLayout(); dl.setContentsMargins(6, 22, 6, 6); dl.setSpacing(5)
         p._grid_cols = 3  # used by _load_layout to restore positions
-        _display_ss = ("background:#27ae60;color:#fff;font:bold 10pt;"
-                       "padding:8px 10px;border:1px solid #58d68d;border-radius:4px;")
+        p._cfg_btn_defaults = ("#27ae60", "#ffffff", 10)
         displays = [
             ("XANES","medm -x -macro 'P=32id:,R=TXMOptics:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/xanes.adl &"),
             ("Furnace","medm -x /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/Furnace.adl &"),
@@ -685,9 +687,10 @@ class Win(QtWidgets.QMainWindow):
             ("TomoStep","medm -x -macro 'P=32id:,R=TomoScanStep:,BEAMLINE=tomoScanStep_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &"),
             ("TomoStream","medm -x -macro 'P=32id:,R=TomoScanStream:,BEAMLINE=tomoScanStream_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &"),
             ("CSS/BPM","/net/s32dserv/xorApps/epics/synApps_6_0/ioc/32idcBPM/iocBoot/iocbpm/32idcBPM.sh css")]
+        bg_d, fg_d, fs_d = p._cfg_btn_defaults
         for i, (lbl, cmd) in enumerate(displays):
-            b = CfgButton(lbl, action_type="shell", action=cmd, parent=p)
-            b.setStyleSheet(_display_ss)
+            b = CfgButton(lbl, action_type="shell", action=cmd,
+                          bg=bg_d, fg=fg_d, font_size=fs_d, parent=p)
             b.setMinimumHeight(34)
             p.custom_buttons.append(b)
             dl.addWidget(b, i // 3, i % 3)
@@ -1199,8 +1202,16 @@ class Win(QtWidgets.QMainWindow):
                     existing.setParent(None); existing.deleteLater()
                 p.custom_buttons.clear()
                 cols = getattr(p, "_grid_cols", None)
+                defaults = getattr(p, "_cfg_btn_defaults", None)
                 for idx, bd in enumerate(btn_list):
                     btn = CfgButton.from_dict(bd, p)
+                    btn.setMinimumHeight(34)
+                    # Force the panel-wide default visual style onto every
+                    # loaded button — otherwise a long-ago save's gray bg
+                    # keeps overriding new defaults forever.
+                    if defaults:
+                        btn._bg, btn._fg, btn._font_size = defaults
+                        btn._apply_style()
                     lay = p.layout()
                     if isinstance(lay, QtWidgets.QGridLayout) and cols:
                         lay.addWidget(btn, idx // cols, idx % cols)

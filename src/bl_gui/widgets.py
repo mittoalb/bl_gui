@@ -242,9 +242,13 @@ class CfgButton(QtWidgets.QPushButton):
         self.setToolTip(f"{action_type}: {action}")
 
     def _apply_style(self):
+        # Lighten the bg by ~30% for the border so the outline is visible
+        # against any dark background. Font weight bold — these are action
+        # buttons and need to look like buttons, not text labels.
         self.setStyleSheet(
-            f"background:{self._bg};color:{self._fg};font:{self._font_size}pt;"
-            f"border:1px solid #404040;border-radius:3px;padding:4px 8px;")
+            f"background:{self._bg};color:{self._fg};"
+            f"font:bold {self._font_size}pt;"
+            f"border:1px solid #6a8cad;border-radius:4px;padding:6px 10px;")
 
     def set_edit_mode(self, on):
         self._edit_mode = on
