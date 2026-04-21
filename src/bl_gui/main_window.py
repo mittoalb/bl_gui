@@ -309,8 +309,8 @@ class Win(QtWidgets.QMainWindow):
         x, y = 0, 0; GAP = 4
 
         # --- Shutters (status + separate Open / Close buttons per row) ---
-        p, _ = self._make_panel("Shutters", 460, 160, tab_name)
-        lay = QtWidgets.QVBoxLayout(); lay.setContentsMargins(6, 22, 6, 6); lay.setSpacing(6)
+        p, _ = self._make_panel("Shutters", 640, 120, tab_name)
+        lay = QtWidgets.QHBoxLayout(); lay.setContentsMargins(6, 22, 6, 6); lay.setSpacing(8)
         shutter_rows = [
             # (field_id, label, status PV, Open PV, Close PV, invert_status)
             # CLSD_PL records read 1=closed, so invert the on/off mapping.
@@ -322,10 +322,10 @@ class Win(QtWidgets.QMainWindow):
         for fid, lbl, st_pv, o_pv, c_pv, inv in shutter_rows:
             vf = ValveField(status_pv=st_pv, on_pv=o_pv, off_pv=c_pv, field_id=fid,
                             label_text=lbl, on_text="Open", off_text="Close",
-                            pulse=False, btn_width=80, invert_status=inv, parent=p)
+                            pulse=False, btn_width=60, invert_status=inv, parent=p)
             lay.addWidget(vf)
             slot[fid] = vf
-        p.setLayout(lay); p.setGeometry(x, y, 460, 160); x += 464
+        p.setLayout(lay); p.setGeometry(x, y, 640, 120); x += 644
 
         # --- Beam Info ---
         p, _ = self._make_panel("Beam", 350, 90, tab_name)

@@ -61,21 +61,26 @@ def save_config(cfg):
         json.dump(cfg, f, indent=2)
 
 
-class XanesCalibDialog(QtWidgets.QDialog):
-    """ZP energy calibration table. All PVs are user-editable — the defaults
-    are sane for bl32-ID but any one can be overridden for a different
-    setup. File format is forward-compatible with the xanes_gui table so a
-    future migration can be a copy-paste."""
+class XanesCalibWindow(QtWidgets.QMainWindow):
+    """ZP energy calibration table. Independent top-level window — not modal,
+    so the main GUI stays live while the table is open. All PVs are
+    user-editable; defaults are sane for bl32-ID. File format is
+    forward-compatible with the xanes_gui table."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Qt.Window = free-standing top-level, movable across screens;
+        # WA_DeleteOnClose so closing it actually frees resources.
+        self.setWindowFlag(QtCore.Qt.Window, True)
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
         self.setWindowTitle("ZP Energy Calibration — bl32-ID")
         self.resize(760, 560)
+        central = QtWidgets.QWidget(); self.setCentralWidget(central)
 
         cfg = load_config()
         self._pvs = dict(DEFAULT_PVS); self._pvs.update(cfg.get("pvs", {}))
 
-        V = QtWidgets.QVBoxLayout(self)
+        V = QtWidgets.QVBoxLayout(central)
 
         # ── PV configuration ────────────────────────────────────────────
         pv_box = QtWidgets.QGroupBox("Sources (PVs)")
@@ -203,17 +208,39 @@ class XanesCalibDialog(QtWidgets.QDialog):
             self.table.setRowCount(0)
 
     def _save_and_close(self):
+        if self._do_save():
+            self.close()
+
+    def _do_save(self):
         cfg = {"pvs": self._collect_pvs(), "points": self._collect_points()}
         try:
             save_config(cfg)
+            return True
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Save failed",
                 f"Could not write {_CALIB_FILE}:\n{e}")
-            return
-        self.accept()
+            return False
+
+
+# Keep references on the QApplication so non-modal windows aren't GC'd the
+# moment launch() returns.
+_open_windows = []
 
 
 def launch(parent=None):
-    """Open the calibration dialog modally."""
-    dlg = XanesCalibDialog(parent)
-    dlg.exec_()
+    """Open the calibration window non-modally (main GUI stays responsive).
+
+    Subsequent calls bring the existing window to the front instead of
+    spawning duplicates."""
+    # If a window is already open, raise it instead of making a second one.
+    for w in list(_open_windows):
+        if w.isVisible():
+            w.raise_(); w.activateWindow()
+            return w
+        _open_windows.remove(w)
+    win = XanesCalibWindow(parent)
+    _open_windows.append(win)
+    win.destroyed.connect(lambda _=None, w=win: _open_windows.remove(w)
+                          if w in _open_windows else None)
+    win.show()
+    return win
