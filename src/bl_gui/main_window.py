@@ -408,11 +408,6 @@ class Win(QtWidgets.QMainWindow):
             ('sp',  "Energy (keV):", "energy_sp",       "32id:TXMOptics:Energy",                   dict(placeholder="keV")),
             ('rb',  "Bragg RBV:",    "bragg_rbv",       "32ida:BraggERdbkAO",                      dict(fmt=".3f")),
             ('sp',  "Detune (eV):",  "energy_detune",   "32id:TXMOptics:EnergyDetune",             {}),
-            ('btn_pair', "Use Calib:", "energy_usecalib", "32id:TXMOptics:EnergyUseCalibration",
-             dict(button_text="Yes/No",
-                  on_pv="32id:TXMOptics:EnergyUseCalibration",
-                  off_pv="32id:TXMOptics:EnergyUseCalibration",
-                  on_value=1, off_value=0)),
             ('sp',  "Cal File 1:",   "energy_calfile1", "32id:TXMOptics:EnergyCalibrationFileOne", dict(placeholder="calib file 1")),
             ('sp',  "Cal File 2:",   "energy_calfile2", "32id:TXMOptics:EnergyCalibrationFileTwo", dict(placeholder="calib file 2")),
             ('rb',  "Und E (keV):",  "und_energy_rbv",  "S32ID:USID:EnergyM.VAL",                  dict(fmt=".3f")),
@@ -424,6 +419,24 @@ class Win(QtWidgets.QMainWindow):
         self._register_pv_fields(p, [
             ('led', "Busy:", "energy_busy_led", "32id:TXMOptics:EnergyBusy", {}),
         ], el)
+
+        # Use Calibration — single state-aware toggle button. Colour = current
+        # state (green/ON = using calibration, red/OFF = not). Button text
+        # describes what clicking will do.
+        use_calib = ToggleField(
+            status_pv="32id:TXMOptics:EnergyUseCalibration",
+            open_pv="32id:TXMOptics:EnergyUseCalibration",
+            close_pv="32id:TXMOptics:EnergyUseCalibration",
+            field_id="energy_usecalib",
+            label_text="",
+            open_text="Enable",
+            close_text="Disable",
+            open_value=1, close_value=0,
+            parent=p,
+        )
+        use_calib.name_lbl.hide()
+        el.addRow("Use Calib:", use_calib)
+        self._pv_fields[p.key]["energy_usecalib"] = use_calib
 
         # Zone-plate / energy calibration table (opens the external xanes_gui
         # GUI_2D window). Kept as a plain launcher button — no PV binding.
