@@ -446,6 +446,13 @@ class Win(QtWidgets.QMainWindow):
             ('sp',  "Bin X:",    "cam_binx",     "32idbSP1:cam1:BinX",            dict(placeholder="1")),
             ('sp',  "Bin Y:",    "cam_biny",     "32idbSP1:cam1:BinY",            dict(placeholder="1")),
         ], cl)
+        # AreaDetector binning needs SizeX/SizeY to be recomputed from the
+        # sensor's max size when BinX/BinY change (same logic as pystream's
+        # "Apply Binning" button). Hook the Enter key on both bin fields to
+        # run the full apply sequence automatically.
+        cam_slot = self._pv_fields[p.key]
+        cam_slot['cam_binx']._inner.returnPressed.connect(self._apply_cam_binning)
+        cam_slot['cam_biny']._inner.returnPressed.connect(self._apply_cam_binning)
         p.setLayout(cl); p.setGeometry(700 + GAP + 344, 84 + GAP, 340, 200)
 
         # --- Crop ---
@@ -1260,6 +1267,45 @@ class Win(QtWidgets.QMainWindow):
             self.statusBar().showMessage(f"Saved layout to {_lay_path()}", 4000)
         except Exception:
             pass
+
+    def _apply_cam_binning(self):
+        """On Enter in Bin X or Bin Y: caput BinX / BinY / SizeX / SizeY.
+
+        Mirrors pystream detectorcontrol's 'Apply Binning' button. SizeX/Y
+        are computed from MaxSizeX_RBV / MaxSizeY_RBV (read live via caget)
+        divided by the current BinX / BinY. Without this the driver leaves
+        the ROI untouched and binning effectively doesn't take effect."""
+        cam_prefix = "32idbSP1:cam1"
+        for key, slot in self._pv_fields.items():
+            if "cam_binx" in slot and "cam_biny" in slot:
+                try:
+                    binx = int(slot["cam_binx"]._inner.text() or "1")
+                    biny = int(slot["cam_biny"]._inner.text() or "1")
+                except ValueError:
+                    print("[BIN] non-integer in Bin X / Bin Y — aborting")
+                    return
+                # Read sensor max — short timeout, must succeed to compute sizes.
+                try:
+                    max_x = int(float(subprocess.run(
+                        ["caget", "-t", f"{cam_prefix}:MaxSizeX_RBV"],
+                        capture_output=True, text=True, timeout=2.0,
+                    ).stdout.strip()))
+                    max_y = int(float(subprocess.run(
+                        ["caget", "-t", f"{cam_prefix}:MaxSizeY_RBV"],
+                        capture_output=True, text=True, timeout=2.0,
+                    ).stdout.strip()))
+                except Exception as e:
+                    print(f"[BIN] could not read MaxSizeX/Y: {e}")
+                    return
+                size_x = max_x // max(1, binx)
+                size_y = max_y // max(1, biny)
+                print(f"[BIN] apply: BinX={binx} BinY={biny} "
+                      f"SizeX={size_x} SizeY={size_y} (max={max_x}x{max_y})")
+                caput_bg(f"{cam_prefix}:BinX",  binx)
+                caput_bg(f"{cam_prefix}:BinY",  biny)
+                caput_bg(f"{cam_prefix}:SizeX", size_x)
+                caput_bg(f"{cam_prefix}:SizeY", size_y)
+                return
 
 
 class _PressFlash(QtCore.QObject):
