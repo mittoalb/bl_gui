@@ -29,6 +29,45 @@ def _user_lay_path():
     return os.path.expanduser(f"~/.bl_gui/{bl_name}.json")
 
 
+def _polyfit_interp(pts, col_idx, e_eV_target):
+    """Fit a polynomial (degree auto-chosen up to 3) through the
+    (Energy, axis-value) pairs from the calibration table and evaluate
+    at ``e_eV_target``. Degree is clamped to ``len(points) - 1`` so we
+    never over-fit. Returns None if fewer than 2 usable points exist."""
+    try:
+        import numpy as _np
+    except Exception:
+        _np = None
+    es, vs = [], []
+    for row in pts:
+        if len(row) <= col_idx: continue
+        if row[0] is None or row[col_idx] is None: continue
+        es.append(float(row[0])); vs.append(float(row[col_idx]))
+    if len(es) < 2:
+        return None
+    if _np is None:
+        # Fallback to piecewise linear if numpy unavailable.
+        order = sorted(range(len(es)), key=lambda i: es[i])
+        es = [es[i] for i in order]; vs = [vs[i] for i in order]
+        if e_eV_target <= es[0]:
+            if len(es) < 2: return vs[0]
+            slope = (vs[1] - vs[0]) / (es[1] - es[0])
+            return vs[0] + slope * (e_eV_target - es[0])
+        if e_eV_target >= es[-1]:
+            slope = (vs[-1] - vs[-2]) / (es[-1] - es[-2])
+            return vs[-1] + slope * (e_eV_target - es[-1])
+        for i in range(1, len(es)):
+            if es[i] >= e_eV_target:
+                frac = (e_eV_target - es[i-1]) / (es[i] - es[i-1])
+                return vs[i-1] + frac * (vs[i] - vs[i-1])
+        return None
+    # Polynomial fit: deg = min(3, N-1). 2 points → linear, 3 → quad,
+    # 4+ → cubic. Using np.polyfit / np.polyval (no scipy dependency).
+    deg = min(3, len(es) - 1)
+    coeffs = _np.polyfit(es, vs, deg)
+    return float(_np.polyval(coeffs, e_eV_target))
+
+
 def _lay_path():
     """Layout path actually used by load/save: prefer the user override
     (if it exists) on load; save always goes there so the bundled copy
@@ -1693,31 +1732,13 @@ class Win(QtWidgets.QMainWindow):
         cfg = xanes_calib.load_config()
         pts = [p for p in (cfg.get("points") or []) if p and p[0] is not None]
         pvs = cfg.get("pvs", dict(xanes_calib.DEFAULT_PVS))
+        print(f"[ENERGY] plugin config: {len(pts)} cal rows; pvs keys={list(pvs.keys())}")
         if len(pts) < 2:
             print(f"[ENERGY] only {len(pts)} cal point(s) — need >= 2")
             return
 
         def _interp(col_idx):
-            es, vs = [], []
-            for row in pts:
-                if len(row) <= col_idx: continue
-                if row[col_idx] is None: continue
-                es.append(float(row[0])); vs.append(float(row[col_idx]))
-            if len(es) < 2:
-                return None
-            order = sorted(range(len(es)), key=lambda i: es[i])
-            es = [es[i] for i in order]; vs = [vs[i] for i in order]
-            if e_eV < es[0]:
-                slope = (vs[1]-vs[0])/(es[1]-es[0])
-                return vs[0] + slope * (e_eV - es[0])
-            if e_eV > es[-1]:
-                slope = (vs[-1]-vs[-2])/(es[-1]-es[-2])
-                return vs[-1] + slope * (e_eV - es[-1])
-            for i in range(1, len(es)):
-                if es[i] >= e_eV:
-                    frac = (e_eV - es[i-1]) / (es[i] - es[i-1])
-                    return vs[i-1] + frac * (vs[i] - vs[i-1])
-            return None
+            return _polyfit_interp(pts, col_idx, e_eV)
 
         for name, col, pv_key in (("X", 1, "zp_x_pv"),
                                   ("Y", 2, "zp_y_pv"),
@@ -1725,14 +1746,26 @@ class Win(QtWidgets.QMainWindow):
                                   ("QG V", 4, "qg_v_pv"),
                                   ("QG H", 5, "qg_h_pv")):
             target_pv = pvs.get(pv_key)
-            if not target_pv: continue
+            if not target_pv:
+                print(f"[ENERGY] {name}: no PV configured (key={pv_key}), skipping")
+                continue
             v = _interp(col)
             if v is None:
-                print(f"[ENERGY] {name}: no cal data, skipping")
+                print(f"[ENERGY] {name}: no cal data for column {col}, skipping")
                 continue
-            print(f"[ENERGY] {name} @ {e_keV:g} keV -> {v:.6f} "
-                  f"(caput {target_pv})")
-            caput_bg(target_pv, float(v))
+            # Sync-caput to the motor's .VAL so we see success/fail now,
+            # not buried in an async worker.
+            try:
+                r = subprocess.run(["caput", target_pv, f"{float(v):.6f}"],
+                                   capture_output=True, timeout=5.0, text=True)
+                if r.returncode == 0:
+                    print(f"[ENERGY] {name} @ {e_keV:g} keV -> {v:.6f}  "
+                          f"caput {target_pv} OK  stdout={r.stdout.strip()!r}")
+                else:
+                    print(f"[ENERGY] {name} caput {target_pv} rc={r.returncode} "
+                          f"stderr={r.stderr.strip()!r}")
+            except Exception as ex:
+                print(f"[ENERGY] {name} caput {target_pv} EXC: {ex}")
 
     def _on_cal_range_changed(self, value):
         """Persist the ± energy range into the calibration config JSON as
@@ -1777,28 +1810,8 @@ class Win(QtWidgets.QMainWindow):
             print(f"[ENERGY] only {len(pts)} cal point(s) — need ≥2; aborting")
             return
 
-        # Linear interpolation / extrapolation helper on (E, value) pairs.
         def _interp_at(col_idx, e_eV_target):
-            es, vs = [], []
-            for row in pts:
-                if len(row) <= col_idx: continue
-                if row[col_idx] is None: continue
-                es.append(float(row[0])); vs.append(float(row[col_idx]))
-            if len(es) < 2:
-                return None
-            order = sorted(range(len(es)), key=lambda i: es[i])
-            es = [es[i] for i in order]; vs = [vs[i] for i in order]
-            if e_eV_target < es[0]:
-                slope = (vs[1] - vs[0]) / (es[1] - es[0])
-                return vs[0] + slope * (e_eV_target - es[0])
-            if e_eV_target > es[-1]:
-                slope = (vs[-1] - vs[-2]) / (es[-1] - es[-2])
-                return vs[-1] + slope * (e_eV_target - es[-1])
-            for i in range(1, len(es)):
-                if es[i] >= e_eV_target:
-                    frac = (e_eV_target - es[i-1]) / (es[i] - es[i-1])
-                    return vs[i-1] + frac * (vs[i] - vs[i-1])
-            return None
+            return _polyfit_interp(pts, col_idx, e_eV_target)
 
         e_lo_keV = e_keV - range_keV
         e_hi_keV = e_keV + range_keV
