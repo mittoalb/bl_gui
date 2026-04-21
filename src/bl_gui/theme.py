@@ -19,9 +19,10 @@ QPushButton {
 QPushButton:hover { background: #3a3a3a; border-color: #505050; }
 QPushButton:pressed { background: #222; }
 QLineEdit {
-    background: #2d2d2d; color: #e0e0e0; padding: 2px 5px;
-    border: 1px solid #404040; border-radius: 3px; font: 9pt monospace;
+    background: #454545; color: #e0e0e0; padding: 2px 5px;
+    border: 1px solid #606060; border-radius: 3px; font: 9pt monospace;
 }
+QLineEdit:focus { background: #555; border: 1px solid #2980b9; }
 QComboBox {
     background: #2d2d2d; color: #e0e0e0; padding: 2px 5px;
     border: 1px solid #404040; border-radius: 3px; font-size: 8pt;
