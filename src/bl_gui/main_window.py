@@ -1749,15 +1749,16 @@ class Win(QtWidgets.QMainWindow):
                 print(f"[ENERGY] failed to write {fpath}: {ex}")
                 return
 
-        # Sync-caput the Cal File PVs (absolute paths) BEFORE EnergySet
-        # fires — prevents the "[Errno 2] No such file or directory: ''"
-        # race in txmoptics.py and gives the IOC something openable.
-        full_paths = [os.path.join(self._CAL_FILE_DIR, fn) for fn in filenames]
-        for pv_name, full_path in (
-                ("32id:TXMOptics:EnergyCalibrationFileOne", full_paths[0]),
-                ("32id:TXMOptics:EnergyCalibrationFileTwo", full_paths[1])):
+        # EnergyCalibrationFile* are 40-char stringout records — a full
+        # path gets silently truncated. Store ONLY the filename in the PV
+        # and rely on the IOC (CWD = iocBoot/iocTXMOptics, or patched to
+        # prepend the cal dir) to open it. Sync-caput to avoid the race
+        # where EnergySet fires before the PV update lands.
+        for pv_name, fname in (
+                ("32id:TXMOptics:EnergyCalibrationFileOne", filenames[0]),
+                ("32id:TXMOptics:EnergyCalibrationFileTwo", filenames[1])):
             try:
-                r = subprocess.run(["caput", pv_name, full_path],
+                r = subprocess.run(["caput", pv_name, fname],
                                    capture_output=True, timeout=3.0, text=True)
                 if r.returncode != 0:
                     print(f"[ENERGY] caput {pv_name} rc={r.returncode} "
@@ -1765,8 +1766,8 @@ class Win(QtWidgets.QMainWindow):
             except Exception as ex:
                 print(f"[ENERGY] caput {pv_name} EXC: {ex}")
         for slot in self._pv_fields.values():
-            for fid, fname in (("energy_calfile1", full_paths[0]),
-                               ("energy_calfile2", full_paths[1])):
+            for fid, fname in (("energy_calfile1", filenames[0]),
+                               ("energy_calfile2", filenames[1])):
                 f = slot.get(fid)
                 if f is not None and hasattr(f, "_inner"):
                     try: f._inner.setText(fname)
