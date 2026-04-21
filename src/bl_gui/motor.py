@@ -30,7 +30,13 @@ class MC(QtWidgets.QFrame):
         self._movn = "0"; self._dmov = "0"; self._hls = "0"; self._lls = "0"; self._lvio = "0"
         self.setMinimumWidth(100); self.setMinimumHeight(140)
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        self.setStyleSheet("MC{background:#2e2e2e;border:1px solid #484848;border-radius:3px;}")
+        self._ss_idle = "MC{background:#2e2e2e;border:1px solid #484848;border-radius:3px;}"
+        self._ss_flash = "MC{background:#f39c12;border:2px solid #f1c40f;border-radius:3px;}"
+        self.setStyleSheet(self._ss_idle)
+        self._flash_on = False
+        self._flash_timer = QtCore.QTimer(self)
+        self._flash_timer.setInterval(400)
+        self._flash_timer.timeout.connect(self._toggle_flash)
         L = QtWidgets.QVBoxLayout(self); L.setContentsMargins(3, 3, 3, 2); L.setSpacing(2)
         self.desc = QtWidgets.QLabel(label); self.desc.setAlignment(QtCore.Qt.AlignCenter)
         self.desc.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred); L.addWidget(self.desc)
@@ -136,12 +142,23 @@ class MC(QtWidgets.QFrame):
 
     def _update_status(self):
         ss = _fs(8)
-        if self._movn in ("1", "1.0"):
+        moving = self._movn in ("1", "1.0")
+        if moving:
             self.stat.setText("Moving"); self.stat.setStyleSheet(f"font:bold {ss}pt;color:#e74c3c;")
+            if not self._flash_timer.isActive():
+                self._flash_timer.start()
         elif self._dmov in ("1", "1.0"):
             self.stat.setText("Done"); self.stat.setStyleSheet(f"font:{ss}pt;color:#2ecc71;")
         else:
             self.stat.setText(""); self.stat.setStyleSheet(f"font:{ss}pt;")
+        if not moving and self._flash_timer.isActive():
+            self._flash_timer.stop()
+            self._flash_on = False
+            self.setStyleSheet(self._ss_idle)
+
+    def _toggle_flash(self):
+        self._flash_on = not self._flash_on
+        self.setStyleSheet(self._ss_flash if self._flash_on else self._ss_idle)
 
     def set_edit_mode(self, on):
         """Called by the owning Panel to enable/disable per-motor editing."""
