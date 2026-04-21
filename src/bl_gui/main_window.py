@@ -303,16 +303,17 @@ class Win(QtWidgets.QMainWindow):
         p, _ = self._make_panel("Shutters", 460, 160, tab_name)
         lay = QtWidgets.QVBoxLayout(); lay.setContentsMargins(6, 22, 6, 6); lay.setSpacing(6)
         shutter_rows = [
-            # (field_id, label, status PV, Open PV, Close PV)
-            ("shtr_A", "A-Stn",    "PB:32ID:STA_A_FES_CLSD_PL", "32idb:rshtrA:Open.PROC",     "32idb:rshtrA:Close.PROC"),
-            ("shtr_B", "B-Stn",    "PB:32ID:STA_B_SBS_CLSD_PL", "32idb:rshtrB:Open.PROC",     "32idb:rshtrB:Close.PROC"),
-            ("shtr_U", "Uniblitz", "",                           "32idbTXM:uniblitz:control", "32idbTXM:uniblitz:control"),
+            # (field_id, label, status PV, Open PV, Close PV, invert_status)
+            # CLSD_PL records read 1=closed, so invert the on/off mapping.
+            ("shtr_A", "A-Stn",    "PB:32ID:STA_A_FES_CLSD_PL", "32idb:rshtrA:Open.PROC",     "32idb:rshtrA:Close.PROC",   True),
+            ("shtr_B", "B-Stn",    "PB:32ID:STA_B_SBS_CLSD_PL", "32idb:rshtrB:Open.PROC",     "32idb:rshtrB:Close.PROC",   True),
+            ("shtr_U", "Uniblitz", "",                           "32idbTXM:uniblitz:control", "32idbTXM:uniblitz:control", False),
         ]
         slot = self._pv_fields.setdefault(p.key, {})
-        for fid, lbl, st_pv, o_pv, c_pv in shutter_rows:
+        for fid, lbl, st_pv, o_pv, c_pv, inv in shutter_rows:
             vf = ValveField(status_pv=st_pv, on_pv=o_pv, off_pv=c_pv, field_id=fid,
                             label_text=lbl, on_text="Open", off_text="Close",
-                            pulse=False, btn_width=80, parent=p)
+                            pulse=False, btn_width=80, invert_status=inv, parent=p)
             lay.addWidget(vf)
             slot[fid] = vf
         p.setLayout(lay); p.setGeometry(x, y, 460, 160); x += 464

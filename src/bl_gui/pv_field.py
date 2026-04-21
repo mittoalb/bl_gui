@@ -285,7 +285,7 @@ class ValveField(QtWidgets.QWidget):
 
     def __init__(self, status_pv, on_pv, off_pv, field_id,
                  label_text="", on_text="On", off_text="Off",
-                 pulse=True, btn_width=38, parent=None):
+                 pulse=True, btn_width=38, invert_status=False, parent=None):
         super().__init__(parent)
         self.field_id = field_id
         self.status_pv = (status_pv or "").strip()
@@ -297,6 +297,9 @@ class ValveField(QtWidgets.QWidget):
         # .PROC fields and level-driven controls (like uniblitz) want a
         # single write and must not be pulsed. Off by default for shutters.
         self._pulse = bool(pulse)
+        # Shutter CLSD_PL records use 1=closed / 0=open (inverse of the
+        # valve on/off convention). invert_status flips the interpretation.
+        self._invert_status = bool(invert_status)
 
         L = QtWidgets.QHBoxLayout(self)
         L.setContentsMargins(0, 0, 0, 0); L.setSpacing(4)
@@ -364,6 +367,8 @@ class ValveField(QtWidgets.QWidget):
             on = float(v) != 0.0
         except (ValueError, TypeError):
             on = lv in ("on", "open", "true", "high", "yes", "1")
+        if self._invert_status:
+            on = not on
         print(f"[VALVE] {self.field_id}: status={value!r} -> {'ON' if on else 'OFF'}")
         if on:
             self.status_lbl.setText("ON")
