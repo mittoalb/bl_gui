@@ -587,10 +587,10 @@ class Win(QtWidgets.QMainWindow):
             ("Web Cams","firefox 10.54.102.97 &"),
             ("Shaker","/net/s32dserv/xorApps/epics/synApps_6_3/ioc/32idbShaker/start_MEDM_32idbShaker")]
         for i, (lbl, cmd) in enumerate(launchers):
-            b = QtWidgets.QPushButton(lbl)
+            b = CfgButton(lbl, action_type="shell", action=cmd, parent=p)
             b.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;padding:3px 6px;border:1px solid #404040;border-radius:3px;")
-            b.clicked.connect(partial(lambda c: subprocess.Popen(c, shell=True, start_new_session=True), cmd))
             ll2.addWidget(b, i // 4, i % 4)
+            p.custom_buttons.append(b)
         p.setLayout(ll2); p.setGeometry(0, iy + 64, 500, 110)
 
         # --- Displays ---
@@ -606,9 +606,9 @@ class Win(QtWidgets.QMainWindow):
             ("TomoStream","medm -x -macro 'P=32id:,R=TomoScanStream:,BEAMLINE=tomoScanStream_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &"),
             ("CSS/BPM","/net/s32dserv/xorApps/epics/synApps_6_0/ioc/32idcBPM/iocBoot/iocbpm/32idcBPM.sh css")]
         for i, (lbl, cmd) in enumerate(displays):
-            b = QtWidgets.QPushButton(lbl)
+            b = CfgButton(lbl, action_type="shell", action=cmd, parent=p)
             b.setStyleSheet("background:#1e5a8e;color:#fff;font:9pt;padding:3px 6px;border:1px solid #2980b9;border-radius:3px;")
-            b.clicked.connect(partial(lambda c: subprocess.Popen(c, shell=True, start_new_session=True), cmd))
+            p.custom_buttons.append(b)
             dl.addWidget(b, i // 3, i % 3)
         p.setLayout(dl); p.setGeometry(0, iy + 178, 500, 80)
 
@@ -1102,11 +1102,21 @@ class Win(QtWidgets.QMainWindow):
                         f"color: #73dfff; font: bold {fs}pt; background: transparent; padding: 2px 6px;"
                     )
                     p._title.adjustSize()
-            # Custom buttons
+            # Custom buttons — if the saved layout has buttons for a panel,
+            # they REPLACE the default buttons built by _build_all_panels
+            # (Launchers / Displays panels seed defaults into
+            # p.custom_buttons so the user can edit them; without this
+            # replacement we'd end up with duplicates after a save).
             buttons = data.get("_buttons", {})
             for panel_key, btn_list in buttons.items():
                 p = self._panels.get(panel_key)
                 if not p: continue
+                for existing in list(p.custom_buttons):
+                    lay = p.layout()
+                    if lay is not None:
+                        lay.removeWidget(existing)
+                    existing.setParent(None); existing.deleteLater()
+                p.custom_buttons.clear()
                 for bd in btn_list:
                     btn = CfgButton.from_dict(bd, p)
                     lay = p.layout()
