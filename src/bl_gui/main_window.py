@@ -1111,7 +1111,14 @@ class Win(QtWidgets.QMainWindow):
         lay_path = _user_lay_path()
         try:
             os.makedirs(os.path.dirname(lay_path), exist_ok=True)
-            with open(lay_path, "w") as f: json.dump(data, f, indent=2)
+            # Write via temp + rename + fsync so a crash mid-write can't
+            # leave a truncated layout file on disk.
+            tmp_path = lay_path + ".tmp"
+            with open(tmp_path, "w") as f:
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, lay_path)
             mc_total = sum(len(v) for v in data["_mcs"].values())
             print(f"[SAVE] wrote {lay_path}  panels={len(data['_panels'])}  mcs={mc_total}  "
                   f"titles={len(data['_titles'])}  deleted={len(data['_deleted_panels'])}")
