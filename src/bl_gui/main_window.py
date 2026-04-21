@@ -403,8 +403,8 @@ class Win(QtWidgets.QMainWindow):
             ("io_diff",     "Diff",    "32id:TXMOptics:MoveDiffuserIn",   "32id:TXMOptics:MoveDiffuserOut"),
         ]
         slot = self._pv_fields.setdefault(p.key, {})
-        # Register the labels on self._io_labels so save/load can restore
-        # user-renamed names across restarts.
+        # Keep ALL In/Out label widgets across tabs so a rename applies
+        # consistently everywhere. Indexed by fid → list of labels.
         if not hasattr(self, "_io_labels"):
             self._io_labels = {}
         for col, (fid, lbl, pv_in, pv_out) in enumerate(inout_rows):
@@ -412,10 +412,10 @@ class Win(QtWidgets.QMainWindow):
             label.setAlignment(QtCore.Qt.AlignCenter)
             label.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
             label.customContextMenuRequested.connect(
-                lambda _pos, l=label, f=fid: self._rename_io_label(l, f))
+                lambda _pos, f=fid: self._rename_io_label_by_fid(f))
             label.setToolTip("Right-click to rename")
             iol.addWidget(label, 0, col, alignment=QtCore.Qt.AlignCenter)
-            self._io_labels[fid] = label
+            self._io_labels.setdefault(fid, []).append(label)
             pf = PVField('btn_pair', "", fid, button_text="In/Out",
                          on_pv=pv_in, off_pv=pv_out, on_value=1, off_value=1, parent=p)
             iol.addWidget(pf, 1, col)
@@ -1068,8 +1068,9 @@ class Win(QtWidgets.QMainWindow):
                 "_panels": {}, "_tab_map": {}, "_buttons": {}, "_styles": {},
                 "_title_fonts": {}, "_titles": {}, "_mcs": {}, "_pv_fields": {},
                 "_custom_rows": self._custom_rows,
-                "_io_labels": {fid: lbl.text()
-                               for fid, lbl in getattr(self, "_io_labels", {}).items()}}
+                "_io_labels": {fid: labels[0].text()
+                               for fid, labels in getattr(self, "_io_labels", {}).items()
+                               if labels}}
         # PV-field assignments — save PV per field_id per panel.
         # Widgets that hold >1 PV (ValveField, PVField 'btn_pair') return a dict
         # from get_pvs_dict(); plain single-PV fields save as a bare string.
@@ -1120,8 +1121,17 @@ class Win(QtWidgets.QMainWindow):
                 os.fsync(f.fileno())
             os.replace(tmp_path, lay_path)
             mc_total = sum(len(v) for v in data["_mcs"].values())
+            btn_total = sum(len(v) for v in data["_buttons"].values())
             print(f"[SAVE] wrote {lay_path}  panels={len(data['_panels'])}  mcs={mc_total}  "
-                  f"titles={len(data['_titles'])}  deleted={len(data['_deleted_panels'])}")
+                  f"titles={len(data['_titles'])}  deleted={len(data['_deleted_panels'])}  "
+                  f"buttons={btn_total}  io_labels={len(data.get('_io_labels', {}))}")
+            # Print a sample of what we just wrote so the user can verify
+            # their edits actually landed in the file.
+            tsample = {k: v for i, (k, v) in enumerate(data["_titles"].items()) if i < 6}
+            print(f"[SAVE]   sample titles: {tsample}")
+            iolabels = data.get("_io_labels", {})
+            if iolabels:
+                print(f"[SAVE]   io_labels: {iolabels}")
         except Exception as e:
             print(f"[SAVE] FAILED: {e}")
             import traceback
@@ -1363,16 +1373,25 @@ class Win(QtWidgets.QMainWindow):
                         f.pv = saved.strip()
                     elif isinstance(saved, dict) and hasattr(f, "set_pvs_dict"):
                         f.set_pvs_dict(saved)
-            # Restore renamed In/Out panel header labels.
+            # Restore renamed In/Out panel header labels (all tabs at once).
             io_labels_saved = data.get("_io_labels", {})
             for fid, text in io_labels_saved.items():
-                lbl = getattr(self, "_io_labels", {}).get(fid)
-                if lbl is not None and isinstance(text, str) and text:
-                    lbl.setText(text)
+                labels = getattr(self, "_io_labels", {}).get(fid) or []
+                if isinstance(text, str) and text:
+                    for l in labels:
+                        l.setText(text)
             mc_total = sum(len(v) for v in mcs_saved.values())
+            btn_total = sum(len(v) for v in data.get("_buttons", {}).values())
+            iolabels = data.get("_io_labels", {})
             print(f"[LOAD] read {lay_path}  panels={len(data.get('_panels', {}))}  "
                   f"mcs={mc_total}  titles={len(data.get('_titles', {}))}  "
-                  f"deleted={len(data.get('_deleted_panels', []))}")
+                  f"deleted={len(data.get('_deleted_panels', []))}  "
+                  f"buttons={btn_total}  io_labels={len(iolabels)}")
+            tsample = {k: v for i, (k, v) in enumerate(
+                data.get("_titles", {}).items()) if i < 6}
+            print(f"[LOAD]   sample titles: {tsample}")
+            if iolabels:
+                print(f"[LOAD]   io_labels: {iolabels}")
         except Exception as e:
             print(f"[LOAD] FAILED: {e}")
             import traceback
@@ -1418,9 +1437,13 @@ class Win(QtWidgets.QMainWindow):
                     f.update_value(value)
 
     def closeEvent(self, event):
-        # DO NOT auto-save the layout here. Closing the GUI must not
-        # overwrite a user's hand-edited layout.json. Use the explicit
-        # 'Save Layout' action (Ctrl+S) or the edit-mode exit to save.
+        # If we are closing from inside edit mode, save — otherwise every
+        # edit done in-session would silently vanish on window-close.
+        # In view mode we still do NOT save so a closed-without-Ctrl+S
+        # cannot stomp on an externally hand-edited layout.json.
+        if getattr(self, "_edit_mode", False):
+            try: self._save_layout()
+            except Exception as e: print(f"[SAVE] close-event save failed: {e}")
         if hasattr(self, '_pve'): self._pve.stop_all()
         event.accept()
 
@@ -1434,14 +1457,19 @@ class Win(QtWidgets.QMainWindow):
         except Exception:
             pass
 
-    def _rename_io_label(self, label, fid):
-        """Inline-rename handler for In/Out panel headers. Triggered by
-        right-click on the header label."""
+    def _rename_io_label_by_fid(self, fid):
+        """Rename every In/Out label that shares this fid across tabs.
+        Triggered by right-click on any In/Out header label."""
+        labels = getattr(self, "_io_labels", {}).get(fid) or []
+        if not labels:
+            return
+        current = labels[0].text()
         text, ok = QtWidgets.QInputDialog.getText(
             self, "Rename", f"New label for {fid}:",
-            QtWidgets.QLineEdit.Normal, label.text())
+            QtWidgets.QLineEdit.Normal, current)
         if ok and text.strip():
-            label.setText(text.strip())
+            for l in labels:
+                l.setText(text.strip())
 
     def _apply_cam_binning(self):
         """On Enter in Bin X or Bin Y: caput BinX / BinY / SizeX / SizeY.
