@@ -462,6 +462,11 @@ class Win(QtWidgets.QMainWindow):
         slot["energy_sp"] = energy_sp
         slot["bragg_rbv"] = bragg_rb
         slot["energy_set"] = energy_go
+        # Replace Go's default caput with a handler that first falls back to
+        # the ZP calibration plugin when both EPICS cal-file PVs are blank.
+        try: energy_go._inner.clicked.disconnect()
+        except TypeError: pass
+        energy_go._inner.clicked.connect(self._on_set_energy)
 
         # Every remaining field is a PVField with a stable id → right-click
         # allows per-beamline PV reassignment, and the PV is persisted in
@@ -1470,6 +1475,87 @@ class Win(QtWidgets.QMainWindow):
         if ok and text.strip():
             for l in labels:
                 l.setText(text.strip())
+
+    def _on_set_energy(self):
+        """Go button in the Energy panel. If the EPICS calibration-file PVs
+        (EnergyCalibrationFileOne / Two) are both blank, use the local ZP
+        calibration table (~/.bl_gui/bl32id_zp_calibration.json) to drive
+        the ZP X/Y/Z motors; otherwise let the IOC handle it normally via
+        EnergySet. The mono move is triggered in both cases."""
+        cal_pvs = ("32id:TXMOptics:EnergyCalibrationFileOne",
+                   "32id:TXMOptics:EnergyCalibrationFileTwo")
+        def _empty(pv):
+            try:
+                r = subprocess.run(["caget", "-t", pv],
+                                   capture_output=True, timeout=2.0, text=True)
+                return (r.returncode != 0) or not r.stdout.strip()
+            except Exception:
+                return True
+        use_plugin = all(_empty(pv) for pv in cal_pvs)
+        if use_plugin:
+            self._apply_zp_calib_from_plugin()
+        else:
+            print("[ENERGY] EPICS cal files set — IOC handles ZP moves")
+        caput_bg("32id:TXMOptics:EnergySet", 1)
+
+    def _apply_zp_calib_from_plugin(self):
+        """Interpolate X/Y/Z at the current Energy SP from the local ZP
+        calibration table and caput the resulting positions."""
+        # Find the Energy SP line edit — it lives in any panel keyed by
+        # 'energy_sp' (there may be one per tab).
+        sp_widget = None
+        for slot in self._pv_fields.values():
+            f = slot.get("energy_sp")
+            if f is not None:
+                sp_widget = f; break
+        if sp_widget is None:
+            print("[ENERGY] could not locate energy_sp field")
+            return
+        try:
+            e_keV = float(sp_widget._inner.text())
+        except (ValueError, AttributeError):
+            print("[ENERGY] energy setpoint not numeric; aborting ZP interp")
+            return
+        e_eV = e_keV * 1000.0
+
+        from .beamlines.bl32id import xanes_calib
+        cfg = xanes_calib.load_config()
+        pts = cfg.get("points", []) or []
+        pvs = cfg.get("pvs", dict(xanes_calib.DEFAULT_PVS))
+        # Build (E, value) lists per axis — only rows with a numeric value
+        # for that axis contribute.
+        def _interp(col_idx):
+            es, vs = [], []
+            for row in pts:
+                if len(row) <= col_idx: continue
+                if row[0] is None or row[col_idx] is None: continue
+                es.append(float(row[0])); vs.append(float(row[col_idx]))
+            if len(es) < 2:
+                return None
+            # Sort by energy so linear interp works; then interp.
+            order = sorted(range(len(es)), key=lambda i: es[i])
+            es = [es[i] for i in order]; vs = [vs[i] for i in order]
+            # Clamp to range end-points to avoid wild extrapolation.
+            if e_eV <= es[0]: return vs[0]
+            if e_eV >= es[-1]: return vs[-1]
+            for i in range(1, len(es)):
+                if es[i] >= e_eV:
+                    frac = (e_eV - es[i-1]) / (es[i] - es[i-1])
+                    return vs[i-1] + frac * (vs[i] - vs[i-1])
+            return None
+
+        for axis_name, col_idx, pv_key in (
+                ("X", 1, "zp_x_pv"),
+                ("Y", 2, "zp_y_pv"),
+                ("Z", 3, "zp_z_pv")):
+            target_pv = pvs.get(pv_key)
+            target = _interp(col_idx)
+            if target_pv and target is not None:
+                print(f"[ENERGY] ZP {axis_name} @ {e_eV:.1f} eV → {target:.6f}  "
+                      f"(caput {target_pv})")
+                caput_bg(target_pv, float(target))
+            elif target is None and target_pv:
+                print(f"[ENERGY] ZP {axis_name}: not enough cal points, skipping")
 
     def _apply_cam_binning(self):
         """On Enter in Bin X or Bin Y: caput BinX / BinY / SizeX / SizeY.

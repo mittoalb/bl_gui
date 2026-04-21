@@ -1,10 +1,10 @@
 """Zone-plate energy-calibration table for bl32-ID.
 
-Stores (E_eV, ZP_mm, ZP_X_mm, ZP_Y_mm, ZP_Z_mm) tuples that callers
-(XANES 2D scans, energy setpoint logic, etc.) can interpolate at run
-time. The table and the PV config persist in
-~/.bl_gui/bl32id_zp_calibration.json so they survive restarts and are
-shared across machines whenever $HOME is on NFS.
+Stores (E_eV, X_mm, Y_mm, Z_mm) tuples — the three ZP positioner axes
+at each energy point. Callers (XANES 2D scans, energy setpoint logic,
+etc.) can interpolate at run time. The table and the PV config persist
+in ~/.bl_gui/bl32id_zp_calibration.json so they survive restarts and
+are shared across machines whenever $HOME is on NFS.
 
 Reads/writes PVs through `caget` / `caput` subprocesses to stay
 consistent with the rest of bl_gui and to bound any CA wait with a
@@ -22,10 +22,9 @@ _CALIB_FILE = os.path.expanduser("~/.bl_gui/bl32id_zp_calibration.json")
 DEFAULT_PVS = {
     "energy_rb_pv": "32ida:BraggERdbkAO",
     "energy_units": "keV",
-    "zp_motor_pv":  "32id:m1",
-    "zp_x_pv":      "",
-    "zp_y_pv":      "",
-    "zp_z_pv":      "",
+    "zp_x_pv":      "32idbTXM:mcs2:c1:m13",
+    "zp_y_pv":      "32idbTXM:mcs2:c1:m14",
+    "zp_z_pv":      "32idbTXM:mcs2:c1:m15",
 }
 
 
@@ -91,7 +90,6 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
         self._pv_edits = {}
         for key, label in [
             ("energy_rb_pv", "Energy RBV PV:"),
-            ("zp_motor_pv",  "ZP motor PV:"),
             ("zp_x_pv",      "ZP X motor PV:"),
             ("zp_y_pv",      "ZP Y motor PV:"),
             ("zp_z_pv",      "ZP Z motor PV:"),
@@ -106,24 +104,33 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
         V.addWidget(pv_box)
 
         # ── Table ───────────────────────────────────────────────────────
-        self.table = QtWidgets.QTableWidget(0, 5)
+        self.table = QtWidgets.QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(
-            ["Energy [eV]", "ZP [mm]", "ZP X [mm]", "ZP Y [mm]", "ZP Z [mm]"])
+            ["Energy [eV]", "X [mm]", "Y [mm]", "Z [mm]"])
         self.table.horizontalHeader().setStretchLastSection(True)
         V.addWidget(self.table, 1)
         for p in cfg.get("points", []):
-            # Legacy 4-column rows (E, ZP, X, Z) are upgraded to 5-column
-            # (E, ZP, X, Y, Z) by inserting None in the Y slot.
-            if len(p) == 4:
-                p = [p[0], p[1], p[2], None, p[3]]
+            # Legacy formats:
+            #   len==4 with ZP focus: [E, ZP, X, Z]  → fold ZP into Z if
+            #                                          Z is missing
+            #   len==5 with ZP focus: [E, ZP, X, Y, Z] → drop ZP, fold
+            #                                           into Z if empty
+            #   len==4 current:       [E, X, Y, Z]
+            if len(p) == 4 and p[1] is not None and p[2] is not None and p[3] is None:
+                # Old E, ZP, X, Z — migrate.
+                p = [p[0], p[2], None, p[3] if p[3] is not None else p[1]]
+            elif len(p) == 5:
+                e, zp, x, y, z = p
+                if z is None:
+                    z = zp
+                p = [e, x, y, z]
             e = p[0] if len(p) > 0 else None
-            zp = p[1] if len(p) > 1 else None
-            if e is None or zp is None:
+            if e is None:
                 continue
-            zpx = p[2] if len(p) > 2 else None
-            zpy = p[3] if len(p) > 3 else None
-            zpz = p[4] if len(p) > 4 else None
-            self._append_row(e, zp, zpx, zpy, zpz)
+            x = p[1] if len(p) > 1 else None
+            y = p[2] if len(p) > 2 else None
+            z = p[3] if len(p) > 3 else None
+            self._append_row(e, x, y, z)
 
         # ── Action buttons ──────────────────────────────────────────────
         H = QtWidgets.QHBoxLayout()
@@ -146,17 +153,16 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
         V.addLayout(H)
 
     # ── Table helpers ───────────────────────────────────────────────────
-    def _append_row(self, e_eV, zp_mm, zpx_mm=None, zpy_mm=None, zpz_mm=None):
+    def _append_row(self, e_eV, x_mm=None, y_mm=None, z_mm=None):
         r = self.table.rowCount()
         self.table.insertRow(r)
         self.table.setItem(r, 0, QtWidgets.QTableWidgetItem(f"{float(e_eV):.3f}"))
-        self.table.setItem(r, 1, QtWidgets.QTableWidgetItem(f"{float(zp_mm):.6f}"))
-        if zpx_mm is not None:
-            self.table.setItem(r, 2, QtWidgets.QTableWidgetItem(f"{float(zpx_mm):.6f}"))
-        if zpy_mm is not None:
-            self.table.setItem(r, 3, QtWidgets.QTableWidgetItem(f"{float(zpy_mm):.6f}"))
-        if zpz_mm is not None:
-            self.table.setItem(r, 4, QtWidgets.QTableWidgetItem(f"{float(zpz_mm):.6f}"))
+        if x_mm is not None:
+            self.table.setItem(r, 1, QtWidgets.QTableWidgetItem(f"{float(x_mm):.6f}"))
+        if y_mm is not None:
+            self.table.setItem(r, 2, QtWidgets.QTableWidgetItem(f"{float(y_mm):.6f}"))
+        if z_mm is not None:
+            self.table.setItem(r, 3, QtWidgets.QTableWidgetItem(f"{float(z_mm):.6f}"))
 
     def _collect_points(self):
         pts = []
@@ -169,10 +175,10 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
                     return float(it.text())
                 except ValueError:
                     return None
-            e = cell(0); zp = cell(1)
-            if e is None or zp is None:
+            e = cell(0)
+            if e is None:
                 continue
-            pts.append([e, zp, cell(2), cell(3), cell(4)])
+            pts.append([e, cell(1), cell(2), cell(3)])
         return pts
 
     def _collect_pvs(self):
@@ -183,10 +189,10 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
     # ── Button handlers ─────────────────────────────────────────────────
     def _on_save_current(self):
         pvs = self._collect_pvs()
-        rb = pvs["energy_rb_pv"]; zp = pvs["zp_motor_pv"]
-        if not rb or not zp:
-            QtWidgets.QMessageBox.warning(self, "Missing PVs",
-                "Set energy RBV PV and ZP motor PV first.")
+        rb = pvs["energy_rb_pv"]
+        if not rb:
+            QtWidgets.QMessageBox.warning(self, "Missing PV",
+                "Set the Energy RBV PV first.")
             return
         e_val = _caget(rb)
         if e_val is None:
@@ -195,15 +201,14 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
             return
         if pvs["energy_units"] == "keV":
             e_val *= 1000.0
-        zp_val = _read_motor_rbv(zp)
-        if zp_val is None:
+        x_val = _read_motor_rbv(pvs["zp_x_pv"]) if pvs["zp_x_pv"] else None
+        y_val = _read_motor_rbv(pvs["zp_y_pv"]) if pvs["zp_y_pv"] else None
+        z_val = _read_motor_rbv(pvs["zp_z_pv"]) if pvs["zp_z_pv"] else None
+        if x_val is None and y_val is None and z_val is None:
             QtWidgets.QMessageBox.warning(self, "Read failed",
-                f"Could not read ZP motor RBV from {zp}.")
+                "Could not read any of the ZP X/Y/Z motor RBVs.")
             return
-        zpx_val = _read_motor_rbv(pvs["zp_x_pv"]) if pvs["zp_x_pv"] else None
-        zpy_val = _read_motor_rbv(pvs["zp_y_pv"]) if pvs["zp_y_pv"] else None
-        zpz_val = _read_motor_rbv(pvs["zp_z_pv"]) if pvs["zp_z_pv"] else None
-        self._append_row(e_val, zp_val, zpx_val, zpy_val, zpz_val)
+        self._append_row(e_val, x_val, y_val, z_val)
 
     def _on_remove(self):
         rows = sorted({i.row() for i in self.table.selectedIndexes()},
