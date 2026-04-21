@@ -321,17 +321,20 @@ class Win(QtWidgets.QMainWindow):
         p, _ = self._make_panel("Shutters", 560, 170, tab_name)
         lay = QtWidgets.QHBoxLayout(); lay.setContentsMargins(6, 22, 6, 6); lay.setSpacing(10)
         shutter_rows = [
-            # (field_id, label, status PV, Open PV, Close PV, invert_status)
+            # (field_id, label, status PV, Open PV, Close PV, invert_status, on_value, off_value)
             # CLSD_PL records read 1=closed, so invert the on/off mapping.
-            ("shtr_A", "A-Stn",    "PB:32ID:STA_A_FES_CLSD_PL", "32idb:rshtrA:Open.PROC",     "32idb:rshtrA:Close.PROC",   True),
-            ("shtr_B", "B-Stn",    "PB:32ID:STA_B_SBS_CLSD_PL", "32idb:rshtrB:Open.PROC",     "32idb:rshtrB:Close.PROC",   True),
-            ("shtr_U", "Uniblitz", "",                           "32idbTXM:uniblitz:control", "32idbTXM:uniblitz:control", False),
+            # Uniblitz is a single-PV binary toggle: 1=open, 0=closed — the
+            # status PV is the same PV we write, no inversion needed.
+            ("shtr_A", "A-Stn",    "PB:32ID:STA_A_FES_CLSD_PL", "32idb:rshtrA:Open.PROC",     "32idb:rshtrA:Close.PROC",   True,  1, 1),
+            ("shtr_B", "B-Stn",    "PB:32ID:STA_B_SBS_CLSD_PL", "32idb:rshtrB:Open.PROC",     "32idb:rshtrB:Close.PROC",   True,  1, 1),
+            ("shtr_U", "Uniblitz", "32idbTXM:uniblitz:control", "32idbTXM:uniblitz:control", "32idbTXM:uniblitz:control", False, "Open", "Close"),
         ]
         slot = self._pv_fields.setdefault(p.key, {})
-        for fid, lbl, st_pv, o_pv, c_pv, inv in shutter_rows:
+        for fid, lbl, st_pv, o_pv, c_pv, inv, ov, ofv in shutter_rows:
             vf = ValveField(status_pv=st_pv, on_pv=o_pv, off_pv=c_pv, field_id=fid,
                             label_text=lbl, on_text="Open", off_text="Close",
                             status_on_text="OPEN", status_off_text="CLOSED",
+                            on_value=ov, off_value=ofv,
                             pulse=False, invert_status=inv, vertical=True, parent=p)
             lay.addWidget(vf, 1)
             slot[fid] = vf

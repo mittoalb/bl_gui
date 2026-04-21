@@ -35,10 +35,10 @@
   ],
   "_panels": {
     "Shutters::User Mode": [
-      3,
-      111,
-      380,
-      80
+      8,
+      134,
+      397,
+      126
     ],
     "Beam::User Mode": [
       811,
@@ -102,14 +102,14 @@
     ],
     "Valves::User Mode": [
       3,
-      196,
-      320,
-      110
+      287,
+      236,
+      106
     ],
     "PLC Outputs::User Mode": [
-      2,
-      310,
-      231,
+      267,
+      303,
+      153,
       83
     ],
     "PV Save/Load::User Mode": [
@@ -150,7 +150,7 @@
     ],
     "Schematic::User Mode": [
       3,
-      656,
+      664,
       565,
       543
     ],
@@ -862,37 +862,31 @@
   "_pv_fields": {
     "Shutters::User Mode": {
       "shtr_A": {
-        "kind": "toggle",
+        "kind": "valve",
         "status": "PB:32ID:STA_A_FES_CLSD_PL",
-        "open": "",
-        "close": "",
-        "label": "A-Stn",
-        "open_text": "Open",
-        "close_text": "Close",
-        "open_value": 1,
-        "close_value": 1
+        "on": "32idb:rshtrA:Open",
+        "off": "32idb:rshtrA:Close",
+        "label": "A-Hutch",
+        "on_text": "Open",
+        "off_text": "Close"
       },
       "shtr_B": {
-        "kind": "toggle",
+        "kind": "valve",
         "status": "PB:32ID:STA_B_SBS_CLSD_PL",
-        "open": "",
-        "close": "",
-        "label": "B-Stn",
-        "open_text": "Open",
-        "close_text": "Close",
-        "open_value": 1,
-        "close_value": 1
+        "on": "32idb:rshtrB:Open",
+        "off": "32idb:rshtrB:Close",
+        "label": "B-Hutch",
+        "on_text": "Open",
+        "off_text": "Close"
       },
       "shtr_U": {
-        "kind": "toggle",
-        "status": "",
-        "open": "",
-        "close": "",
-        "label": "Uniblitz",
-        "open_text": "Open",
-        "close_text": "Close",
-        "open_value": 1,
-        "close_value": 1
+        "kind": "valve",
+        "status": "32idbTXM:uniblitz:control",
+        "on": "32idbTXM:uniblitz:control",
+        "off": "32idbTXM:uniblitz:control",
+        "label": "FastShutter",
+        "on_text": "Open",
+        "off_text": "Close"
       }
     },
     "Beam::User Mode": {
@@ -972,10 +966,10 @@
     "Valves::User Mode": {
       "valve_all": {
         "kind": "valve",
-        "status": "32idbSoft:PLC1:C1",
-        "on": "32idbSoft:PLC1:oC21",
-        "off": "32idbSoft:PLC1:oC31",
-        "label": "all",
+        "status": "32idbSoft:PLC1:C3",
+        "on": "32idbSoft:PLC1:oC23",
+        "off": "32idbSoft:PLC1:oC33",
+        "label": "Master",
         "on_text": "On",
         "off_text": "Off"
       },
@@ -990,9 +984,9 @@
       },
       "valve_granite_y": {
         "kind": "valve",
-        "status": "32idbSoft:PLC1:C3",
-        "on": "32idbSoft:PLC1:oC23",
-        "off": "32idbSoft:PLC1:oC33",
+        "status": "32idbSoft:PLC1:C1",
+        "on": "32idbSoft:PLC1:oC21",
+        "off": "32idbSoft:PLC1:oC31",
         "label": "Granite Y",
         "on_text": "On",
         "off_text": "Off"
@@ -1034,37 +1028,31 @@
     },
     "Shutters::Expert Mode": {
       "shtr_A": {
-        "kind": "toggle",
+        "kind": "valve",
         "status": "PB:32ID:STA_A_FES_CLSD_PL",
-        "open": "",
-        "close": "",
+        "on": "",
+        "off": "",
         "label": "A-Stn",
-        "open_text": "Open",
-        "close_text": "Close",
-        "open_value": 1,
-        "close_value": 1
+        "on_text": "Open",
+        "off_text": "Close"
       },
       "shtr_B": {
-        "kind": "toggle",
+        "kind": "valve",
         "status": "PB:32ID:STA_B_SBS_CLSD_PL",
-        "open": "",
-        "close": "",
+        "on": "",
+        "off": "",
         "label": "B-Stn",
-        "open_text": "Open",
-        "close_text": "Close",
-        "open_value": 1,
-        "close_value": 1
+        "on_text": "Open",
+        "off_text": "Close"
       },
       "shtr_U": {
-        "kind": "toggle",
+        "kind": "valve",
         "status": "",
-        "open": "",
-        "close": "",
+        "on": "",
+        "off": "",
         "label": "Uniblitz",
-        "open_text": "Open",
-        "close_text": "Close",
-        "open_value": 1,
-        "close_value": 1
+        "on_text": "Open",
+        "off_text": "Close"
       }
     },
     "Beam::Expert Mode": {

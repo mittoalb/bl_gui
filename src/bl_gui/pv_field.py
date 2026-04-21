@@ -286,6 +286,7 @@ class ValveField(QtWidgets.QWidget):
     def __init__(self, status_pv, on_pv, off_pv, field_id,
                  label_text="", on_text="On", off_text="Off",
                  status_on_text=None, status_off_text=None,
+                 on_value=1, off_value=1,
                  pulse=True, btn_width=38, invert_status=False,
                  vertical=False, parent=None):
         super().__init__(parent)
@@ -306,6 +307,12 @@ class ValveField(QtWidgets.QWidget):
         # want OPEN/CLOSED).
         self._status_on_text = status_on_text or "ON"
         self._status_off_text = status_off_text or "OFF"
+        # Values written by the on/off buttons. Default 1/1 matches the
+        # traditional "two-trigger" pattern (separate on/off PVs, each
+        # triggered with a 1). For a single-PV toggle (e.g. Uniblitz), set
+        # on_value=1, off_value=0.
+        self._on_value = on_value
+        self._off_value = off_value
 
         if vertical:
             # Column layout: name on top, status below, Open/Close buttons
@@ -334,7 +341,7 @@ class ValveField(QtWidgets.QWidget):
             self.btn_on.setStyleSheet(
                 "background:#27ae60;color:#fff;font:bold 10pt;padding:4px;"
                 "border:1px solid #2ecc71;border-radius:3px;")
-            self.btn_on.clicked.connect(lambda: self._fire(self.on_pv))
+            self.btn_on.clicked.connect(lambda: self._fire(self.on_pv, self._on_value))
             btn_row.addWidget(self.btn_on)
 
             self.btn_off = QtWidgets.QPushButton(off_text)
@@ -344,7 +351,7 @@ class ValveField(QtWidgets.QWidget):
             self.btn_off.setStyleSheet(
                 "background:#c0392b;color:#fff;font:bold 10pt;padding:4px;"
                 "border:1px solid #e74c3c;border-radius:3px;")
-            self.btn_off.clicked.connect(lambda: self._fire(self.off_pv))
+            self.btn_off.clicked.connect(lambda: self._fire(self.off_pv, self._off_value))
             btn_row.addWidget(self.btn_off)
             L.addLayout(btn_row)
             return
@@ -372,27 +379,29 @@ class ValveField(QtWidgets.QWidget):
         self.btn_on = QtWidgets.QPushButton(on_text); self.btn_on.setFixedWidth(btn_width)
         self.btn_on.setStyleSheet(
             f"background:#27ae60;color:#fff;font:bold {fs}pt;padding:4px;")
-        self.btn_on.clicked.connect(lambda: self._fire(self.on_pv))
+        self.btn_on.clicked.connect(lambda: self._fire(self.on_pv, self._on_value))
         L.addWidget(self.btn_on)
 
         self.btn_off = QtWidgets.QPushButton(off_text); self.btn_off.setFixedWidth(btn_width)
         self.btn_off.setStyleSheet(
             f"background:#c0392b;color:#fff;font:bold {fs}pt;padding:4px;")
-        self.btn_off.clicked.connect(lambda: self._fire(self.off_pv))
+        self.btn_off.clicked.connect(lambda: self._fire(self.off_pv, self._off_value))
         L.addWidget(self.btn_off)
 
-    def _fire(self, pv):
+    def _fire(self, pv, value=1):
         if pv:
             if self._pulse:
-                print(f"[VALVE] {self.field_id}: fire -> {pv}  (pulse 1,0)")
-                caput_bg(pv, 1)
+                print(f"[VALVE] {self.field_id}: fire -> {pv}={value}  (pulse {value},0)")
+                caput_bg(pv, value)
                 QtCore.QTimer.singleShot(300, lambda p=pv: caput_bg(p, 0))
             else:
-                print(f"[VALVE] {self.field_id}: fire -> {pv}  (single 1)")
-                caput_bg(pv, 1)
-            if pv == self.on_pv:
+                print(f"[VALVE] {self.field_id}: fire -> {pv}={value}")
+                caput_bg(pv, value)
+            # The "going_on" intent is whichever button was clicked, even
+            # if on_pv == off_pv (single-PV toggles like Uniblitz).
+            if value == self._on_value and (pv == self.on_pv):
                 self._show_pending(True)
-            elif pv == self.off_pv:
+            elif value == self._off_value and (pv == self.off_pv):
                 self._show_pending(False)
 
     def _show_pending(self, going_on):
