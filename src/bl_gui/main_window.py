@@ -434,22 +434,19 @@ class Win(QtWidgets.QMainWindow):
         p.setLayout(el); p.setGeometry(700 + GAP, 84 + GAP, 340, 280)
 
         # --- Camera ---
-        p, _ = self._make_panel("Camera", 360, 280, tab_name)
+        p, _ = self._make_panel("Camera", 340, 180, tab_name)
         cl = QtWidgets.QFormLayout(); cl.setContentsMargins(6, 22, 6, 6); cl.setSpacing(3)
         self._register_pv_fields(p, [
-            ('btn', "Acquire:",     "cam_acquire",    "32idbSP1:cam1:Acquire",             dict(button_text="Start", button_value=1)),
-            ('led', "Busy:",        "cam_acq_led",    "32idbSP1:cam1:Acquire",             {}),
-            ('sp',  "Exp (s):",     "cam_exp_sp",     "32idbSP1:cam1:AcquireTime",         dict(placeholder="sec")),
-            ('rb',  "Exp RBV:",     "cam_exp_rb",     "32idbSP1:cam1:AcquireTime_RBV",     dict(fmt=".3f")),
-            ('rb',  "Size X:",      "cam_sizex",      "32idbSP1:cam1:SizeX_RBV",           {}),
-            ('rb',  "Size Y:",      "cam_sizey",      "32idbSP1:cam1:SizeY_RBV",           {}),
-            ('sp',  "Num Filter:",  "cam_numfilt",    "32idbSP1:Proc1:NumFilter",          dict(placeholder="N")),
-            ('rb',  "Filtered:",    "cam_filtered",   "32idbSP1:Proc1:NumFiltered_RBV",    {}),
-            ('rb',  "Flat Valid:",  "cam_flat_valid", "32idbSP1:Proc1:ValidFlatField_RBV", {}),
-            ('btn', "Reset filt:",  "cam_reset",      "32idbSP1:Proc1:ResetFilter",        dict(button_text="Reset", button_value=1)),
-            ('btn', "Save flat:",   "cam_save_flat",  "32idbSP1:Proc1:SaveFlatField",      dict(button_text="Save",  button_value=1)),
+            ('btn', "Start:",    "cam_start",    "32idbSP1:cam1:Acquire",         dict(button_text="Start", button_value=1)),
+            ('btn', "Stop:",     "cam_stop",     "32idbSP1:cam1:Acquire",         dict(button_text="Stop",  button_value=0)),
+            ('sp',  "Exp (s):",  "cam_exp_sp",   "32idbSP1:cam1:AcquireTime",     dict(placeholder="sec")),
+            ('rb',  "Exp RBV:",  "cam_exp_rb",   "32idbSP1:cam1:AcquireTime_RBV", dict(fmt=".3f")),
+            ('rb',  "Size X:",   "cam_sizex",    "32idbSP1:cam1:SizeX_RBV",       {}),
+            ('rb',  "Size Y:",   "cam_sizey",    "32idbSP1:cam1:SizeY_RBV",       {}),
+            ('rb',  "Bin X:",    "cam_binx",     "32idbSP1:cam1:BinX_RBV",        {}),
+            ('rb',  "Bin Y:",    "cam_biny",     "32idbSP1:cam1:BinY_RBV",        {}),
         ], cl)
-        p.setLayout(cl); p.setGeometry(700 + GAP + 344, 84 + GAP, 360, 280)
+        p.setLayout(cl); p.setGeometry(700 + GAP + 344, 84 + GAP, 340, 180)
 
         # --- Crop ---
         p, _ = self._make_panel("Crop", 360, 100, tab_name)
