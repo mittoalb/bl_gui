@@ -651,8 +651,8 @@ class Win(QtWidgets.QMainWindow):
         p, _ = self._make_panel("Launchers", 560, 150, tab_name)
         ll2 = QtWidgets.QGridLayout(); ll2.setContentsMargins(6, 22, 6, 6); ll2.setSpacing(5)
         p._grid_cols = 4  # used by _load_layout to restore positions
-        _launcher_ss = ("background:#4a6a8a;color:#fff;font:bold 10pt;"
-                        "padding:8px 10px;border:1px solid #5d7ea0;border-radius:4px;")
+        _launcher_ss = ("background:#2980b9;color:#fff;font:bold 10pt;"
+                        "padding:8px 10px;border:1px solid #5dade2;border-radius:4px;")
         launchers = [
             ("ImageJ","/home/beams/USERTXM/Software/ImageJ/ImageJ.sh"),
             ("Detector","/home/beams/USERTXM/epics/synApps/support/32idbSP1/iocBoot/ioc32idbSP1/softioc/32idbSP1.sh medm"),
@@ -674,8 +674,8 @@ class Win(QtWidgets.QMainWindow):
         p, _ = self._make_panel("Displays", 560, 150, tab_name)
         dl = QtWidgets.QGridLayout(); dl.setContentsMargins(6, 22, 6, 6); dl.setSpacing(5)
         p._grid_cols = 3  # used by _load_layout to restore positions
-        _display_ss = ("background:#1e6a3e;color:#fff;font:bold 10pt;"
-                       "padding:8px 10px;border:1px solid #27ae60;border-radius:4px;")
+        _display_ss = ("background:#27ae60;color:#fff;font:bold 10pt;"
+                       "padding:8px 10px;border:1px solid #58d68d;border-radius:4px;")
         displays = [
             ("XANES","medm -x -macro 'P=32id:,R=TXMOptics:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/xanes.adl &"),
             ("Furnace","medm -x /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/Furnace.adl &"),
