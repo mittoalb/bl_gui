@@ -1486,12 +1486,24 @@ class Win(QtWidgets.QMainWindow):
                    "32id:TXMOptics:EnergyCalibrationFileTwo")
         def _empty(pv):
             try:
-                r = subprocess.run(["caget", "-t", pv],
+                r = subprocess.run(["caget", pv],
                                    capture_output=True, timeout=2.0, text=True)
-                return (r.returncode != 0) or not r.stdout.strip()
-            except Exception:
+                if r.returncode != 0:
+                    print(f"[ENERGY] {pv}: caget rc={r.returncode} — treating as empty")
+                    return True
+                out = r.stdout.strip()
+                # caget output is normally "PV_NAME value"
+                parts = out.split(None, 1)
+                val = parts[1].strip() if len(parts) > 1 else ""
+                print(f"[ENERGY] {pv} raw={val!r}")
+                # Char waveforms with no content show up as "0" (zero bytes),
+                # stringouts as an empty string, both are 'no file set'.
+                return val in ("", "0") or val.startswith("0 ")
+            except Exception as e:
+                print(f"[ENERGY] {pv}: caget EXC {e} — treating as empty")
                 return True
         use_plugin = all(_empty(pv) for pv in cal_pvs)
+        print(f"[ENERGY] use_plugin={use_plugin}")
         if use_plugin:
             self._apply_zp_calib_from_plugin()
         else:
