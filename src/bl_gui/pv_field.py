@@ -285,7 +285,9 @@ class ValveField(QtWidgets.QWidget):
 
     def __init__(self, status_pv, on_pv, off_pv, field_id,
                  label_text="", on_text="On", off_text="Off",
-                 pulse=True, btn_width=38, invert_status=False, parent=None):
+                 status_on_text=None, status_off_text=None,
+                 pulse=True, btn_width=38, invert_status=False,
+                 vertical=False, parent=None):
         super().__init__(parent)
         self.field_id = field_id
         self.status_pv = (status_pv or "").strip()
@@ -300,6 +302,52 @@ class ValveField(QtWidgets.QWidget):
         # Shutter CLSD_PL records use 1=closed / 0=open (inverse of the
         # valve on/off convention). invert_status flips the interpretation.
         self._invert_status = bool(invert_status)
+        # Labels shown on the status indicator (default ON/OFF; shutters
+        # want OPEN/CLOSED).
+        self._status_on_text = status_on_text or "ON"
+        self._status_off_text = status_off_text or "OFF"
+
+        if vertical:
+            # Column layout: name on top, status below, Open/Close buttons
+            # side-by-side at the bottom. Used by the shutter panel.
+            L = QtWidgets.QVBoxLayout(self)
+            L.setContentsMargins(4, 4, 4, 4); L.setSpacing(4)
+
+            self.name_lbl = QtWidgets.QLabel(self.label_text)
+            self.name_lbl.setAlignment(QtCore.Qt.AlignCenter)
+            self.name_lbl.setStyleSheet("font:bold 10pt;color:#73dfff;padding:2px;")
+            L.addWidget(self.name_lbl)
+
+            self.status_lbl = QtWidgets.QLabel("---")
+            self.status_lbl.setAlignment(QtCore.Qt.AlignCenter)
+            self.status_lbl.setStyleSheet(
+                "background:#404040;color:#e0e0e0;font:bold 11pt;"
+                "border:1px solid #606060;border-radius:3px;padding:4px;")
+            self.status_lbl.setMinimumHeight(28)
+            L.addWidget(self.status_lbl)
+
+            btn_row = QtWidgets.QHBoxLayout(); btn_row.setSpacing(4)
+            self.btn_on = QtWidgets.QPushButton(on_text)
+            self.btn_on.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
+                                      QtWidgets.QSizePolicy.Preferred)
+            self.btn_on.setMinimumHeight(32)
+            self.btn_on.setStyleSheet(
+                "background:#27ae60;color:#fff;font:bold 10pt;padding:4px;"
+                "border:1px solid #2ecc71;border-radius:3px;")
+            self.btn_on.clicked.connect(lambda: self._fire(self.on_pv))
+            btn_row.addWidget(self.btn_on)
+
+            self.btn_off = QtWidgets.QPushButton(off_text)
+            self.btn_off.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
+                                       QtWidgets.QSizePolicy.Preferred)
+            self.btn_off.setMinimumHeight(32)
+            self.btn_off.setStyleSheet(
+                "background:#c0392b;color:#fff;font:bold 10pt;padding:4px;"
+                "border:1px solid #e74c3c;border-radius:3px;")
+            self.btn_off.clicked.connect(lambda: self._fire(self.off_pv))
+            btn_row.addWidget(self.btn_off)
+            L.addLayout(btn_row)
+            return
 
         L = QtWidgets.QHBoxLayout(self)
         L.setContentsMargins(0, 0, 0, 0); L.setSpacing(4)
@@ -371,16 +419,16 @@ class ValveField(QtWidgets.QWidget):
             on = not on
         print(f"[VALVE] {self.field_id}: status={value!r} -> {'ON' if on else 'OFF'}")
         if on:
-            self.status_lbl.setText("ON")
+            self.status_lbl.setText(self._status_on_text)
             self.status_lbl.setStyleSheet(
-                "background:#27ae60;color:#fff;font:bold 10pt;"
-                "border:1px solid #2ecc71;border-radius:2px;padding:2px 6px;"
+                "background:#27ae60;color:#fff;font:bold 11pt;"
+                "border:1px solid #2ecc71;border-radius:3px;padding:4px;"
             )
         else:
-            self.status_lbl.setText("OFF")
+            self.status_lbl.setText(self._status_off_text)
             self.status_lbl.setStyleSheet(
-                "background:#c0392b;color:#fff;font:bold 10pt;"
-                "border:1px solid #e74c3c;border-radius:2px;padding:2px 6px;"
+                "background:#c0392b;color:#fff;font:bold 11pt;"
+                "border:1px solid #e74c3c;border-radius:3px;padding:4px;"
             )
 
     # ── Save / load support ──────────────────────────────────────────
