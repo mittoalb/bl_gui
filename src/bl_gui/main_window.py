@@ -1273,7 +1273,10 @@ class Win(QtWidgets.QMainWindow):
                 for idx, bd in enumerate(merged):
                     btn = CfgButton.from_dict(bd, p)
                     btn.setMinimumHeight(34)
-                    if defaults:
+                    # Only override style when the saved colour is the
+                    # stale default "#2d2d2d" from a pre-refresh save —
+                    # otherwise respect whatever the user set.
+                    if defaults and bd.get("bg") in ("#2d2d2d", None):
                         btn._bg, btn._fg, btn._font_size = defaults
                         btn._apply_style()
                     lay = p.layout()

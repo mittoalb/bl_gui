@@ -588,8 +588,13 @@ def _edit_widget(widget):
     widget.setProperty("_custom_bg", d['bg']); widget.setProperty("_custom_fg", d['fg']); widget.setProperty("_custom_fs", d['fs'])
     widget.setMinimumSize(d['w'], d['h']); widget.setMaximumSize(d['w'], d['h']); widget.resize(d['w'], d['h'])
 
-    # CfgButton: update label + action_type + action from the Action tab.
+    # CfgButton: update label + action_type + action + style.
     if isinstance(widget, CfgButton):
+        # Update internal style fields so to_dict() persists the edit.
+        widget._bg = d.get('bg', widget._bg)
+        widget._fg = d.get('fg', widget._fg)
+        widget._font_size = d.get('fs', widget._font_size)
+        widget._apply_style()
         new_label = d.get('label', '').strip()
         if new_label:
             widget.setText(new_label)
