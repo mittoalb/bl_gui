@@ -166,6 +166,12 @@ class MC(QtWidgets.QFrame):
         menu = QtWidgets.QMenu(self)
         menu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;}"
                            "QMenu::item:selected{background:#1e5a8e;}")
+        if self.pv:
+            act = menu.addAction(f"Copy PV: {self.pv}")
+            act.triggered.connect(
+                lambda _=False, p=self.pv:
+                    QtWidgets.QApplication.clipboard().setText(p))
+            menu.addSeparator()
         menu.addAction("Motor Details...", self._open_debug)
         if self._panel_edit_mode:
             from .widgets import _edit_widget, _duplicate_widget, _change_font_size, _delete_widget

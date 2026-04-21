@@ -17,6 +17,24 @@ from PyQt5 import QtCore, QtWidgets
 from .pv import caput_bg
 
 
+def _copy_to_clipboard(text):
+    if text:
+        QtWidgets.QApplication.clipboard().setText(text)
+
+
+def _add_copy_pv_entries(menu, items):
+    """Append `Copy PV: <name>` entries for each (label, pv) tuple where pv
+    is non-empty. Returns True if any entry was added."""
+    any_added = False
+    for label, pv in items:
+        if not pv:
+            continue
+        act = menu.addAction(f"Copy {label}: {pv}")
+        act.triggered.connect(lambda _=False, p=pv: _copy_to_clipboard(p))
+        any_added = True
+    return any_added
+
+
 class PVField(QtWidgets.QWidget):
     def __init__(self, kind, pv, field_id,
                  choices=None, button_text=None, button_value=None,
@@ -207,15 +225,20 @@ class PVField(QtWidgets.QWidget):
         self._edit_mode = bool(on)
 
     def contextMenuEvent(self, e):
-        if not self._edit_mode:
-            return super().contextMenuEvent(e)
         menu = QtWidgets.QMenu(self)
         menu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;}"
                            "QMenu::item:selected{background:#1e5a8e;}")
-        menu.addAction("Edit PV...", self._edit_pv_dialog)
-        menu.addAction("Delete Row", self._delete_row)
-        menu.addSeparator()
-        menu.addAction("Add PV Row here...", self._add_row_here)
+        items = [("PV", self.pv), ("on PV", self.on_pv), ("off PV", self.off_pv)]
+        added = _add_copy_pv_entries(menu, items)
+        if self._edit_mode:
+            if added:
+                menu.addSeparator()
+            menu.addAction("Edit PV...", self._edit_pv_dialog)
+            menu.addAction("Delete Row", self._delete_row)
+            menu.addSeparator()
+            menu.addAction("Add PV Row here...", self._add_row_here)
+        if menu.isEmpty():
+            return super().contextMenuEvent(e)
         menu.exec_(e.globalPos())
         e.accept()
 
@@ -482,15 +505,22 @@ class ValveField(QtWidgets.QWidget):
         self._edit_mode = bool(on)
 
     def contextMenuEvent(self, e):
-        if not self._edit_mode:
-            return super().contextMenuEvent(e)
         menu = QtWidgets.QMenu(self)
         menu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;}"
                            "QMenu::item:selected{background:#1e5a8e;}")
-        menu.addAction("Edit Valve PVs...", self._edit_pvs_dialog)
-        menu.addAction("Delete Row", self._delete_row)
-        menu.addSeparator()
-        menu.addAction("Add PV Row here...", self._add_row_here)
+        added = _add_copy_pv_entries(menu, [
+            ("status PV", self.status_pv),
+            ("on PV", self.on_pv),
+            ("off PV", self.off_pv),
+        ])
+        if self._edit_mode:
+            if added: menu.addSeparator()
+            menu.addAction("Edit Valve PVs...", self._edit_pvs_dialog)
+            menu.addAction("Delete Row", self._delete_row)
+            menu.addSeparator()
+            menu.addAction("Add PV Row here...", self._add_row_here)
+        if menu.isEmpty():
+            return super().contextMenuEvent(e)
         menu.exec_(e.globalPos())
         e.accept()
 
@@ -699,15 +729,22 @@ class ToggleField(QtWidgets.QWidget):
         self._edit_mode = bool(on)
 
     def contextMenuEvent(self, e):
-        if not self._edit_mode:
-            return super().contextMenuEvent(e)
         menu = QtWidgets.QMenu(self)
         menu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;}"
                            "QMenu::item:selected{background:#1e5a8e;}")
-        menu.addAction("Edit Toggle...", self._edit_dialog)
-        menu.addAction("Delete Row", self._delete_row)
-        menu.addSeparator()
-        menu.addAction("Add PV Row here...", self._add_row_here)
+        added = _add_copy_pv_entries(menu, [
+            ("status PV", self.status_pv),
+            ("open PV", self.open_pv),
+            ("close PV", self.close_pv),
+        ])
+        if self._edit_mode:
+            if added: menu.addSeparator()
+            menu.addAction("Edit Toggle...", self._edit_dialog)
+            menu.addAction("Delete Row", self._delete_row)
+            menu.addSeparator()
+            menu.addAction("Add PV Row here...", self._add_row_here)
+        if menu.isEmpty():
+            return super().contextMenuEvent(e)
         menu.exec_(e.globalPos())
         e.accept()
 
