@@ -485,16 +485,30 @@ class Win(QtWidgets.QMainWindow):
         # --- Camera ---
         p, _ = self._make_panel("Camera", 340, 180, tab_name)
         cl = QtWidgets.QFormLayout(); cl.setContentsMargins(6, 22, 6, 6); cl.setSpacing(4)
+        # Start + Stop on a single row — main acquisition controls.
+        cam_slot = self._pv_fields.setdefault(p.key, {})
+        cam_start = PVField(kind='btn', pv="32idbSP1:cam1:Acquire",
+                            field_id="cam_start", button_text="Start",
+                            button_value=1, parent=p)
+        cam_stop = PVField(kind='btn', pv="32idbSP1:cam1:Acquire",
+                           field_id="cam_stop", button_text="Stop",
+                           button_value=0, parent=p)
+        cam_start._inner.setMinimumHeight(32)
+        cam_stop._inner.setMinimumHeight(32)
+        ctrl_row = QtWidgets.QWidget()
+        ctrl_hl = QtWidgets.QHBoxLayout(ctrl_row)
+        ctrl_hl.setContentsMargins(0, 0, 0, 0); ctrl_hl.setSpacing(6)
+        ctrl_hl.addWidget(cam_start, 1); ctrl_hl.addWidget(cam_stop, 1)
+        cl.addRow("Acquire:", ctrl_row)
+        cam_slot["cam_start"] = cam_start
+        cam_slot["cam_stop"] = cam_stop
         self._register_pv_fields(p, [
-            ('btn', "Start:",    "cam_start",    "32idbSP1:cam1:Acquire",         dict(button_text="Start", button_value=1)),
-            ('btn', "Stop:",     "cam_stop",     "32idbSP1:cam1:Acquire",         dict(button_text="Stop",  button_value=0)),
             ('sp',  "Exp (s):",  "cam_exp_sp",   "32idbSP1:cam1:AcquireTime",     dict(placeholder="sec")),
             ('rb',  "Size X:",   "cam_sizex",    "32idbSP1:cam1:SizeX_RBV",       {}),
             ('rb',  "Size Y:",   "cam_sizey",    "32idbSP1:cam1:SizeY_RBV",       {}),
             ('sp',  "Bin X:",    "cam_binx",     "32idbSP1:cam1:BinX",            dict(placeholder="1")),
             ('sp',  "Bin Y:",    "cam_biny",     "32idbSP1:cam1:BinY",            dict(placeholder="1")),
         ], cl)
-        cam_slot = self._pv_fields[p.key]
         # Make the exposure-time field noticeably bigger (main user control).
         exp_edit = cam_slot['cam_exp_sp']._inner
         exp_edit.setMinimumHeight(32)
