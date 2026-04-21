@@ -284,7 +284,8 @@ class ValveField(QtWidgets.QWidget):
     """
 
     def __init__(self, status_pv, on_pv, off_pv, field_id,
-                 label_text="", on_text="On", off_text="Off", parent=None):
+                 label_text="", on_text="On", off_text="Off",
+                 pulse=True, parent=None):
         super().__init__(parent)
         self.field_id = field_id
         self.status_pv = (status_pv or "").strip()
@@ -292,6 +293,10 @@ class ValveField(QtWidgets.QWidget):
         self.off_pv = (off_pv or "").strip()
         self.label_text = label_text or ""
         self._edit_mode = False
+        # Edge-triggered PLC bits need a 1,0 pulse so the next click works.
+        # .PROC fields and level-driven controls (like uniblitz) want a
+        # single write and must not be pulsed. Off by default for shutters.
+        self._pulse = bool(pulse)
 
         L = QtWidgets.QHBoxLayout(self)
         L.setContentsMargins(0, 0, 0, 0); L.setSpacing(4)
@@ -324,10 +329,13 @@ class ValveField(QtWidgets.QWidget):
 
     def _fire(self, pv):
         if pv:
-            print(f"[VALVE] {self.field_id}: fire -> {pv}")
-            caput_bg(pv, 1)
-            # Immediate tentative feedback so the user sees the click landed
-            # even if the PLC status PV takes a while (or never) to confirm.
+            if self._pulse:
+                print(f"[VALVE] {self.field_id}: fire -> {pv}  (pulse 1,0)")
+                caput_bg(pv, 1)
+                QtCore.QTimer.singleShot(300, lambda p=pv: caput_bg(p, 0))
+            else:
+                print(f"[VALVE] {self.field_id}: fire -> {pv}  (single 1)")
+                caput_bg(pv, 1)
             if pv == self.on_pv:
                 self._show_pending(True)
             elif pv == self.off_pv:
@@ -528,13 +536,20 @@ class ToggleField(QtWidgets.QWidget):
 
     def _on_click(self):
         if self._is_open and self.close_pv:
-            print(f"[SHUTTER] {self.field_id}: fire -> {self.close_pv}")
-            caput_bg(self.close_pv, self._close_value)
+            print(f"[SHUTTER] {self.field_id}: fire -> {self.close_pv}  (pulse)")
+            self._pulse(self.close_pv, self._close_value)
             self._show_pending("closing")
         elif (not self._is_open) and self.open_pv:
-            print(f"[SHUTTER] {self.field_id}: fire -> {self.open_pv}")
-            caput_bg(self.open_pv, self._open_value)
+            print(f"[SHUTTER] {self.field_id}: fire -> {self.open_pv}  (pulse)")
+            self._pulse(self.open_pv, self._open_value)
             self._show_pending("opening")
+
+    def _pulse(self, pv, val):
+        # Write the trigger value then clear to 0 after 300 ms. Trigger bits
+        # on edge-triggered PLCs latch — without the clear, the next click
+        # does nothing.
+        caput_bg(pv, val)
+        QtCore.QTimer.singleShot(300, lambda p=pv: caput_bg(p, 0))
 
     def _show_pending(self, label):
         # Immediate visual feedback — the button turns blue with a '...'
