@@ -819,9 +819,6 @@ class Win(QtWidgets.QMainWindow):
             # Function type — mbbo (Circle / Lissajous). Extra live states arrive
             # from the PV itself get added dynamically by the combo.
             ('cmb', "Function:",       "shaker_menu",    "32idbShaker:shakerMenu",              dict(choices=["Circle", "Lissajous"])),
-            # Run/Stop as explicit action buttons (shared PV, different values)
-            ('btn', "Run:",            "shaker_run",     "32idbShaker:shaker:run",              dict(button_text="Run",  button_value=1)),
-            ('btn', "Stop:",           "shaker_stop",    "32idbShaker:shaker:run",              dict(button_text="Stop", button_value=0)),
             # Channel A
             ('sp',  "A: Amp Mult:",    "shaker_A_amp",   "32idbShaker:shaker:A:ampMult.VAL",    {}),
             ('sp',  "A: Amp Offset:",  "shaker_A_off",   "32idbShaker:shaker:A:ampOffset.VAL",  {}),
@@ -832,6 +829,23 @@ class Win(QtWidgets.QMainWindow):
             ('sp',  "B: Freq Mult:",   "shaker_B_fmult", "32idbShaker:shaker:B:freqMult.VAL",   {}),
         ]
         self._register_pv_fields(p, shaker_fields, skl)
+        # Single state-aware run/stop toggle. Green RUNNING when the run
+        # PV is non-zero, red STOPPED otherwise. Click toggles.
+        shaker_toggle = ToggleField(
+            status_pv="32idbShaker:shaker:run",
+            open_pv="32idbShaker:shaker:run",
+            close_pv="32idbShaker:shaker:run",
+            field_id="shaker_run",
+            label_text="",
+            open_text="RUNNING",   # shown when status is ON (green)
+            close_text="STOPPED",  # shown when status is OFF (red)
+            open_value=1, close_value=0,
+            state_label=True,
+            parent=p,
+        )
+        shaker_toggle.name_lbl.hide()
+        skl.addRow("Shaker:", shaker_toggle)
+        self._pv_fields[p.key]["shaker_run"] = shaker_toggle
         p.setLayout(skl); p.setGeometry(1104 + GAP, iy + 168, 360, 400)
 
         # --- Launchers ---

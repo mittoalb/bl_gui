@@ -235,7 +235,18 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
 
     def _save_and_close(self):
         if self._do_save():
+            self._saved_in_session = True
             self.close()
+
+    def closeEvent(self, event):
+        """Auto-save on any close (X button, Alt+F4, window-manager close)
+        so deleting rows and just closing the dialog actually persists."""
+        try:
+            if not getattr(self, "_saved_in_session", False):
+                self._do_save()
+        except Exception as e:
+            print(f"[CALIB] auto-save on close failed: {e}")
+        super().closeEvent(event)
 
     def _do_save(self):
         # Preserve range_keV (set from the main GUI's Energy panel) across
