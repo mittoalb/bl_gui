@@ -1484,26 +1484,43 @@ class Win(QtWidgets.QMainWindow):
         EnergySet. The mono move is triggered in both cases."""
         cal_pvs = ("32id:TXMOptics:EnergyCalibrationFileOne",
                    "32id:TXMOptics:EnergyCalibrationFileTwo")
+
         def _empty(pv):
-            try:
-                r = subprocess.run(["caget", pv],
-                                   capture_output=True, timeout=2.0, text=True)
-                if r.returncode != 0:
-                    print(f"[ENERGY] {pv}: caget rc={r.returncode} — treating as empty")
-                    return True
-                out = r.stdout.strip()
-                # caget output is normally "PV_NAME value"
-                parts = out.split(None, 1)
-                val = parts[1].strip() if len(parts) > 1 else ""
-                print(f"[ENERGY] {pv} raw={val!r}")
-                # Char waveforms with no content show up as "0" (zero bytes),
-                # stringouts as an empty string, both are 'no file set'.
-                return val in ("", "0") or val.startswith("0 ")
-            except Exception as e:
-                print(f"[ENERGY] {pv}: caget EXC {e} — treating as empty")
-                return True
-        use_plugin = all(_empty(pv) for pv in cal_pvs)
-        print(f"[ENERGY] use_plugin={use_plugin}")
+            # Try -S (treat char waveform as string) then bare caget.
+            for flags in (["-S"], []):
+                try:
+                    r = subprocess.run(["caget", *flags, pv],
+                                       capture_output=True, timeout=2.0, text=True)
+                    if r.returncode != 0:
+                        continue
+                    out = r.stdout.strip()
+                    parts = out.split(None, 1)
+                    val = parts[1].strip() if len(parts) > 1 else ""
+                    val = val.strip('"').strip("'")
+                    print(f"[ENERGY] {pv} ({'S' if flags else ''}) raw={val!r}")
+                    if val == "" or val == "0":
+                        return True
+                    if val.startswith("0 "):
+                        return True
+                    toks = val.split()
+                    if len(toks) > 1 and all(t == "0" for t in toks):
+                        return True
+                    return False
+                except Exception as e:
+                    print(f"[ENERGY] {pv}: caget EXC {e}")
+                    continue
+            return True
+
+        # Use Calibration toggle state (True = YES).
+        use_cal_on = False
+        for slot in self._pv_fields.values():
+            f = slot.get("energy_usecalib")
+            if f is not None and hasattr(f, "_is_open"):
+                use_cal_on = bool(f._is_open); break
+        files_empty = all(_empty(pv) for pv in cal_pvs)
+        use_plugin = use_cal_on and files_empty
+        print(f"[ENERGY] use_cal_on={use_cal_on} files_empty={files_empty} "
+              f"use_plugin={use_plugin}")
         if use_plugin:
             self._apply_zp_calib_from_plugin()
         else:
