@@ -1588,7 +1588,11 @@ class Win(QtWidgets.QMainWindow):
         print(f"[ENERGY] use_cal_on={use_cal_on} files_empty={files_empty} "
               f"use_plugin={use_plugin}")
         if use_plugin:
-            self._apply_zp_calib_from_plugin()
+            # No cal-file names specified — rely entirely on the bl_gui
+            # calibration table: interpolate + caput motor positions now,
+            # do NOT generate any cal files and do NOT set cal-file PVs
+            # (the IOC's file-based logic is bypassed in this mode).
+            self._move_motors_from_plugin()
         else:
             print("[ENERGY] EPICS cal files set — IOC handles ZP moves")
         caput_bg("32id:TXMOptics:EnergySet", 1)
@@ -1645,6 +1649,71 @@ class Win(QtWidgets.QMainWindow):
                 self._style_qgmax_button(b, running=running)
             if not running:
                 self.statusBar().showMessage("QGMax: done.", 3000)
+
+    def _move_motors_from_plugin(self):
+        """Linear-interpolate X/Y/Z/QG-V/QG-H at the current Energy SP
+        from the ZP calibration table and caput the positions to each
+        motor. Used when the EPICS cal-file PVs are empty: bl_gui acts
+        as the calibration authority instead of the IOC."""
+        sp = None
+        for slot in self._pv_fields.values():
+            f = slot.get("energy_sp")
+            if f is not None:
+                sp = f; break
+        if sp is None:
+            print("[ENERGY] no energy_sp widget found")
+            return
+        try:
+            e_keV = float(sp._inner.text())
+        except (ValueError, AttributeError):
+            print("[ENERGY] energy setpoint not numeric; aborting")
+            return
+        e_eV = e_keV * 1000.0
+
+        from .beamlines.bl32id import xanes_calib
+        cfg = xanes_calib.load_config()
+        pts = [p for p in (cfg.get("points") or []) if p and p[0] is not None]
+        pvs = cfg.get("pvs", dict(xanes_calib.DEFAULT_PVS))
+        if len(pts) < 2:
+            print(f"[ENERGY] only {len(pts)} cal point(s) — need >= 2")
+            return
+
+        def _interp(col_idx):
+            es, vs = [], []
+            for row in pts:
+                if len(row) <= col_idx: continue
+                if row[col_idx] is None: continue
+                es.append(float(row[0])); vs.append(float(row[col_idx]))
+            if len(es) < 2:
+                return None
+            order = sorted(range(len(es)), key=lambda i: es[i])
+            es = [es[i] for i in order]; vs = [vs[i] for i in order]
+            if e_eV < es[0]:
+                slope = (vs[1]-vs[0])/(es[1]-es[0])
+                return vs[0] + slope * (e_eV - es[0])
+            if e_eV > es[-1]:
+                slope = (vs[-1]-vs[-2])/(es[-1]-es[-2])
+                return vs[-1] + slope * (e_eV - es[-1])
+            for i in range(1, len(es)):
+                if es[i] >= e_eV:
+                    frac = (e_eV - es[i-1]) / (es[i] - es[i-1])
+                    return vs[i-1] + frac * (vs[i] - vs[i-1])
+            return None
+
+        for name, col, pv_key in (("X", 1, "zp_x_pv"),
+                                  ("Y", 2, "zp_y_pv"),
+                                  ("Z", 3, "zp_z_pv"),
+                                  ("QG V", 4, "qg_v_pv"),
+                                  ("QG H", 5, "qg_h_pv")):
+            target_pv = pvs.get(pv_key)
+            if not target_pv: continue
+            v = _interp(col)
+            if v is None:
+                print(f"[ENERGY] {name}: no cal data, skipping")
+                continue
+            print(f"[ENERGY] {name} @ {e_keV:g} keV -> {v:.6f} "
+                  f"(caput {target_pv})")
+            caput_bg(target_pv, float(v))
 
     def _on_cal_range_changed(self, value):
         """Persist the ± energy range into the calibration config JSON as
