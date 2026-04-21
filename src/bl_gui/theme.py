@@ -33,10 +33,10 @@ QTabBar { qproperty-expanding: 0; }
 """
 
 _PANEL_SS = """
-    background: #1e1e1e; border: 1px solid #383838; border-radius: 3px;
+    background: #323232; border: 1px solid #484848; border-radius: 3px;
     font: bold 9pt; color: #e0e0e0;
 """
 _PANEL_SS_EDIT = """
-    background: #1e1e1e; border: 2px dashed #f39c12; border-radius: 3px;
+    background: #323232; border: 2px dashed #f39c12; border-radius: 3px;
     font: bold 9pt; color: #e0e0e0;
 """
