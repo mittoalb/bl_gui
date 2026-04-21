@@ -1527,11 +1527,14 @@ class Win(QtWidgets.QMainWindow):
             print("[ENERGY] EPICS cal files set — IOC handles ZP moves")
         caput_bg("32id:TXMOptics:EnergySet", 1)
 
+    _CAL_FILE_DIR = "/home/beams/USERTXM/epics/synApps/support/txmoptics/iocBoot/iocTXMOptics"
+
     def _apply_zp_calib_from_plugin(self):
-        """Interpolate X/Y/Z at the current Energy SP from the local ZP
-        calibration table and caput the resulting positions."""
-        # Find the Energy SP line edit — it lives in any panel keyed by
-        # 'energy_sp' (there may be one per tab).
+        """When both EPICS cal files are blank and Use Calibration is YES,
+        auto-generate the two Energy_*keV.txt files from the local
+        calibration table (bracketing the current Energy SP), drop them in
+        the TXMOptics iocBoot directory, and point the EPICS cal-file PVs
+        at them so the IOC handles the interpolation on EnergySet."""
         sp_widget = None
         for slot in self._pv_fields.values():
             f = slot.get("energy_sp")
@@ -1543,52 +1546,85 @@ class Win(QtWidgets.QMainWindow):
         try:
             e_keV = float(sp_widget._inner.text())
         except (ValueError, AttributeError):
-            print("[ENERGY] energy setpoint not numeric; aborting ZP interp")
+            print("[ENERGY] energy setpoint not numeric; aborting")
             return
         e_eV = e_keV * 1000.0
 
         from .beamlines.bl32id import xanes_calib
         cfg = xanes_calib.load_config()
-        pts = cfg.get("points", []) or []
+        pts = [p for p in (cfg.get("points") or []) if p and p[0] is not None]
         pvs = cfg.get("pvs", dict(xanes_calib.DEFAULT_PVS))
-        # Build (E, value) lists per axis — only rows with a numeric value
-        # for that axis contribute.
-        def _interp(col_idx):
-            es, vs = [], []
-            for row in pts:
-                if len(row) <= col_idx: continue
-                if row[0] is None or row[col_idx] is None: continue
-                es.append(float(row[0])); vs.append(float(row[col_idx]))
-            if len(es) < 2:
-                return None
-            order = sorted(range(len(es)), key=lambda i: es[i])
-            es = [es[i] for i in order]; vs = [vs[i] for i in order]
-            # Linear extrapolation past either end using the slope of the
-            # nearest two points.
-            if e_eV < es[0]:
-                slope = (vs[1] - vs[0]) / (es[1] - es[0])
-                return vs[0] + slope * (e_eV - es[0])
-            if e_eV > es[-1]:
-                slope = (vs[-1] - vs[-2]) / (es[-1] - es[-2])
-                return vs[-1] + slope * (e_eV - es[-1])
-            for i in range(1, len(es)):
-                if es[i] >= e_eV:
-                    frac = (e_eV - es[i-1]) / (es[i] - es[i-1])
-                    return vs[i-1] + frac * (vs[i] - vs[i-1])
+        if len(pts) < 2:
+            print(f"[ENERGY] only {len(pts)} cal point(s) — need 2; aborting")
+            return
+
+        # Pick the two cal-table rows to write out. Use the two rows
+        # bracketing the target; fall back to the two nearest if target is
+        # outside the table (= extrapolation bracket).
+        sorted_pts = sorted(pts, key=lambda r: r[0])
+        lo_pt = hi_pt = None
+        for p in sorted_pts:
+            if p[0] <= e_eV:
+                lo_pt = p
+            if hi_pt is None and p[0] >= e_eV:
+                hi_pt = p
+        if lo_pt is None: lo_pt = sorted_pts[0]
+        if hi_pt is None: hi_pt = sorted_pts[-1]
+        if lo_pt is hi_pt:
+            idx = sorted_pts.index(lo_pt)
+            if idx + 1 < len(sorted_pts):
+                hi_pt = sorted_pts[idx + 1]
+            elif idx > 0:
+                lo_pt = sorted_pts[idx - 1]
+
+        def _name(e_eV_val):
+            k = e_eV_val / 1000.0
+            s = f"{k:g}".replace(".", "p")
+            return f"Energy_{s}keV.txt"
+
+        def _axis_value(row, col):
+            if len(row) > col and row[col] is not None:
+                try: return float(row[col])
+                except (ValueError, TypeError): return None
             return None
 
-        for axis_name, col_idx, pv_key in (
-                ("X", 1, "zp_x_pv"),
-                ("Y", 2, "zp_y_pv"),
-                ("Z", 3, "zp_z_pv")):
-            target_pv = pvs.get(pv_key)
-            target = _interp(col_idx)
-            if target_pv and target is not None:
-                print(f"[ENERGY] ZP {axis_name} @ {e_eV:.1f} eV → {target:.6f}  "
-                      f"(caput {target_pv})")
-                caput_bg(target_pv, float(target))
-            elif target is None and target_pv:
-                print(f"[ENERGY] ZP {axis_name}: not enough cal points, skipping")
+        axis_pvs = [(pvs.get("zp_x_pv"), 1),
+                    (pvs.get("zp_y_pv"), 2),
+                    (pvs.get("zp_z_pv"), 3)]
+
+        try:
+            os.makedirs(self._CAL_FILE_DIR, exist_ok=True)
+        except Exception as ex:
+            print(f"[ENERGY] cal dir not writable: {ex} — aborting")
+            return
+
+        filenames = []
+        for pt in (lo_pt, hi_pt):
+            fname = _name(pt[0])
+            fpath = os.path.join(self._CAL_FILE_DIR, fname)
+            try:
+                with open(fpath, "w") as f:
+                    f.write(f"energy {pt[0]/1000.0:g}\n")
+                    for pv_name, col in axis_pvs:
+                        v = _axis_value(pt, col)
+                        if pv_name and v is not None:
+                            f.write(f"{pv_name} {v:.6f}\n")
+                print(f"[ENERGY] wrote {fpath}")
+                filenames.append(fname)
+            except Exception as ex:
+                print(f"[ENERGY] failed to write {fpath}: {ex}")
+                return
+
+        # Push the two filenames to EPICS and reflect them in the GUI.
+        caput_bg("32id:TXMOptics:EnergyCalibrationFileOne", filenames[0])
+        caput_bg("32id:TXMOptics:EnergyCalibrationFileTwo", filenames[1])
+        for slot in self._pv_fields.values():
+            for fid, fname in (("energy_calfile1", filenames[0]),
+                               ("energy_calfile2", filenames[1])):
+                f = slot.get(fid)
+                if f is not None and hasattr(f, "_inner"):
+                    try: f._inner.setText(fname)
+                    except Exception: pass
 
     def _apply_cam_binning(self):
         """On Enter in Bin X or Bin Y: caput BinX / BinY / SizeX / SizeY.
