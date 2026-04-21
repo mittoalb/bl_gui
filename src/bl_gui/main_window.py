@@ -371,10 +371,22 @@ class Win(QtWidgets.QMainWindow):
         # --- Presets ---
         p, _ = self._make_panel("Presets", 200, 80, tab_name)
         pl = QtWidgets.QHBoxLayout(); pl.setContentsMargins(6, 20, 6, 4); pl.setSpacing(4)
-        bn = QtWidgets.QPushButton("Nano"); bn.setStyleSheet("background:#27ae60;color:#fff;font:bold 11pt;")
-        bn.clicked.connect(lambda: caput_bg("32id:TXMOptics:MoveAllIn",1)); pl.addWidget(bn)
-        bm = QtWidgets.QPushButton("Micro"); bm.setStyleSheet("background:#27ae60;color:#fff;font:bold 11pt;")
-        bm.clicked.connect(lambda: caput_bg("32id:TXMOptics:MoveAllOut",1)); pl.addWidget(bm)
+        # Presets are CfgButtons so they: (1) get duplicated when the panel
+        # is duplicated, (2) are editable via right-click in edit mode,
+        # (3) save/load through the normal _buttons path.
+        p._cfg_btn_defaults = ("#27ae60", "#ffffff", 11)
+        presets = [
+            ("Nano",  "caput", "32id:TXMOptics:MoveAllIn 1"),
+            ("Micro", "caput", "32id:TXMOptics:MoveAllOut 1"),
+        ]
+        p._default_btn_specs = presets
+        bg_pr, fg_pr, fs_pr = p._cfg_btn_defaults
+        for lbl, atype, action in presets:
+            b = CfgButton(lbl, action_type=atype, action=action,
+                          bg=bg_pr, fg=fg_pr, font_size=fs_pr, parent=p)
+            b.setMinimumHeight(34)
+            pl.addWidget(b)
+            p.custom_buttons.append(b)
         p.setLayout(pl); p.setGeometry(x, y, 200, 80)
 
         # --- Motor groups ---
@@ -1322,15 +1334,20 @@ class Win(QtWidgets.QMainWindow):
                 defaults = getattr(p, "_cfg_btn_defaults", None)
                 default_specs = getattr(p, "_default_btn_specs", [])
                 # Merge: if the saved list is missing any default button,
-                # append it. Match by label OR action — if the user renamed
-                # or retargeted a default, we must NOT re-inject it.
+                # append it. Each spec is (label, cmd) = shell default,
+                # or (label, action_type, action) for e.g. caput presets.
+                # Match by label OR action so renames don't duplicate.
                 saved_labels = {bd.get("label") for bd in btn_list}
                 saved_actions = {bd.get("action") for bd in btn_list}
                 merged = list(btn_list)
-                for lbl, cmd in default_specs:
+                for spec in default_specs:
+                    if len(spec) == 3:
+                        lbl, atype, cmd = spec
+                    else:
+                        lbl, cmd = spec; atype = "shell"
                     if lbl in saved_labels or cmd in saved_actions:
                         continue
-                    merged.append({"label": lbl, "type": "shell", "action": cmd,
+                    merged.append({"label": lbl, "type": atype, "action": cmd,
                                    "bg": defaults[0] if defaults else "#2d2d2d",
                                    "fg": defaults[1] if defaults else "#e0e0e0",
                                    "font_size": defaults[2] if defaults else 9})
