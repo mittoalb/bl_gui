@@ -426,17 +426,23 @@ class Win(QtWidgets.QMainWindow):
         bp.clicked.connect(lambda: subprocess.Popen(["/home/beams/USERTXM/scripts/start_pystream.sh"], start_new_session=True))
         iol.addWidget(bp, 0, len(inout_rows), 2, 1)
         # QGMax one-shot optimization — writes the request file that
-        # pystream's background watcher picks up.
+        # pystream's background watcher picks up. The button polls the
+        # response file to show live running/idle state.
         qgmax_btn = QtWidgets.QPushButton("QGMax")
         qgmax_btn.setFixedSize(90, 28)
-        qgmax_btn.setStyleSheet(
-            "background:#8e44ad;color:#fff;font:bold 10pt;"
-            "border:1px solid #9b59b6;border-radius:3px;")
-        qgmax_btn.setToolTip(
-            "Trigger a single QGMax image-mean optimization cycle "
-            "(pystream must be running).")
         qgmax_btn.clicked.connect(self._trigger_qgmax)
         iol.addWidget(qgmax_btn, 0, len(inout_rows) + 1, 2, 1)
+        self._qgmax_btn = qgmax_btn
+        # Only create the polling infrastructure once across both tabs.
+        if not hasattr(self, "_qgmax_buttons"):
+            self._qgmax_buttons = []
+            self._qgmax_running = False
+            self._qgmax_timer = QtCore.QTimer(self)
+            self._qgmax_timer.setInterval(500)
+            self._qgmax_timer.timeout.connect(self._poll_qgmax_status)
+            self._qgmax_timer.start()
+        self._qgmax_buttons.append(qgmax_btn)
+        self._style_qgmax_button(qgmax_btn, running=False)
         p.setLayout(iol); p.setGeometry(0, iy, 860, 70)
 
         # --- Energy ---
@@ -1576,17 +1582,52 @@ class Win(QtWidgets.QMainWindow):
         """Fire a one-shot QGMax optimization by writing pystream's request
         file. The pystream QGMax background watcher polls that file twice
         a second and runs one optimization cycle."""
+        if getattr(self, "_qgmax_running", False):
+            print("[QGMAX] cycle already running — ignoring trigger")
+            return
         try:
             from .beamlines.bl32id import qgmax_trigger
             ts = qgmax_trigger.trigger()
+            # Reflect state immediately — don't wait for the next poll tick.
+            self._qgmax_running = True
+            for b in getattr(self, "_qgmax_buttons", []):
+                self._style_qgmax_button(b, running=True)
             self.statusBar().showMessage(
-                f"QGMax trigger sent (ts={ts:.1f}) — pystream will run one cycle.",
-                4000)
+                f"QGMax trigger sent (ts={ts:.1f}) — optimization running…", 4000)
             print(f"[QGMAX] trigger ts={ts}")
         except Exception as e:
             print(f"[QGMAX] trigger failed: {e}")
             QtWidgets.QMessageBox.warning(self, "QGMax",
                 f"Could not write the trigger file:\n{e}")
+
+    def _style_qgmax_button(self, btn, running):
+        if running:
+            btn.setText("QGMax… running")
+            btn.setStyleSheet(
+                "background:#f39c12;color:#000;font:bold 10pt;"
+                "border:1px solid #f1c40f;border-radius:3px;")
+            btn.setToolTip("QGMax is running — wait until it finishes.")
+            btn.setEnabled(False)
+        else:
+            btn.setText("QGMax")
+            btn.setStyleSheet(
+                "background:#8e44ad;color:#fff;font:bold 10pt;"
+                "border:1px solid #9b59b6;border-radius:3px;")
+            btn.setToolTip(
+                "Trigger a single QGMax image-mean optimization cycle "
+                "(pystream must be running).")
+            btn.setEnabled(True)
+
+    def _poll_qgmax_status(self):
+        from .beamlines.bl32id import qgmax_trigger
+        st = qgmax_trigger.read_status()
+        running = bool(st and st.get("running"))
+        if running != getattr(self, "_qgmax_running", False):
+            self._qgmax_running = running
+            for b in getattr(self, "_qgmax_buttons", []):
+                self._style_qgmax_button(b, running=running)
+            if not running:
+                self.statusBar().showMessage("QGMax: done.", 3000)
 
     def _on_cal_range_changed(self, value):
         """Persist the ± energy range into the calibration config JSON as
