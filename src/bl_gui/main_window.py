@@ -1121,7 +1121,12 @@ class Win(QtWidgets.QMainWindow):
             traceback.print_exc()
 
     def _load_layout(self):
+        user_path = _user_lay_path()
+        bundled_path = _bundled_lay_path()
         lay_path = _lay_path()
+        print(f"[LOAD] user_path={user_path} exists={os.path.isfile(user_path)}")
+        print(f"[LOAD] bundled_path={bundled_path} exists={os.path.isfile(bundled_path)}")
+        print(f"[LOAD] using={lay_path}")
         if not os.path.isfile(lay_path):
             print(f"[LOAD] no file at {lay_path}, using defaults")
             return
