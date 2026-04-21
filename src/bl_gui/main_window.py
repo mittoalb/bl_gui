@@ -1749,12 +1749,9 @@ class Win(QtWidgets.QMainWindow):
                 print(f"[ENERGY] failed to write {fpath}: {ex}")
                 return
 
-        # Write the two Cal File PVs SYNCHRONOUSLY (not through the async
-        # caput_bg pool) so EnergySet fired right after sees real values
-        # and the IOC doesn't try to open('') — which is the root cause of
-        # the "[Errno 2] No such file or directory: ''" from txmoptics.py.
-        # Write full absolute paths too, since the IOC open()s whatever
-        # string it reads from the PV relative to its own CWD.
+        # Sync-caput the Cal File PVs (absolute paths) BEFORE EnergySet
+        # fires — prevents the "[Errno 2] No such file or directory: ''"
+        # race in txmoptics.py and gives the IOC something openable.
         full_paths = [os.path.join(self._CAL_FILE_DIR, fn) for fn in filenames]
         for pv_name, full_path in (
                 ("32id:TXMOptics:EnergyCalibrationFileOne", full_paths[0]),
@@ -1774,6 +1771,20 @@ class Win(QtWidgets.QMainWindow):
                 if f is not None and hasattr(f, "_inner"):
                     try: f._inner.setText(fname)
                     except Exception: pass
+
+        # Also move the motors directly from bl_gui, using our own
+        # interpolation at the TARGET energy. This makes bl_gui
+        # self-sufficient: even if the IOC's cal-file interpolation fails
+        # or runs late, the motors still land at the right positions. The
+        # IOC's later re-application (via EnergySet) will write the same
+        # values — idempotent.
+        e_target_eV = e_keV * 1000.0
+        for pv_name, col in axis_pvs:
+            if not pv_name: continue
+            v = _interp_at(col, e_target_eV)
+            if v is None: continue
+            print(f"[ENERGY] direct move {pv_name} -> {v:.6f} (col {col})")
+            caput_bg(pv_name, float(v))
 
     def _apply_cam_binning(self):
         """On Enter in Bin X or Bin Y: caput BinX / BinY / SizeX / SizeY.
