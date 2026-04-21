@@ -1716,7 +1716,9 @@ class Win(QtWidgets.QMainWindow):
         e_hi_keV = e_keV + range_keV
         axis_pvs = [(pvs.get("zp_x_pv"), 1),
                     (pvs.get("zp_y_pv"), 2),
-                    (pvs.get("zp_z_pv"), 3)]
+                    (pvs.get("zp_z_pv"), 3),
+                    (pvs.get("qg_v_pv"), 4),
+                    (pvs.get("qg_h_pv"), 5)]
 
         try:
             os.makedirs(self._CAL_FILE_DIR, exist_ok=True)
