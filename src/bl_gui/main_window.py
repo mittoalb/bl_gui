@@ -1749,11 +1749,27 @@ class Win(QtWidgets.QMainWindow):
                 print(f"[ENERGY] failed to write {fpath}: {ex}")
                 return
 
-        caput_bg("32id:TXMOptics:EnergyCalibrationFileOne", filenames[0])
-        caput_bg("32id:TXMOptics:EnergyCalibrationFileTwo", filenames[1])
+        # Write the two Cal File PVs SYNCHRONOUSLY (not through the async
+        # caput_bg pool) so EnergySet fired right after sees real values
+        # and the IOC doesn't try to open('') — which is the root cause of
+        # the "[Errno 2] No such file or directory: ''" from txmoptics.py.
+        # Write full absolute paths too, since the IOC open()s whatever
+        # string it reads from the PV relative to its own CWD.
+        full_paths = [os.path.join(self._CAL_FILE_DIR, fn) for fn in filenames]
+        for pv_name, full_path in (
+                ("32id:TXMOptics:EnergyCalibrationFileOne", full_paths[0]),
+                ("32id:TXMOptics:EnergyCalibrationFileTwo", full_paths[1])):
+            try:
+                r = subprocess.run(["caput", pv_name, full_path],
+                                   capture_output=True, timeout=3.0, text=True)
+                if r.returncode != 0:
+                    print(f"[ENERGY] caput {pv_name} rc={r.returncode} "
+                          f"stderr={r.stderr.strip()!r}")
+            except Exception as ex:
+                print(f"[ENERGY] caput {pv_name} EXC: {ex}")
         for slot in self._pv_fields.values():
-            for fid, fname in (("energy_calfile1", filenames[0]),
-                               ("energy_calfile2", filenames[1])):
+            for fid, fname in (("energy_calfile1", full_paths[0]),
+                               ("energy_calfile2", full_paths[1])):
                 f = slot.get(fid)
                 if f is not None and hasattr(f, "_inner"):
                     try: f._inner.setText(fname)
