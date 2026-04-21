@@ -452,9 +452,10 @@ class Win(QtWidgets.QMainWindow):
             close_pv="32id:TXMOptics:EnergyUseCalibration",
             field_id="energy_usecalib",
             label_text="",
-            open_text="Enable",
-            close_text="Disable",
+            open_text="YES",          # shown when state is ON (green)
+            close_text="NO",          # shown when state is OFF (red)
             open_value="Yes", close_value="No",
+            state_label=True,
             parent=p,
         )
         use_calib.name_lbl.hide()

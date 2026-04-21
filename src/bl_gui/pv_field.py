@@ -566,7 +566,8 @@ class ToggleField(QtWidgets.QWidget):
     def __init__(self, status_pv, open_pv, close_pv, field_id,
                  label_text="", open_text="Open", close_text="Close",
                  open_value=1, close_value=1,
-                 pulse=False, invert_status=False, parent=None):
+                 pulse=False, invert_status=False,
+                 state_label=False, parent=None):
         super().__init__(parent)
         self.field_id = field_id
         self.status_pv = (status_pv or "").strip()
@@ -586,6 +587,12 @@ class ToggleField(QtWidgets.QWidget):
         # For records like CLSD_PL where 1=closed/0=open, the "state is on"
         # interpretation is inverted. Shutter users set invert_status=True.
         self._invert_status = bool(invert_status)
+        # state_label mode: button text is the CURRENT STATE (e.g. "YES" /
+        # "NO") rather than the action the click will perform. Colour still
+        # follows state (green=on, red=off). When state_label=False (default)
+        # the button reads like a shutter: it says "Close" when open, "Open"
+        # when closed — i.e. what clicking will do.
+        self._state_label = bool(state_label)
 
         L = QtWidgets.QVBoxLayout(self)
         L.setContentsMargins(2, 2, 2, 2); L.setSpacing(2)
@@ -605,17 +612,23 @@ class ToggleField(QtWidgets.QWidget):
     # ── Behaviour ────────────────────────────────────────────────────
     def _restyle(self):
         if self._is_open:
-            # Currently open → next click will close it.
-            self.btn.setText(self.close_text)
+            # State is ON. In state_label mode the text shows the on-state
+            # name (open_text); in action-label mode it shows what clicking
+            # does (close_text).
+            self.btn.setText(self.open_text if self._state_label else self.close_text)
+            bg = "#27ae60" if self._state_label else "#c0392b"
+            bd = "#2ecc71" if self._state_label else "#e74c3c"
             self.btn.setStyleSheet(
-                "background:#c0392b;color:#fff;font:bold 11pt;"
-                "border:1px solid #e74c3c;border-radius:3px;padding:4px;"
+                f"background:{bg};color:#fff;font:bold 11pt;"
+                f"border:1px solid {bd};border-radius:3px;padding:4px;"
             )
         else:
-            self.btn.setText(self.open_text)
+            self.btn.setText(self.close_text if self._state_label else self.open_text)
+            bg = "#c0392b" if self._state_label else "#27ae60"
+            bd = "#e74c3c" if self._state_label else "#2ecc71"
             self.btn.setStyleSheet(
-                "background:#27ae60;color:#fff;font:bold 11pt;"
-                "border:1px solid #2ecc71;border-radius:3px;padding:4px;"
+                f"background:{bg};color:#fff;font:bold 11pt;"
+                f"border:1px solid {bd};border-radius:3px;padding:4px;"
             )
 
     def _on_click(self):
