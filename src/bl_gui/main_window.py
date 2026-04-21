@@ -425,7 +425,19 @@ class Win(QtWidgets.QMainWindow):
         bp.setStyleSheet("background:#27ae60;color:#fff;font:bold 10pt;border-radius:3px;")
         bp.clicked.connect(lambda: subprocess.Popen(["/home/beams/USERTXM/scripts/start_pystream.sh"], start_new_session=True))
         iol.addWidget(bp, 0, len(inout_rows), 2, 1)
-        p.setLayout(iol); p.setGeometry(0, iy, 760, 70)
+        # QGMax one-shot optimization — writes the request file that
+        # pystream's background watcher picks up.
+        qgmax_btn = QtWidgets.QPushButton("QGMax")
+        qgmax_btn.setFixedSize(90, 28)
+        qgmax_btn.setStyleSheet(
+            "background:#8e44ad;color:#fff;font:bold 10pt;"
+            "border:1px solid #9b59b6;border-radius:3px;")
+        qgmax_btn.setToolTip(
+            "Trigger a single QGMax image-mean optimization cycle "
+            "(pystream must be running).")
+        qgmax_btn.clicked.connect(self._trigger_qgmax)
+        iol.addWidget(qgmax_btn, 0, len(inout_rows) + 1, 2, 1)
+        p.setLayout(iol); p.setGeometry(0, iy, 860, 70)
 
         # --- Energy ---
         p, _ = self._make_panel("Energy", 380, 300, tab_name)
@@ -1559,6 +1571,22 @@ class Win(QtWidgets.QMainWindow):
         caput_bg("32id:TXMOptics:EnergySet", 1)
 
     _CAL_FILE_DIR = "/home/beams/USERTXM/epics/synApps/support/txmoptics/iocBoot/iocTXMOptics"
+
+    def _trigger_qgmax(self):
+        """Fire a one-shot QGMax optimization by writing pystream's request
+        file. The pystream QGMax background watcher polls that file twice
+        a second and runs one optimization cycle."""
+        try:
+            from .beamlines.bl32id import qgmax_trigger
+            ts = qgmax_trigger.trigger()
+            self.statusBar().showMessage(
+                f"QGMax trigger sent (ts={ts:.1f}) — pystream will run one cycle.",
+                4000)
+            print(f"[QGMAX] trigger ts={ts}")
+        except Exception as e:
+            print(f"[QGMAX] trigger failed: {e}")
+            QtWidgets.QMessageBox.warning(self, "QGMax",
+                f"Could not write the trigger file:\n{e}")
 
     def _on_cal_range_changed(self, value):
         """Persist the ± energy range into the calibration config JSON as
