@@ -420,19 +420,51 @@ class WidgetEditor(QtWidgets.QDialog):
         self._w_spin = QtWidgets.QSpinBox(); self._w_spin.setRange(10, 9999); self._w_spin.setValue(geo.width()); pl.addRow("Width:", self._w_spin)
         self._h_spin = QtWidgets.QSpinBox(); self._h_spin.setRange(10, 9999); self._h_spin.setValue(geo.height()); pl.addRow("Height:", self._h_spin)
         tabs.addTab(pos_w, "Position / Size")
-        pv_name = ""
-        if hasattr(widget, 'pv'): pv_name = widget.pv
-        elif hasattr(widget, 'action') and getattr(widget, 'action_type', '') == 'caput':
-            pv_name = widget.action.split(None, 1)[0] if widget.action else ""
-        pv_w = QtWidgets.QWidget(); pvl = QtWidgets.QFormLayout(pv_w); pvl.setSpacing(6)
         cur_label = getattr(widget, "_label", None) or self._widget_text()
-        self._label_edit = QtWidgets.QLineEdit(cur_label)
-        self._label_edit.setPlaceholderText("Displayed name (e.g. X, Y-L, Sample X)")
-        pvl.addRow("Name/Label:", self._label_edit)
-        self._pv_edit = QtWidgets.QLineEdit(pv_name)
-        self._pv_edit.setPlaceholderText("PV name (e.g. 32idbTXM:mcs2:c1:m1)"); pvl.addRow("PV:", self._pv_edit)
-        pvl.addRow(QtWidgets.QLabel("For motor cards: changes the motor PV prefix and label.\nFor caput buttons: changes the target PV.\nLeave empty to keep current."))
-        tabs.addTab(pv_w, "PV"); L.addWidget(tabs)
+
+        # For CfgButton widgets, show an "Action" tab instead of a PV tab —
+        # these buttons don't talk to a PV directly, they run a shell
+        # command / caput / URL / script.
+        self._is_cfg = isinstance(widget, CfgButton)
+        if self._is_cfg:
+            act_w = QtWidgets.QWidget(); al = QtWidgets.QFormLayout(act_w); al.setSpacing(6)
+            self._label_edit = QtWidgets.QLineEdit(cur_label)
+            self._label_edit.setPlaceholderText("Button label")
+            al.addRow("Label:", self._label_edit)
+            self._type_combo = QtWidgets.QComboBox()
+            self._type_combo.addItems(["shell", "caput", "url", "script"])
+            idx = self._type_combo.findText(getattr(widget, "action_type", "shell"))
+            if idx >= 0: self._type_combo.setCurrentIndex(idx)
+            al.addRow("Action type:", self._type_combo)
+            self._action_edit = QtWidgets.QLineEdit(getattr(widget, "action", ""))
+            self._action_edit.setPlaceholderText(
+                "e.g. /path/to/script.sh   or   PV_NAME value")
+            al.addRow("Action:", self._action_edit)
+            help_lbl = QtWidgets.QLabel(
+                "shell : run a shell command\n"
+                "caput : 'PV_NAME value' (writes value to PV)\n"
+                "url   : open URL in default browser\n"
+                "script: run Python script")
+            help_lbl.setStyleSheet("color:#888;font:8pt;"); help_lbl.setWordWrap(True)
+            al.addRow(help_lbl)
+            tabs.addTab(act_w, "Action")
+            # Keep a blank _pv_edit so accept() can still reference it.
+            self._pv_edit = QtWidgets.QLineEdit("")
+        else:
+            pv_name = ""
+            if hasattr(widget, 'pv'): pv_name = widget.pv
+            pv_w = QtWidgets.QWidget(); pvl = QtWidgets.QFormLayout(pv_w); pvl.setSpacing(6)
+            self._label_edit = QtWidgets.QLineEdit(cur_label)
+            self._label_edit.setPlaceholderText("Displayed name (e.g. X, Y-L, Sample X)")
+            pvl.addRow("Name/Label:", self._label_edit)
+            self._pv_edit = QtWidgets.QLineEdit(pv_name)
+            self._pv_edit.setPlaceholderText("PV name (e.g. 32idbTXM:mcs2:c1:m1)")
+            pvl.addRow("PV:", self._pv_edit)
+            pvl.addRow(QtWidgets.QLabel(
+                "For motor cards: changes the motor PV prefix and label.\n"
+                "Leave empty to keep current."))
+            tabs.addTab(pv_w, "PV")
+        L.addWidget(tabs)
         btns = QtWidgets.QHBoxLayout()
         bok = QtWidgets.QPushButton("OK"); bok.setStyleSheet("background:#1e5a8e;color:#fff;font:bold 9pt;")
         bok.clicked.connect(self.accept); btns.addWidget(bok)
@@ -475,6 +507,9 @@ class WidgetEditor(QtWidgets.QDialog):
             "w": self._w_spin.value(), "h": self._h_spin.value(),
             "pv": self._pv_edit.text().strip(),
             "label": self._label_edit.text().strip()}
+        if self._is_cfg:
+            self.result_data["action_type"] = self._type_combo.currentText()
+            self.result_data["action"] = self._action_edit.text()
         super().accept()
 
 
@@ -548,13 +583,24 @@ def _edit_widget(widget):
     widget.setStyleSheet(f"background:{d['bg']};color:{d['fg']};font:{d['fs']}pt;border:1px solid #404040;border-radius:3px;padding:4px 8px;")
     widget.setProperty("_custom_bg", d['bg']); widget.setProperty("_custom_fg", d['fg']); widget.setProperty("_custom_fs", d['fs'])
     widget.setMinimumSize(d['w'], d['h']); widget.setMaximumSize(d['w'], d['h']); widget.resize(d['w'], d['h'])
+
+    # CfgButton: update label + action_type + action from the Action tab.
+    if isinstance(widget, CfgButton):
+        new_label = d.get('label', '').strip()
+        if new_label:
+            widget.setText(new_label)
+        atype = d.get('action_type')
+        if atype is not None:
+            widget.action_type = atype
+        action = d.get('action')
+        if action is not None:
+            widget.action = action
+        widget.setToolTip(f"{widget.action_type}: {widget.action}")
+        return
+
     pv = d.get('pv', '')
-    if pv:
-        if hasattr(widget, 'pv'):
-            widget.pv = pv
-        elif isinstance(widget, CfgButton) and widget.action_type == 'caput':
-            parts = widget.action.split(None, 1); val = parts[1] if len(parts) == 2 else "1"
-            widget.action = f"{pv} {val}"; widget.setToolTip(f"{widget.action_type}: {widget.action}")
+    if pv and hasattr(widget, 'pv'):
+        widget.pv = pv
 
 
 def _delete_widget(widget):
