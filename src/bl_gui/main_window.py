@@ -403,13 +403,17 @@ class Win(QtWidgets.QMainWindow):
         p, _ = self._make_panel("Energy", 380, 300, tab_name)
         el = QtWidgets.QFormLayout(); el.setContentsMargins(6, 22, 6, 6); el.setSpacing(4)
 
-        # Top row: big Energy setpoint + Bragg readback side-by-side — this
-        # is the main user-facing control so they must be easy to read.
+        # Top row: big Energy setpoint + Bragg readback + Go button all on
+        # the same line — this is the main user-facing control so they must
+        # be easy to read and act on without hunting for a separate button.
         slot = self._pv_fields.setdefault(p.key, {})
         energy_sp = PVField(kind='sp', pv="32id:TXMOptics:Energy",
                             field_id="energy_sp", placeholder="keV", parent=p)
         bragg_rb  = PVField(kind='rb', pv="32ida:BraggERdbkAO",
                             field_id="bragg_rbv", fmt=".3f", parent=p)
+        energy_go = PVField(kind='btn', pv="32id:TXMOptics:EnergySet",
+                            field_id="energy_set",
+                            button_text="Go", button_value=1, parent=p)
         energy_sp._inner.setMinimumHeight(36)
         energy_sp._inner.setStyleSheet(
             "QLineEdit{background:#2c3e50;color:#ecf0f1;"
@@ -419,12 +423,17 @@ class Win(QtWidgets.QMainWindow):
         bragg_rb._inner.setMinimumHeight(36)
         bragg_rb._inner.setStyleSheet(
             "color:#2ecc71;background:transparent;font:bold 15pt monospace;padding:4px 6px;")
+        energy_go._inner.setMinimumHeight(36)
+        energy_go._inner.setStyleSheet(
+            "background:#27ae60;color:#fff;font:bold 13pt;"
+            "border:1px solid #2ecc71;border-radius:3px;padding:4px 16px;")
         row = QtWidgets.QWidget()
         hl = QtWidgets.QHBoxLayout(row); hl.setContentsMargins(0, 0, 0, 0); hl.setSpacing(6)
-        hl.addWidget(energy_sp, 1); hl.addWidget(bragg_rb, 1)
+        hl.addWidget(energy_sp, 1); hl.addWidget(bragg_rb, 1); hl.addWidget(energy_go, 0)
         el.addRow("Energy (keV):", row)
         slot["energy_sp"] = energy_sp
         slot["bragg_rbv"] = bragg_rb
+        slot["energy_set"] = energy_go
 
         # Every remaining field is a PVField with a stable id → right-click
         # allows per-beamline PV reassignment, and the PV is persisted in
@@ -434,7 +443,6 @@ class Win(QtWidgets.QMainWindow):
             ('sp',  "Cal File 1:",   "energy_calfile1", "32id:TXMOptics:EnergyCalibrationFileOne", dict(placeholder="calib file 1")),
             ('sp',  "Cal File 2:",   "energy_calfile2", "32id:TXMOptics:EnergyCalibrationFileTwo", dict(placeholder="calib file 2")),
             ('rb',  "Und E (keV):",  "und_energy_rbv",  "S32ID:USID:EnergyM.VAL",                  dict(fmt=".3f")),
-            ('btn', "Set Energy:",   "energy_set",      "32id:TXMOptics:EnergySet",                dict(button_text="Go", button_value=1)),
         ]
         self._register_pv_fields(p, energy_fields, el)
 
