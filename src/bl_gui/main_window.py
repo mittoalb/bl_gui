@@ -1561,12 +1561,16 @@ class Win(QtWidgets.QMainWindow):
                 es.append(float(row[0])); vs.append(float(row[col_idx]))
             if len(es) < 2:
                 return None
-            # Sort by energy so linear interp works; then interp.
             order = sorted(range(len(es)), key=lambda i: es[i])
             es = [es[i] for i in order]; vs = [vs[i] for i in order]
-            # Clamp to range end-points to avoid wild extrapolation.
-            if e_eV <= es[0]: return vs[0]
-            if e_eV >= es[-1]: return vs[-1]
+            # Linear extrapolation past either end using the slope of the
+            # nearest two points.
+            if e_eV < es[0]:
+                slope = (vs[1] - vs[0]) / (es[1] - es[0])
+                return vs[0] + slope * (e_eV - es[0])
+            if e_eV > es[-1]:
+                slope = (vs[-1] - vs[-2]) / (es[-1] - es[-2])
+                return vs[-1] + slope * (e_eV - es[-1])
             for i in range(1, len(es)):
                 if es[i] >= e_eV:
                     frac = (e_eV - es[i-1]) / (es[i] - es[i-1])
