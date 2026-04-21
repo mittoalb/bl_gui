@@ -103,19 +103,10 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
         self._units_cmb.addItems(["keV", "eV"])
         self._units_cmb.setCurrentText(self._pvs.get("energy_units", "keV"))
         pl.addRow("Energy units:", self._units_cmb)
-
-        # Half-width of the energy window used when the main GUI auto-
-        # generates the two EPICS cal files (Energy_<E>keV.txt): low file
-        # gets E-range, high file gets E+range. Persisted in the same
-        # config JSON.
-        self._range_spin = QtWidgets.QDoubleSpinBox()
-        self._range_spin.setDecimals(3)
-        self._range_spin.setRange(0.001, 50.0)
-        self._range_spin.setSingleStep(0.05)
-        self._range_spin.setSuffix(" keV")
-        self._range_spin.setValue(float(cfg.get("range_keV", DEFAULT_RANGE_KEV)))
-        pl.addRow("Energy range ± (cal files):", self._range_spin)
         V.addWidget(pv_box)
+        # Note: the cal-file energy range is exposed in the Energy panel of
+        # the main GUI, so it's always visible without opening this dialog.
+        # It is still stored in this same config JSON under "range_keV".
 
         # ── Table ───────────────────────────────────────────────────────
         self.table = QtWidgets.QTableWidget(0, 4)
@@ -243,10 +234,13 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
             self.close()
 
     def _do_save(self):
+        # Preserve range_keV (set from the main GUI's Energy panel) across
+        # this dialog's saves.
+        prior = load_config()
         cfg = {
             "pvs": self._collect_pvs(),
             "points": self._collect_points(),
-            "range_keV": float(self._range_spin.value()),
+            "range_keV": prior.get("range_keV", DEFAULT_RANGE_KEV),
         }
         try:
             save_config(cfg)

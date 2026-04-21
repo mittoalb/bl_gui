@@ -512,10 +512,26 @@ class Win(QtWidgets.QMainWindow):
         calib_btn.clicked.connect(lambda: xanes_calib.launch(self))
         el.addRow("Calibration:", calib_btn)
 
-        # Manual "Generate Cal Files" — regenerates Energy_*keV.txt files
-        # at target ± range using the ZP calibration table, without
-        # triggering EnergySet. Useful when the user wants to refresh the
-        # files without changing energy.
+        # Cal files: a ± range spinbox (persisted in the calibration
+        # config JSON) + a button to generate the two Energy_*keV.txt
+        # files from the ZP calibration table without triggering EnergySet.
+        range_spin = QtWidgets.QDoubleSpinBox()
+        range_spin.setDecimals(3)
+        range_spin.setRange(0.001, 50.0)
+        range_spin.setSingleStep(0.05)
+        range_spin.setSuffix(" keV")
+        try:
+            _initial_range = float(xanes_calib.load_config().get(
+                "range_keV", xanes_calib.DEFAULT_RANGE_KEV))
+        except Exception:
+            _initial_range = xanes_calib.DEFAULT_RANGE_KEV
+        range_spin.setValue(_initial_range)
+        range_spin.valueChanged.connect(self._on_cal_range_changed)
+        range_spin.setToolTip("Half-width used when generating cal files: "
+                              "low file at E−range, high file at E+range.")
+        el.addRow("Range ± (keV):", range_spin)
+        self._cal_range_spin = range_spin
+
         gen_btn = QtWidgets.QPushButton("Generate Cal Files")
         gen_btn.setStyleSheet(
             "background:#8e44ad;color:#fff;font:bold 9pt;"
@@ -1543,6 +1559,18 @@ class Win(QtWidgets.QMainWindow):
         caput_bg("32id:TXMOptics:EnergySet", 1)
 
     _CAL_FILE_DIR = "/home/beams/USERTXM/epics/synApps/support/txmoptics/iocBoot/iocTXMOptics"
+
+    def _on_cal_range_changed(self, value):
+        """Persist the ± energy range into the calibration config JSON as
+        soon as it changes, so Go / Generate Cal Files always see the
+        current value."""
+        from .beamlines.bl32id import xanes_calib
+        try:
+            cfg = xanes_calib.load_config()
+            cfg["range_keV"] = float(value)
+            xanes_calib.save_config(cfg)
+        except Exception as e:
+            print(f"[ENERGY] failed to persist range_keV: {e}")
 
     def _apply_zp_calib_from_plugin(self):
         """Auto-generate two EPICS cal files at E_target ± range (range
