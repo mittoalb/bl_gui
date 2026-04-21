@@ -386,8 +386,19 @@ class Win(QtWidgets.QMainWindow):
             ("io_diff",     "Diff",    "32id:TXMOptics:MoveDiffuserIn",   "32id:TXMOptics:MoveDiffuserOut"),
         ]
         slot = self._pv_fields.setdefault(p.key, {})
+        # Register the labels on self._io_labels so save/load can restore
+        # user-renamed names across restarts.
+        if not hasattr(self, "_io_labels"):
+            self._io_labels = {}
         for col, (fid, lbl, pv_in, pv_out) in enumerate(inout_rows):
-            iol.addWidget(QtWidgets.QLabel(lbl), 0, col, alignment=QtCore.Qt.AlignCenter)
+            label = QtWidgets.QLabel(lbl)
+            label.setAlignment(QtCore.Qt.AlignCenter)
+            label.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+            label.customContextMenuRequested.connect(
+                lambda _pos, l=label, f=fid: self._rename_io_label(l, f))
+            label.setToolTip("Right-click to rename")
+            iol.addWidget(label, 0, col, alignment=QtCore.Qt.AlignCenter)
+            self._io_labels[fid] = label
             pf = PVField('btn_pair', "", fid, button_text="In/Out",
                          on_pv=pv_in, off_pv=pv_out, on_value=1, off_value=1, parent=p)
             iol.addWidget(pf, 1, col)
@@ -1031,7 +1042,9 @@ class Win(QtWidgets.QMainWindow):
                 "_deleted_panels": self._deleted_panels,
                 "_panels": {}, "_tab_map": {}, "_buttons": {}, "_styles": {},
                 "_title_fonts": {}, "_titles": {}, "_mcs": {}, "_pv_fields": {},
-                "_custom_rows": self._custom_rows}
+                "_custom_rows": self._custom_rows,
+                "_io_labels": {fid: lbl.text()
+                               for fid, lbl in getattr(self, "_io_labels", {}).items()}}
         # PV-field assignments — save PV per field_id per panel.
         # Widgets that hold >1 PV (ValveField, PVField 'btn_pair') return a dict
         # from get_pvs_dict(); plain single-PV fields save as a bare string.
@@ -1296,6 +1309,12 @@ class Win(QtWidgets.QMainWindow):
                         f.pv = saved.strip()
                     elif isinstance(saved, dict) and hasattr(f, "set_pvs_dict"):
                         f.set_pvs_dict(saved)
+            # Restore renamed In/Out panel header labels.
+            io_labels_saved = data.get("_io_labels", {})
+            for fid, text in io_labels_saved.items():
+                lbl = getattr(self, "_io_labels", {}).get(fid)
+                if lbl is not None and isinstance(text, str) and text:
+                    lbl.setText(text)
             mc_total = sum(len(v) for v in mcs_saved.values())
             print(f"[LOAD] read {lay_path}  panels={len(data.get('_panels', {}))}  "
                   f"mcs={mc_total}  titles={len(data.get('_titles', {}))}  "
@@ -1360,6 +1379,15 @@ class Win(QtWidgets.QMainWindow):
             self.statusBar().showMessage(f"Saved layout to {_lay_path()}", 4000)
         except Exception:
             pass
+
+    def _rename_io_label(self, label, fid):
+        """Inline-rename handler for In/Out panel headers. Triggered by
+        right-click on the header label."""
+        text, ok = QtWidgets.QInputDialog.getText(
+            self, "Rename", f"New label for {fid}:",
+            QtWidgets.QLineEdit.Normal, label.text())
+        if ok and text.strip():
+            label.setText(text.strip())
 
     def _apply_cam_binning(self):
         """On Enter in Bin X or Bin Y: caput BinX / BinY / SizeX / SizeY.
