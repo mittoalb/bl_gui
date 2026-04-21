@@ -1548,53 +1548,18 @@ class Win(QtWidgets.QMainWindow):
         calibration table (~/.bl_gui/bl32id_zp_calibration.json) to drive
         the ZP X/Y/Z motors; otherwise let the IOC handle it normally via
         EnergySet. The mono move is triggered in both cases."""
-        cal_pvs = ("32id:TXMOptics:EnergyCalibrationFileOne",
-                   "32id:TXMOptics:EnergyCalibrationFileTwo")
-
-        def _empty(pv):
-            # Try -S (treat char waveform as string) then bare caget.
-            for flags in (["-S"], []):
-                try:
-                    r = subprocess.run(["caget", *flags, pv],
-                                       capture_output=True, timeout=2.0, text=True)
-                    if r.returncode != 0:
-                        continue
-                    out = r.stdout.strip()
-                    parts = out.split(None, 1)
-                    val = parts[1].strip() if len(parts) > 1 else ""
-                    val = val.strip('"').strip("'")
-                    print(f"[ENERGY] {pv} ({'S' if flags else ''}) raw={val!r}")
-                    if val == "" or val == "0":
-                        return True
-                    if val.startswith("0 "):
-                        return True
-                    toks = val.split()
-                    if len(toks) > 1 and all(t == "0" for t in toks):
-                        return True
-                    return False
-                except Exception as e:
-                    print(f"[ENERGY] {pv}: caget EXC {e}")
-                    continue
-            return True
-
-        # Use Calibration toggle state (True = YES).
+        # Simple rule: Use Calib YES → bl_gui's table is the authority for
+        # motor positions; direct-move the motors. Use Calib NO → leave
+        # motors alone. EPICS cal-file PVs are IGNORED here (only the
+        # Generate Cal Files button touches them).
         use_cal_on = False
         for slot in self._pv_fields.values():
             f = slot.get("energy_usecalib")
             if f is not None and hasattr(f, "_is_open"):
                 use_cal_on = bool(f._is_open); break
-        files_empty = all(_empty(pv) for pv in cal_pvs)
-        use_plugin = use_cal_on and files_empty
-        print(f"[ENERGY] use_cal_on={use_cal_on} files_empty={files_empty} "
-              f"use_plugin={use_plugin}")
-        if use_plugin:
-            # No cal-file names specified — rely entirely on the bl_gui
-            # calibration table: interpolate + caput motor positions now,
-            # do NOT generate any cal files and do NOT set cal-file PVs
-            # (the IOC's file-based logic is bypassed in this mode).
+        print(f"[ENERGY] use_cal_on={use_cal_on}")
+        if use_cal_on:
             self._move_motors_from_plugin()
-        else:
-            print("[ENERGY] EPICS cal files set — IOC handles ZP moves")
         caput_bg("32id:TXMOptics:EnergySet", 1)
 
     _CAL_FILE_DIR = "/home/beams/USERTXM/epics/synApps/support/txmoptics/iocBoot/iocTXMOptics"
