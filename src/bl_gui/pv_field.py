@@ -13,6 +13,8 @@ three PVs and participates in the same save/load machinery.
 Right-click (in panel edit mode) exposes 'Edit PV...' so each field's PV
 can be reassigned at runtime and saved with the layout.
 """
+import subprocess
+
 from PyQt5 import QtCore, QtWidgets
 from .pv import caput_bg
 
@@ -447,6 +449,36 @@ class ValveField(QtWidgets.QWidget):
             "background:#2980b9;color:#fff;font:bold 10pt;"
             "border:1px solid #3a95d8;border-radius:2px;padding:2px 6px;"
         )
+        # Safety net so we don't get stuck on "?" forever. Cases where the
+        # status monitor doesn't fire after a click:
+        #   - Edge-triggered PLC bit clicked in the same direction it was
+        #     already in → no state change → no monitor event.
+        #   - CA monitor subscription dropped that particular update.
+        # After 2s we force a caget and reflect whatever the PV really says.
+        if not hasattr(self, "_pending_timer"):
+            self._pending_timer = QtCore.QTimer(self)
+            self._pending_timer.setSingleShot(True)
+            self._pending_timer.timeout.connect(self._resync_status)
+        self._pending_timer.start(2000)
+
+    def _resync_status(self):
+        """Force-read the status PV via caget. Fallback for when the CA
+        monitor doesn't deliver an event after a caput."""
+        if not self.status_pv:
+            return
+        try:
+            r = subprocess.run(["caget", "-t", self.status_pv],
+                               capture_output=True, timeout=2.0, text=True)
+        except Exception as e:
+            print(f"[VALVE] {self.field_id}: resync caget failed: {e}")
+            return
+        if r.returncode != 0:
+            print(f"[VALVE] {self.field_id}: resync caget rc={r.returncode} "
+                  f"stderr={r.stderr.strip()!r}")
+            return
+        v = r.stdout.strip()
+        if v:
+            self.update_value(v)
 
     # ── PV interface used by the window ──────────────────────────────
     def monitored_pvs(self):
@@ -454,6 +486,11 @@ class ValveField(QtWidgets.QWidget):
 
     def update_value(self, value):
         """Called by the window when the status PV fires."""
+        # A real monitor event arrived — cancel any pending resync so we
+        # don't do an unnecessary caget right after a legitimate update.
+        t = getattr(self, "_pending_timer", None)
+        if t is not None and t.isActive():
+            t.stop()
         v = str(value).strip()
         lv = v.lower()
         on = False
