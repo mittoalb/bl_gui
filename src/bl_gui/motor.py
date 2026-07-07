@@ -56,6 +56,12 @@ class MC(QtWidgets.QFrame):
         self.twv.setPlaceholderText("step")
         self.twv.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         self.twv.returnPressed.connect(self._on_twv_return); tw.addWidget(self.twv)
+        # Display-only default: on first non-zero RBV, pre-fill the step
+        # field with 1% of |RBV|. Purely a starting value the user can
+        # still overwrite as before. textEdited fires only on keystrokes
+        # (not setText), so it cleanly marks user input.
+        self._twv_user_set = False
+        self.twv.textEdited.connect(lambda _=None: setattr(self, "_twv_user_set", True))
         self.btn_twf = QtWidgets.QPushButton("\u25B6")
         self.btn_twf.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         self.btn_twf.clicked.connect(lambda: caput_bg(f"{self.pv}.TWF", 1)); tw.addWidget(self.btn_twf)
@@ -154,8 +160,19 @@ class MC(QtWidgets.QFrame):
 
     def apply_one(self, field, value):
         if field == "RBV":
-            try: self.rbv.setText(f"{float(value):.4f}")
-            except (ValueError, TypeError): self.rbv.setText(str(value))
+            try:
+                rbv = float(value)
+                self.rbv.setText(f"{rbv:.4f}")
+            except (ValueError, TypeError):
+                self.rbv.setText(str(value))
+                rbv = None
+            # Pre-fill the tweak step to 1% of |RBV| on first non-zero
+            # readback, as a starting value. Skipped once the user types
+            # or if a step is already showing.
+            if (rbv is not None and rbv != 0.0
+                    and not self._twv_user_set
+                    and not self.twv.text().strip()):
+                self.twv.setText(f"{abs(rbv) * 0.01:.6g}")
         elif field == "DESC":
             if not self._custom_label:
                 self.desc.setText(value)
