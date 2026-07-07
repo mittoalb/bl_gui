@@ -56,12 +56,12 @@ class MC(QtWidgets.QFrame):
         self.twv.setPlaceholderText("step")
         self.twv.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         self.twv.returnPressed.connect(self._on_twv_return); tw.addWidget(self.twv)
-        # Display-only default: on first non-zero RBV, pre-fill the step
-        # field with 1% of |RBV|. Purely a starting value the user can
-        # still overwrite as before. textEdited fires only on keystrokes
-        # (not setText), so it cleanly marks user input.
-        self._twv_user_set = False
-        self.twv.textEdited.connect(lambda _=None: setattr(self, "_twv_user_set", True))
+        # Live-mirror <pv>.TWV so what's in the box is always what the
+        # tweak buttons will actually move by. When EPICS TWV is 0 on
+        # first read, seed it to 1% of |RBV| so users see a sane
+        # starting value instead of an empty field.
+        self._epics_twv = None
+        self._twv_defaulted = False
         self.btn_twf = QtWidgets.QPushButton("\u25B6")
         self.btn_twf.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         self.btn_twf.clicked.connect(lambda: caput_bg(f"{self.pv}.TWF", 1)); tw.addWidget(self.btn_twf)
@@ -154,9 +154,31 @@ class MC(QtWidgets.QFrame):
         self._apply_fonts()
 
     def get_pvs(self):
-        base = [f"{self.pv}.{f}" for f in ("RBV","DMOV","MOVN","DESC","EGU","HLS","LLS","LVIO")]
+        base = [f"{self.pv}.{f}" for f in ("RBV","DMOV","MOVN","DESC","EGU","HLS","LLS","LVIO","TWV")]
         base.append(f"{self.pv}_able")
         return base
+
+    def _maybe_default_twv(self, rbv=None):
+        """One-shot seed of <pv>.TWV to 1% of |RBV| if EPICS reports TWV
+        is currently 0. Skipped if EPICS already has a step, if we've
+        already seeded once, or if we don't yet know either value."""
+        if self._twv_defaulted:
+            return
+        if self._epics_twv is None:
+            return
+        if self._epics_twv != 0.0:
+            self._twv_defaulted = True
+            return
+        if rbv is None:
+            try:
+                rbv = float(self.rbv.text())
+            except (ValueError, TypeError):
+                return
+        if rbv == 0.0:
+            return
+        step = abs(rbv) * 0.01
+        caput_bg(f"{self.pv}.TWV", f"{step:.6g}")
+        self._twv_defaulted = True
 
     def apply_one(self, field, value):
         if field == "RBV":
@@ -166,13 +188,18 @@ class MC(QtWidgets.QFrame):
             except (ValueError, TypeError):
                 self.rbv.setText(str(value))
                 rbv = None
-            # Pre-fill the tweak step to 1% of |RBV| on first non-zero
-            # readback, as a starting value. Skipped once the user types
-            # or if a step is already showing.
-            if (rbv is not None and rbv != 0.0
-                    and not self._twv_user_set
-                    and not self.twv.text().strip()):
-                self.twv.setText(f"{abs(rbv) * 0.01:.6g}")
+            self._maybe_default_twv(rbv=rbv)
+        elif field == "TWV":
+            try:
+                tv = float(value)
+            except (ValueError, TypeError):
+                return
+            self._epics_twv = tv
+            # Live-update the display, but don't clobber whatever the user
+            # is currently typing.
+            if not self.twv.hasFocus():
+                self.twv.setText(f"{tv:.6g}" if tv != 0 else "")
+            self._maybe_default_twv()
         elif field == "DESC":
             if not self._custom_label:
                 self.desc.setText(value)
