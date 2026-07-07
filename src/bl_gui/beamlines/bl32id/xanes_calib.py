@@ -119,6 +119,22 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
              "QG V [mm]", "QG H [mm]"])
         self.table.horizontalHeader().setStretchLastSection(True)
         V.addWidget(self.table, 1)
+        # Debounced auto-save so any table edit (including new rows added
+        # via "Save current E + ZP") lands in the JSON immediately. Without
+        # this, changes only persist on Save & Close / auto-save-on-close,
+        # and the main GUI's Go / Generate Cal Files reads a stale JSON
+        # while this window is still open.
+        self._autosave_timer = QtCore.QTimer(self)
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.setInterval(250)
+        self._autosave_timer.timeout.connect(self._do_save)
+        # Connected BEFORE population so initial-load setItem calls do
+        # trigger the timer — they collapse into one save whose payload
+        # equals the loaded data, so the extra write is harmless.
+        self.table.itemChanged.connect(lambda *_: self._autosave_timer.start())
+        self.table.model().rowsInserted.connect(lambda *_: self._autosave_timer.start())
+        self.table.model().rowsRemoved.connect(lambda *_: self._autosave_timer.start())
+
         for p in cfg.get("points", []):
             # Legacy formats (all folded into 6-column [E, X, Y, Z, QGV, QGH]):
             #   len==4 old:     [E, ZP, X, Z]       (ZP→Z)
@@ -249,6 +265,26 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
         super().closeEvent(event)
 
     def _do_save(self):
+        # Force any in-progress cell edit to commit. QTableWidget's default
+        # delegate only writes the editor text into the item on focus-out
+        # or Enter; closing the window (or clicking Save & Close) with the
+        # cursor still in a cell would otherwise drop the last edit — a
+        # common way for QG values to silently fail to reach disk.
+        if self.table.state() == QtWidgets.QAbstractItemView.EditingState:
+            editor = QtWidgets.QApplication.focusWidget()
+            if editor is not None:
+                delegate = self.table.itemDelegate(self.table.currentIndex())
+                if delegate is not None:
+                    try:
+                        delegate.commitData.emit(editor)
+                        delegate.closeEditor.emit(editor)
+                    except Exception:
+                        pass
+            try:
+                self.table.setCurrentCell(-1, -1)
+            except Exception:
+                pass
+
         # Preserve range_keV (set from the main GUI's Energy panel) across
         # this dialog's saves.
         prior = load_config()

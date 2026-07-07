@@ -1674,6 +1674,11 @@ class Win(QtWidgets.QMainWindow):
         print(f"[ENERGY] use_cal_on={use_cal_on}")
         if use_cal_on:
             self._move_motors_from_plugin()
+            # Also refresh the EPICS cal files from the SAME JSON. Without
+            # this, EnergySet=1 (below) makes the IOC re-apply whatever
+            # was in EnergyCalibrationFileOne/Two from an earlier click,
+            # overwriting the QG/X/Y/Z values we just direct-caput.
+            self._apply_zp_calib_from_plugin()
         caput_bg("32id:TXMOptics:EnergySet", 1)
 
     _CAL_FILE_DIR = "/home/beams/USERTXM/epics/synApps/support/txmoptics/iocBoot/iocTXMOptics"
