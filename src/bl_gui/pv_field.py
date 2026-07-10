@@ -19,6 +19,39 @@ from PyQt5 import QtCore, QtWidgets
 from .pv import caput_bg
 
 
+# ── Setpoint field styles ───────────────────────────────────────────────
+# Clean = the field's value matches what the IOC has (nothing pending).
+# Dirty = user has typed a value that hasn't been caput yet. The colour
+# swap is the visual reminder that Enter is still required — the display
+# no longer tells the truth about the PV until the user commits.
+_SP_STYLE_CLEAN = (
+    "QLineEdit{background:#2c3e50;color:#ecf0f1;"
+    "border:1px solid #3498db;border-radius:3px;"
+    "padding:4px 6px;font:10pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+    "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}"
+)
+_SP_STYLE_DIRTY = (
+    "QLineEdit{background:#2980b9;color:#fff;"
+    "border:1px solid #f39c12;border-radius:3px;"
+    "padding:4px 6px;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+    "QLineEdit:focus{background:#3498db;border:1px solid #f1c40f;}"
+)
+
+
+def _sp_values_equal(a, b):
+    """Compare two setpoint value strings, tolerating numeric formatting
+    differences (\"5\" vs \"5.000000\") that show up when the IOC echoes
+    a caput back with its own precision."""
+    a = "" if a is None else str(a).strip()
+    b = "" if b is None else str(b).strip()
+    if a == b:
+        return True
+    try:
+        return float(a) == float(b)
+    except (ValueError, TypeError):
+        return False
+
+
 def _copy_to_clipboard(text):
     if text:
         QtWidgets.QApplication.clipboard().setText(text)
@@ -75,15 +108,16 @@ class PVField(QtWidgets.QWidget):
         if self.kind == 'sp':
             w = QtWidgets.QLineEdit()
             # Distinct bluish background so editable fields are obviously
-            # different from read-only readbacks / labels.
-            w.setStyleSheet(
-                "QLineEdit{background:#2c3e50;color:#ecf0f1;"
-                "border:1px solid #3498db;border-radius:3px;"
-                "padding:4px 6px;font:10pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
-                "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}")
+            # different from read-only readbacks / labels. Switches to the
+            # DIRTY style whenever the typed text stops matching the PV.
+            w.setStyleSheet(_SP_STYLE_CLEAN)
             if self._placeholder:
                 w.setPlaceholderText(self._placeholder)
             w.returnPressed.connect(self._on_sp_return)
+            # textEdited fires on user keystrokes only (not on our own
+            # setText during PV echoes), so it's the right hook to detect
+            # a pending edit without recursing on our own updates.
+            w.textEdited.connect(lambda _=None: self._update_sp_dirty())
         elif self.kind == 'rb':
             w = QtWidgets.QLabel("---")
             w.setStyleSheet("color:#2ecc71;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;")
@@ -138,6 +172,21 @@ class PVField(QtWidgets.QWidget):
             print(f"[SP] {self.field_id}: caput {self.pv} {val!r}")
             caput_bg(self.pv, val)
 
+    def _update_sp_dirty(self):
+        """Colour the setpoint field so it's obvious when what you see
+        doesn't match what the PV actually has (i.e. you typed but
+        haven't hit Enter). Clears itself as soon as the IOC echoes
+        your commit back."""
+        if self.kind != 'sp' or self._inner is None:
+            return
+        pv_val = getattr(self, '_pv_value', None)
+        dirty = (pv_val is not None
+                 and not _sp_values_equal(self._inner.text(), pv_val))
+        if getattr(self, '_sp_dirty', None) == dirty:
+            return
+        self._sp_dirty = dirty
+        self._inner.setStyleSheet(_SP_STYLE_DIRTY if dirty else _SP_STYLE_CLEAN)
+
     def _on_cmb_changed(self, idx):
         if self.pv and idx >= 0:
             caput_bg(self.pv, idx)
@@ -188,10 +237,14 @@ class PVField(QtWidgets.QWidget):
             finally:
                 self._inner.blockSignals(False)
         elif self.kind == 'sp':
+            # Remember the actual PV value regardless of focus so the
+            # dirty check compares against ground truth, not stale state.
+            self._pv_value = str(value)
             if not self._inner.hasFocus():
                 self._inner.blockSignals(True)
                 self._inner.setText(str(value))
                 self._inner.blockSignals(False)
+            self._update_sp_dirty()
         elif self.kind == 'led':
             v = str(value).strip().lower()
             on = False
