@@ -105,6 +105,12 @@ class Win(QtWidgets.QMainWindow):
             "User Mode": (1000, 600),
             "Expert Mode": (1800, 1000),
         }
+        # Nano vs Micro regime. Nano = ZP in beam → interpolate ZP with
+        # energy. Micro = ZP parked out → skip ZP moves (QG still moves).
+        # Flipped by the Nano/Micro preset buttons; persisted in the
+        # layout JSON so it survives restarts. Default Nano to preserve
+        # pre-existing behaviour for anyone who never clicks a preset.
+        self._nano_mode = True
 
         cw = QtWidgets.QWidget(); self.setCentralWidget(cw)
         root = QtWidgets.QVBoxLayout(cw); root.setContentsMargins(4, 4, 4, 4); root.setSpacing(4)
@@ -478,6 +484,8 @@ class Win(QtWidgets.QMainWindow):
             b = CfgButton(lbl, action_type=atype, action=action,
                           bg=bg_pr, fg=fg_pr, font_size=fs_pr, parent=p)
             b.setMinimumHeight(34)
+            b.clicked.connect(
+                lambda _=False, btn=b: self._on_preset_clicked(btn))
             pl.addWidget(b)
             p.custom_buttons.append(b)
         p.setLayout(pl); p.setGeometry(x, y, 200, 80)
@@ -1245,6 +1253,7 @@ class Win(QtWidgets.QMainWindow):
                 "_tab_sizes": {k: list(v) for k, v in self._tab_sizes.items()},
                 "_tab_label_fs": self._tab_label_font_size,
                 "_deleted_panels": self._deleted_panels,
+                "_nano_mode": bool(self._nano_mode),
                 "_panels": {}, "_tab_map": {}, "_buttons": {}, "_styles": {},
                 "_title_fonts": {}, "_titles": {}, "_mcs": {}, "_pv_fields": {},
                 "_custom_rows": self._custom_rows,
@@ -1331,6 +1340,10 @@ class Win(QtWidgets.QMainWindow):
             with open(lay_path) as f: data = json.load(f)
             fs = data.get("_font_scale")
             if fs is not None: self.font_slider.setValue(int(fs))
+            nm = data.get("_nano_mode")
+            if nm is not None:
+                self._nano_mode = bool(nm)
+                print(f"[LOAD] regime -> {'NANO' if self._nano_mode else 'MICRO'}")
             # Restore tab label font size
             tlfs = data.get("_tab_label_fs")
             if tlfs is not None:
@@ -1656,6 +1669,28 @@ class Win(QtWidgets.QMainWindow):
             for l in labels:
                 l.setText(text.strip())
 
+    def _on_preset_clicked(self, btn):
+        """Track Nano/Micro regime from the preset actions so ZP
+        interpolation can be skipped when the zone plate is parked out
+        (Micro). Detected by matching the well-known TXMOptics all-in /
+        all-out PVs — a user-edited preset that no longer contains
+        either leaves the state alone."""
+        action = (getattr(btn, 'action', '') or '')
+        if 'MoveAllIn' in action:
+            if not self._nano_mode:
+                print("[PRESET] regime -> NANO (ZP moves with energy)")
+            self._nano_mode = True
+        elif 'MoveAllOut' in action:
+            if self._nano_mode:
+                print("[PRESET] regime -> MICRO (ZP frozen; QG still moves)")
+            self._nano_mode = False
+        else:
+            return
+        try:
+            self._save_layout()
+        except Exception as e:
+            print(f"[PRESET] save layout failed: {e}")
+
     def _on_set_energy(self):
         """Go button in the Energy panel. If the EPICS calibration-file PVs
         (EnergyCalibrationFileOne / Two) are both blank, use the local ZP
@@ -1796,6 +1831,10 @@ class Win(QtWidgets.QMainWindow):
                                   ("Z", 3, "zp_z_pv"),
                                   ("QG V", 4, "qg_v_pv"),
                                   ("QG H", 5, "qg_h_pv")):
+            # ZP is parked out in Micro mode; do not move it with energy.
+            if col in (1, 2, 3) and not self._nano_mode:
+                print(f"[ENERGY] {name}: skipping (MICRO regime — ZP parked out)")
+                continue
             target_pv = pvs.get(pv_key)
             if not target_pv:
                 print(f"[ENERGY] {name}: no PV configured (key={pv_key}), skipping")
@@ -1871,6 +1910,12 @@ class Win(QtWidgets.QMainWindow):
                     (pvs.get("zp_z_pv"), 3),
                     (pvs.get("qg_v_pv"), 4),
                     (pvs.get("qg_h_pv"), 5)]
+        # In Micro regime the ZP is parked out — leave X/Y/Z alone in
+        # both the cal files (so the IOC's re-apply doesn't drive them)
+        # and in the direct-caput block below.
+        if not self._nano_mode:
+            axis_pvs = [(pv, col) for pv, col in axis_pvs if col not in (1, 2, 3)]
+            print("[ENERGY] MICRO regime — cal files & direct move: QG only, no ZP")
 
         try:
             os.makedirs(self._CAL_FILE_DIR, exist_ok=True)
