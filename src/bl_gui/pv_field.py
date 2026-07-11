@@ -189,7 +189,11 @@ class PVField(QtWidgets.QWidget):
 
     def _on_cmb_changed(self, idx):
         if self.pv and idx >= 0:
-            caput_bg(self.pv, idx)
+            # caput the label, not the local index. Local index depends on
+            # the order we listed choices in; sending the string lets the
+            # IOC (mbbo / bo with ZRST/ONAM etc.) resolve it correctly
+            # regardless of how the choices are ordered in the GUI.
+            caput_bg(self.pv, self._inner.currentText())
 
     def _on_btn_clicked(self):
         if self.pv and self._button_value is not None:
@@ -237,12 +241,22 @@ class PVField(QtWidgets.QWidget):
             finally:
                 self._inner.blockSignals(False)
         elif self.kind == 'sp':
+            # Apply the field's fmt (if given) so IOC echoes like
+            # "6.9999999999" show as "7.000" instead of the raw float.
+            # Dirty-check comparison is numeric so the formatted string
+            # still matches whatever the user typed.
+            text = str(value)
+            if self._fmt:
+                try:
+                    text = format(float(value), self._fmt)
+                except (ValueError, TypeError):
+                    pass
             # Remember the actual PV value regardless of focus so the
             # dirty check compares against ground truth, not stale state.
-            self._pv_value = str(value)
+            self._pv_value = text
             if not self._inner.hasFocus():
                 self._inner.blockSignals(True)
-                self._inner.setText(str(value))
+                self._inner.setText(text)
                 self._inner.blockSignals(False)
             self._update_sp_dirty()
         elif self.kind == 'led':

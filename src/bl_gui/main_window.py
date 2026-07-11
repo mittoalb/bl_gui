@@ -567,7 +567,8 @@ class Win(QtWidgets.QMainWindow):
         # be easy to read and act on without hunting for a separate button.
         slot = self._pv_fields.setdefault(p.key, {})
         energy_sp = PVField(kind='sp', pv="32id:TXMOptics:Energy",
-                            field_id="energy_sp", placeholder="keV", parent=p)
+                            field_id="energy_sp", placeholder="keV",
+                            fmt=".3f", parent=p)
         bragg_rb  = PVField(kind='rb', pv="32ida:BraggERdbkAO",
                             field_id="bragg_rbv", fmt=".3f", parent=p)
         energy_go = PVField(kind='btn', pv="32id:TXMOptics:EnergySet",
@@ -833,7 +834,7 @@ class Win(QtWidgets.QMainWindow):
             ('sp',  "Num Points:",     "shaker_npts",    "32idbShaker:shaker:numPoints.VAL",    {}),
             # Function type — mbbo (Circle / Lissajous). Extra live states arrive
             # from the PV itself get added dynamically by the combo.
-            ('cmb', "Function:",       "shaker_menu",    "32idbShaker:shakerMenu",              dict(choices=["Circle", "Lissajous"])),
+            ('cmb', "Function:",       "shaker_menu",    "32idbShaker:shakerMenu",              dict(choices=["Lissajous", "Circle"])),
             # Channel A
             ('sp',  "A: Amp Mult:",    "shaker_A_amp",   "32idbShaker:shaker:A:ampMult.VAL",    {}),
             ('sp',  "A: Amp Offset:",  "shaker_A_off",   "32idbShaker:shaker:A:ampOffset.VAL",  {}),
