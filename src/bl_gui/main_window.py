@@ -936,7 +936,7 @@ class Win(QtWidgets.QMainWindow):
         astop = QtWidgets.QPushButton("ALL STOP")
         astop.setStyleSheet("background:#c0392b;color:#fff;font:bold 14pt;border:2px solid #e74c3c;border-radius:4px;padding:4px;")
         astop.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        astop.clicked.connect(lambda: caput_bg("32id:TXMOptics:AllStop", 1))
+        astop.clicked.connect(self._on_all_stop)
         asl.addWidget(astop); p.setLayout(asl)
         p.setGeometry(938, 0, 160, 60)
 
@@ -1669,6 +1669,22 @@ class Win(QtWidgets.QMainWindow):
         if ok and text.strip():
             for l in labels:
                 l.setText(text.strip())
+
+    def _on_all_stop(self):
+        """ALL STOP: stops motors (via TXMOptics:AllStop), the condenser
+        shaker, the camera acquisition, and drops the He PLC analog
+        output to 0. Each is a fire-and-forget caput; the shaker/camera
+        status widgets pick up the state change via their own PV
+        monitors."""
+        actions = [
+            ("32id:TXMOptics:AllStop",   1, "motors"),
+            ("32idbShaker:shaker:run",   0, "condenser shaker"),
+            ("32idbSP1:cam1:Acquire",    0, "camera"),
+            ("32idbSoft:PLC1:ao1",       0, "He PLC AO1"),
+        ]
+        for pv, val, label in actions:
+            print(f"[ALLSTOP] {label}: caput {pv} {val}")
+            caput_bg(pv, val)
 
     def _on_preset_clicked(self, btn):
         """Track Nano/Micro regime from the preset actions so ZP
