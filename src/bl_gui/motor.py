@@ -47,7 +47,12 @@ class MC(QtWidgets.QFrame):
         self.val = QtWidgets.QLineEdit(); self.val.setAlignment(QtCore.Qt.AlignCenter)
         self.val.setPlaceholderText("go to")
         self.val.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        self.val.returnPressed.connect(lambda: caput_bg(f"{self.pv}.VAL", self.val.text())); L.addWidget(self.val)
+        # Dirty highlight: blue while typing an un-committed value, back
+        # to plain once the user presses Enter (which caputs to .VAL).
+        self._val_dirty = False
+        self.val.returnPressed.connect(self._on_val_return)
+        self.val.textEdited.connect(self._on_val_edited)
+        L.addWidget(self.val)
         tw = QtWidgets.QHBoxLayout(); tw.setSpacing(2); tw.setContentsMargins(0, 0, 0, 0)
         self.btn_twr = QtWidgets.QPushButton("\u25C0")
         self.btn_twr.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
@@ -55,7 +60,10 @@ class MC(QtWidgets.QFrame):
         self.twv = QtWidgets.QLineEdit(""); self.twv.setAlignment(QtCore.Qt.AlignCenter)
         self.twv.setPlaceholderText("step")
         self.twv.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        self.twv.returnPressed.connect(self._on_twv_return); tw.addWidget(self.twv)
+        self._twv_dirty = False
+        self.twv.returnPressed.connect(self._on_twv_return)
+        self.twv.textEdited.connect(self._on_twv_edited)
+        tw.addWidget(self.twv)
         # Live-mirror <pv>.TWV so what's in the box is always what the
         # tweak buttons will actually move by. When EPICS TWV is 0 on
         # first read, seed it to 1% of |RBV| so users see a sane
@@ -91,11 +99,32 @@ class MC(QtWidgets.QFrame):
         self.lim = QtWidgets.QFrame(); self.lim.setFixedHeight(3); self.lim.setStyleSheet("background:#404040;"); L.addWidget(self.lim)
         self._apply_fonts()
 
+    def _on_val_return(self):
+        caput_bg(f"{self.pv}.VAL", self.val.text())
+        # The value has been committed to the IOC; drop the dirty flag
+        # so the field returns to its normal colour.
+        self._val_dirty = False
+        self._apply_fonts()
+
+    def _on_val_edited(self, _=None):
+        # First keystroke flips to dirty; subsequent ones are no-ops
+        # because _apply_fonts only runs when the state actually changes.
+        if not self._val_dirty:
+            self._val_dirty = True
+            self._apply_fonts()
+
     def _on_twv_return(self):
         # Push the new step to the IOC. Do NOT touch the layout file — any
         # layout save must be triggered explicitly by the user so we don't
         # stomp on hand-edited bl32id.json.
         caput_bg(f"{self.pv}.TWV", self.twv.text())
+        self._twv_dirty = False
+        self._apply_fonts()
+
+    def _on_twv_edited(self, _=None):
+        if not self._twv_dirty:
+            self._twv_dirty = True
+            self._apply_fonts()
 
     def _on_set_position(self):
         """Redefine position via EPICS .SET=1 → .VAL → .SET=0."""
@@ -136,7 +165,23 @@ class MC(QtWidgets.QFrame):
         seg=_fs(8)
         self.desc.setStyleSheet(f"background:#1e5a8e;color:#fff;font:bold {sd}pt;padding:2px;border-radius:2px;")
         self.rbv.setStyleSheet(f"background:#000000;color:#2ecc71;font:bold {sr}pt 'Liberation Mono','DejaVu Sans Mono',monospace;padding:3px;border:1px solid #333;border-radius:2px;")
-        self.val.setStyleSheet(f"font:{sv}pt;"); self.twv.setStyleSheet(f"font:bold {st}pt;")
+        # Dirty (un-committed edit) uses a blue background + amber border
+        # so it's obvious you still owe an Enter. Clean is just the normal
+        # font override the app-level theme sets.
+        _dirty_ss = (
+            "QLineEdit{{background:#2980b9;color:#fff;padding:2px 5px;"
+            "border:1px solid #f39c12;border-radius:3px;"
+            "font:bold {pt}pt 'Liberation Mono','DejaVu Sans Mono',monospace;}}"
+            "QLineEdit:focus{{background:#3498db;border:1px solid #f1c40f;}}"
+        )
+        if getattr(self, "_val_dirty", False):
+            self.val.setStyleSheet(_dirty_ss.format(pt=sv))
+        else:
+            self.val.setStyleSheet(f"font:{sv}pt;")
+        if getattr(self, "_twv_dirty", False):
+            self.twv.setStyleSheet(_dirty_ss.format(pt=st))
+        else:
+            self.twv.setStyleSheet(f"font:bold {st}pt;")
         # Units label (egu) — now scales with the font slider too.
         self.egu.setStyleSheet(f"color:#888;font:{seg}pt;")
         self.egu.setFixedHeight(max(12, seg + 4))
