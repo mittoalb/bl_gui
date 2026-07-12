@@ -136,31 +136,40 @@ class HarmonicCorrection(QtCore.QObject):
     # ── Timer tick ────────────────────────────────────────────────────
     def _tick(self):
         if self._in_flight:
+            print("[HARMONIC] tick skipped: previous tick still in flight")
             return
         if not self._is_nano():
-            print("[HARMONIC] skip: MICRO regime")
+            print("[HARMONIC] tick skipped: MICRO regime (nano_mode=False)")
             return
         mean = _caget_float(self.mean_pv)
         if mean is None:
-            print(f"[HARMONIC] skip: could not read {self.mean_pv}")
+            print(f"[HARMONIC] tick skipped: could not read {self.mean_pv} "
+                  "(is Stats1 plugin enabled?)")
             return
         if mean < self.mean_min:
-            # Dim frame — no beam / camera not acquiring / sample blocking.
+            print(f"[HARMONIC] tick skipped: mean={mean:.1f} < {self.mean_min:g} "
+                  "(dim frame / no beam / shutter closed)")
             return
         self._in_flight = True
         try:
             img = _grab_image(self.image_pv, timeout=2.0)
             if img is None:
-                print(f"[HARMONIC] skip: no image from {self.image_pv}")
+                print(f"[HARMONIC] tick skipped: no image from {self.image_pv}")
                 return
+            print(f"[HARMONIC] tick: image {img.shape} dtype={img.dtype} "
+                  f"min={img.min():.0f} max={img.max():.0f} mean={mean:.1f}")
             result = find_bright_spot(img, self.spot_radius_px,
                                       self.bg_inner_radius_px)
             if result is None:
-                print("[HARMONIC] skip: could not compute spot ratio")
+                print(f"[HARMONIC] tick skipped: find_bright_spot returned None "
+                      f"(image too small? spot_radius={self.spot_radius_px}, "
+                      f"bg_inner={self.bg_inner_radius_px}, "
+                      f"image dims={img.shape})")
                 return
             ratio, peak_y, peak_x = result
             if ratio <= self.ratio_threshold:
-                # No central hot spot — nothing to do.
+                print(f"[HARMONIC] no correction: peak=({peak_x},{peak_y}) "
+                      f"ratio={ratio:.2f} ≤ threshold {self.ratio_threshold:.2f}")
                 return
             # Push the spot away from the image centre: upper half → +1,
             # lower → -1, scaled by direction_sign for motor wiring.
