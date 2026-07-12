@@ -141,20 +141,20 @@ class HarmonicCorrection(QtCore.QObject):
         if not self._is_nano():
             print("[HARMONIC] tick skipped: MICRO regime (nano_mode=False)")
             return
-        mean = _caget_float(self.mean_pv)
-        if mean is None:
-            print(f"[HARMONIC] tick skipped: could not read {self.mean_pv} "
-                  "(is Stats1 plugin enabled?)")
-            return
-        if mean < self.mean_min:
-            print(f"[HARMONIC] tick skipped: mean={mean:.1f} < {self.mean_min:g} "
-                  "(dim frame / no beam / shutter closed)")
-            return
         self._in_flight = True
         try:
+            # Compute the frame mean directly from the grabbed image
+            # instead of relying on <cam>:Stats1:MeanValue_RBV, which is
+            # 0 unless the Stats plugin is enabled and wired to the
+            # current stream. One less external dependency.
             img = _grab_image(self.image_pv, timeout=2.0)
             if img is None:
                 print(f"[HARMONIC] tick skipped: no image from {self.image_pv}")
+                return
+            mean = float(np.mean(img))
+            if mean < self.mean_min:
+                print(f"[HARMONIC] tick skipped: image mean={mean:.1f} < "
+                      f"{self.mean_min:g} (dim frame / no beam / shutter closed)")
                 return
             print(f"[HARMONIC] tick: image {img.shape} dtype={img.dtype} "
                   f"min={img.min():.0f} max={img.max():.0f} mean={mean:.1f}")
