@@ -1,21 +1,26 @@
 """Background central-bright-spot ("harmonic") correction for bl32-ID.
 
-When enabled, a 5-second timer polls the camera. If the frame is bright
-enough (mean > threshold) and shows a central bright spot, the QG V motor
-(32idQG:m1) is nudged by one step size to push the spot away from the
-image centre. Same detection maths as pystream's QGMax online spot check
-(spot mean / background mean ratio, direction from spot Y position).
+When enabled, a 5-second timer inspects the most recent frame from the
+camera's pvaccess NTNDArray PV. If the frame is bright enough (mean >
+threshold) and shows a central bright spot, the QG V motor (32idQG:m1)
+is nudged by one step size to push the spot away from the image centre.
+Same detection maths as pystream's QGMax online spot check (spot mean /
+background mean ratio, direction from spot Y position).
+
+Frames come from a persistent pvaccess monitor — one-shot Channel.get()
+on an NTNDArray doesn't reliably pull the payload; the monitor callback
+gets the full frame on every push, matching how pystream's viewer sees
+the stream.
 
 Only runs when the caller's `is_nano()` callable returns True — in Micro
 regime the ZP is parked out and there's no bright spot to chase.
 """
-import subprocess
+import threading
 from typing import Callable, Optional, Tuple
 
 import numpy as np
 from PyQt5 import QtCore
 
-from .autofocus import _grab_image
 from ...pv import caput_bg
 
 
@@ -34,15 +39,35 @@ DEFAULTS = {
 }
 
 
-def _caget_float(pv, timeout=1.5):
+def _decode_ntnd(pv_obj) -> Optional[np.ndarray]:
+    """Turn a pvaccess NTNDArray PV object into a 2-D numpy array, or
+    None on any structural mismatch. Handles all the common areaDetector
+    numeric dtypes (u8/u16/u32, s8/s16/s32, f32, f64)."""
     try:
-        r = subprocess.run(["caget", "-t", pv],
-                           capture_output=True, timeout=timeout, text=True)
-        if r.returncode != 0:
-            return None
-        return float(r.stdout.strip())
+        d = pv_obj.toDict()
     except Exception:
         return None
+    dims = d.get("dimension") or []
+    if len(dims) < 2:
+        return None
+    try:
+        nx = int(dims[0]["size"])
+        ny = int(dims[1]["size"])
+    except Exception:
+        return None
+    if nx <= 0 or ny <= 0:
+        return None
+    val = d.get("value", {})
+    arr = None
+    for key in ("ubyteValue", "ushortValue", "uintValue", "ulongValue",
+                "byteValue", "shortValue", "intValue", "longValue",
+                "floatValue", "doubleValue"):
+        if key in val:
+            arr = np.asarray(val[key])
+            break
+    if arr is None or arr.size < ny * nx:
+        return None
+    return arr[: ny * nx].reshape((ny, nx))
 
 
 def find_bright_spot(image: np.ndarray,
@@ -96,11 +121,16 @@ def find_bright_spot(image: np.ndarray,
 
 
 class HarmonicCorrection(QtCore.QObject):
-    """Poll the camera every ``interval_ms``. If the toggle is on AND we're
-    in Nano regime AND the frame is bright enough AND a central bright
-    spot is present, caput a relative move to the QG V motor. Fire-and-
-    forget — no waiting for motion to complete, no retry loop; the next
-    tick will re-check and nudge again if the spot is still there."""
+    """Every ``interval_ms`` inspect the most recent camera frame. If the
+    toggle is on AND we're in Nano regime AND the frame is bright enough
+    AND a central bright spot is present, caput a relative move to the
+    QG V motor. Fire-and-forget — no waiting for motion to complete, no
+    retry loop; the next tick will re-check and nudge again if the spot
+    is still there.
+
+    The image is delivered by a persistent pvaccess monitor started when
+    the toggle turns on. The monitor callback runs on a pvaccess worker
+    thread, so `_latest_image` is protected by a lock."""
 
     def __init__(self, is_nano: Callable[[], bool], parent=None, **cfg):
         super().__init__(parent)
@@ -111,9 +141,11 @@ class HarmonicCorrection(QtCore.QObject):
         self._timer = QtCore.QTimer(self)
         self._timer.setInterval(self.interval_ms)
         self._timer.timeout.connect(self._tick)
-        # Guard against overlapping ticks (image grab can take a couple
-        # hundred ms; if a previous tick is still running we skip).
-        self._in_flight = False
+        # Latest decoded frame; None until the first monitor callback.
+        self._latest_image = None
+        self._image_lock = threading.Lock()
+        self._channel = None
+        self._frames_seen = 0
 
     # ── Public API ────────────────────────────────────────────────────
     def set_enabled(self, on: bool):
@@ -125,67 +157,99 @@ class HarmonicCorrection(QtCore.QObject):
             print(f"[HARMONIC] enabled — {self.interval_ms/1000:g}s tick, "
                   f"mean>{self.mean_min:g}, motor={self.qg_motor_pv}, "
                   f"step={self.step_size:g} mm")
+            self._start_monitor()
             self._timer.start()
         else:
             print("[HARMONIC] disabled")
             self._timer.stop()
+            self._stop_monitor()
 
     def is_enabled(self) -> bool:
         return self._enabled
 
+    # ── pvaccess image monitor ────────────────────────────────────────
+    def _start_monitor(self):
+        if self._channel is not None:
+            return
+        try:
+            from pvaccess import Channel
+            self._channel = Channel(self.image_pv)
+            self._channel.subscribe("harm", self._on_frame)
+            # Explicit field request so the payload actually comes through.
+            self._channel.startMonitor(
+                "field(value,dimension,codec,uncompressedSize)")
+            print(f"[HARMONIC] monitor started on {self.image_pv}")
+        except Exception as e:
+            print(f"[HARMONIC] monitor start failed: {e}")
+            self._channel = None
+
+    def _stop_monitor(self):
+        if self._channel is None:
+            return
+        try:
+            self._channel.stopMonitor()
+            self._channel.unsubscribe("harm")
+        except Exception:
+            pass
+        self._channel = None
+        with self._image_lock:
+            self._latest_image = None
+        self._frames_seen = 0
+
+    def _on_frame(self, pv_obj):
+        img = _decode_ntnd(pv_obj)
+        if img is None:
+            return
+        with self._image_lock:
+            self._latest_image = img
+        self._frames_seen += 1
+
     # ── Timer tick ────────────────────────────────────────────────────
     def _tick(self):
-        if self._in_flight:
-            print("[HARMONIC] tick skipped: previous tick still in flight")
-            return
         if not self._is_nano():
             print("[HARMONIC] tick skipped: MICRO regime (nano_mode=False)")
             return
-        self._in_flight = True
-        try:
-            # Compute the frame mean directly from the grabbed image
-            # instead of relying on <cam>:Stats1:MeanValue_RBV, which is
-            # 0 unless the Stats plugin is enabled and wired to the
-            # current stream. One less external dependency.
-            img = _grab_image(self.image_pv, timeout=2.0)
-            if img is None:
-                print(f"[HARMONIC] tick skipped: no image from {self.image_pv}")
-                return
-            mean = float(np.mean(img))
-            if mean < self.mean_min:
-                print(f"[HARMONIC] tick skipped: image mean={mean:.1f} < "
-                      f"{self.mean_min:g} (dim frame / no beam / shutter closed)")
-                return
-            print(f"[HARMONIC] tick: image {img.shape} dtype={img.dtype} "
-                  f"min={img.min():.0f} max={img.max():.0f} mean={mean:.1f}")
-            result = find_bright_spot(img, self.spot_radius_px,
-                                      self.bg_inner_radius_px)
-            if result is None:
-                print(f"[HARMONIC] tick skipped: find_bright_spot returned None "
-                      f"(image too small? spot_radius={self.spot_radius_px}, "
-                      f"bg_inner={self.bg_inner_radius_px}, "
-                      f"image dims={img.shape})")
-                return
-            ratio, peak_y, peak_x = result
-            if ratio <= self.ratio_threshold:
-                print(f"[HARMONIC] no correction: peak=({peak_x},{peak_y}) "
-                      f"ratio={ratio:.2f} ≤ threshold {self.ratio_threshold:.2f}")
-                return
-            # Push the spot away from the image centre: upper half → +1,
-            # lower → -1, scaled by direction_sign for motor wiring.
-            image_center_y = img.shape[0] / 2.0
-            y_sign = +1 if peak_y < image_center_y else -1
-            direction = y_sign * self.direction_sign
-            shift = direction * self.step_size
-            # Relative move: caput to .RLV, which is the motor record's
-            # "move by this delta from current position" field. Caputting
-            # a small number like 0.01 to the base PV (or .VAL) would
-            # instead set the ABSOLUTE target to 0.01 mm and slam the
-            # piezo across its range.
-            rlv_pv = f"{self.qg_motor_pv}.RLV"
-            print(f"[HARMONIC] mean={mean:.1f} peak=({peak_x},{peak_y}) "
-                  f"ratio={ratio:.2f} > {self.ratio_threshold:.2f} → "
-                  f"nudge {rlv_pv} by {shift:+.4f} mm")
-            caput_bg(rlv_pv, shift, t=3.0)
-        finally:
-            self._in_flight = False
+        with self._image_lock:
+            img = self._latest_image
+        if img is None:
+            print(f"[HARMONIC] tick skipped: no frame received yet from "
+                  f"{self.image_pv} (frames seen: {self._frames_seen}) — "
+                  f"is the camera acquiring?")
+            return
+        mean = float(np.mean(img))
+        if mean < self.mean_min:
+            print(f"[HARMONIC] tick skipped: image mean={mean:.1f} < "
+                  f"{self.mean_min:g} (dim frame / no beam / shutter closed)")
+            return
+        print(f"[HARMONIC] tick: image {img.shape} dtype={img.dtype} "
+              f"min={img.min():.0f} max={img.max():.0f} mean={mean:.1f} "
+              f"(frames seen: {self._frames_seen})")
+        result = find_bright_spot(img, self.spot_radius_px,
+                                  self.bg_inner_radius_px)
+        if result is None:
+            print(f"[HARMONIC] tick skipped: find_bright_spot returned None "
+                  f"(image too small? spot_radius={self.spot_radius_px}, "
+                  f"bg_inner={self.bg_inner_radius_px}, "
+                  f"image dims={img.shape})")
+            return
+        ratio, peak_y, peak_x = result
+        if ratio <= self.ratio_threshold:
+            print(f"[HARMONIC] no correction: peak=({peak_x},{peak_y}) "
+                  f"ratio={ratio:.2f} ≤ threshold {self.ratio_threshold:.2f}")
+            return
+        # Push the spot away from the image centre: upper half → +1,
+        # lower → -1, scaled by direction_sign for motor wiring.
+        image_center_y = img.shape[0] / 2.0
+        y_sign = +1 if peak_y < image_center_y else -1
+        direction = y_sign * self.direction_sign
+        shift = direction * self.step_size
+        # Relative move: caput to .RLV, which is the motor record's
+        # "move by this delta from current position" field. Caputting
+        # a small number like 0.01 to the base PV (or .VAL) would
+        # instead set the ABSOLUTE target to 0.01 mm and slam the
+        # piezo across its range.
+        rlv_pv = f"{self.qg_motor_pv}.RLV"
+        print(f"[HARMONIC] mean={mean:.1f} peak=({peak_x},{peak_y}) "
+              f"ratio={ratio:.2f} > {self.ratio_threshold:.2f} → "
+              f"nudge {rlv_pv} by {shift:+.4f} mm")
+        caput_bg(rlv_pv, shift, t=3.0)
