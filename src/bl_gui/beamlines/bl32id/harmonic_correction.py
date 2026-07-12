@@ -17,6 +17,7 @@ regime the ZP is parked out and there's no bright spot to chase.
 """
 import subprocess
 import threading
+import time
 from typing import Callable, Optional, Tuple
 
 import numpy as np
@@ -56,6 +57,10 @@ DEFAULTS = {
     # 5 s tick. Prevents having to wait a full tick between corrections.
     "settle_ms":                600,
     "max_corrections_per_burst": 15,
+    # If no new frame has arrived from the monitor within this many
+    # seconds, treat the cache as stale and skip. Guards against nudging
+    # based on a frozen last-known frame when the camera stops acquiring.
+    "max_frame_age_s":           3.0,
 }
 
 
@@ -162,7 +167,10 @@ class HarmonicCorrection(QtCore.QObject):
         self._timer.setInterval(self.interval_ms)
         self._timer.timeout.connect(self._tick)
         # Latest decoded frame; None until the first monitor callback.
+        # _latest_image_ts is the wall-clock time we received it so we
+        # can detect a stopped camera (no fresh frames) and skip.
         self._latest_image = None
+        self._latest_image_ts = 0.0
         self._image_lock = threading.Lock()
         self._channel = None
         self._frames_seen = 0
@@ -226,8 +234,10 @@ class HarmonicCorrection(QtCore.QObject):
         img = _decode_ntnd(pv_obj)
         if img is None:
             return
+        ts = time.monotonic()
         with self._image_lock:
             self._latest_image = img
+            self._latest_image_ts = ts
         self._frames_seen += 1
 
     # ── Timer tick ────────────────────────────────────────────────────
@@ -243,14 +253,20 @@ class HarmonicCorrection(QtCore.QObject):
             return
         with self._image_lock:
             img = self._latest_image
+            ts = self._latest_image_ts
         if img is None:
             print(f"[HARMONIC] tick skipped: no frame received yet from "
                   f"{self.image_pv} (frames seen: {self._frames_seen}) — "
                   f"is the camera acquiring?")
             return
+        age = time.monotonic() - ts
+        if age > self.max_frame_age_s:
+            print(f"[HARMONIC] tick skipped: last frame is {age:.1f}s old "
+                  f"(> {self.max_frame_age_s:g}s) — camera stopped?")
+            return
         print(f"[HARMONIC] tick: image {img.shape} dtype={img.dtype} "
               f"min={img.min():.0f} max={img.max():.0f} mean={float(np.mean(img)):.1f} "
-              f"(frames seen: {self._frames_seen})")
+              f"(frames seen: {self._frames_seen}, age {age:.1f}s)")
         # Kick off a correction burst — one shot now, then _step_burst
         # re-checks every settle_ms until the spot is gone or the cap is
         # hit.
@@ -266,8 +282,15 @@ class HarmonicCorrection(QtCore.QObject):
             return
         with self._image_lock:
             img = self._latest_image
+            ts = self._latest_image_ts
         if img is None:
             print("[HARMONIC] burst stopped: no frame available")
+            self._burst_iter = 0
+            return
+        age = time.monotonic() - ts
+        if age > self.max_frame_age_s:
+            print(f"[HARMONIC] burst stopped: last frame is {age:.1f}s old "
+                  f"(> {self.max_frame_age_s:g}s) — camera stopped mid-burst?")
             self._burst_iter = 0
             return
         mean = float(np.mean(img))
