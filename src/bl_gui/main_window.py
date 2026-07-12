@@ -112,6 +112,10 @@ class Win(QtWidgets.QMainWindow):
         # change is picked up without restarting.
         from .beamlines.bl32id import regime as _regime
         self._regime = _regime
+        # Create the file with "nano" as the default if it doesn't
+        # exist yet, so the file is always present on disk and the
+        # user can edit it directly to change the regime.
+        _regime.ensure_exists("nano")
         self._nano_mode = _regime.is_nano()
         print(f"[REGIME] startup -> {'NANO' if self._nano_mode else 'MICRO'} "
               f"(from {_regime.STATE_FILE})")
@@ -1694,10 +1698,11 @@ class Win(QtWidgets.QMainWindow):
         status widgets pick up the state change via their own PV
         monitors."""
         actions = [
-            ("32id:TXMOptics:AllStop",   1, "motors"),
-            ("32idbShaker:shaker:run",   0, "condenser shaker"),
-            ("32idbSP1:cam1:Acquire",    0, "camera"),
-            ("32idbSoft:PLC1:ao1",       0, "He PLC AO1"),
+            ("32id:TXMOptics:AllStop",     1, "motors"),
+            ("32idbShaker:shaker:run",     0, "condenser shaker"),
+            ("32idbSP1:cam1:Acquire",      0, "camera"),
+            ("32idbSoft:PLC1:ao1",         0, "He PLC AO1"),
+            ("32idbTXM:uniblitz:control",  0, "uniblitz shutter"),
         ]
         for pv, val, label in actions:
             print(f"[ALLSTOP] {label}: caput {pv} {val}")

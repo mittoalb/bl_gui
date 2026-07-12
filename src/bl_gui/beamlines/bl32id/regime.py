@@ -44,3 +44,16 @@ def write(mode: str) -> None:
 
 def is_nano() -> bool:
     return read() == "nano"
+
+
+def ensure_exists(default: str = "nano") -> str:
+    """Create the state file with `default` if it isn't there yet.
+    Returns the effective regime after the call. Idempotent — leaves an
+    existing file untouched."""
+    if os.path.isfile(STATE_FILE):
+        return read(default)
+    try:
+        write(default)
+    except Exception:
+        pass
+    return default
