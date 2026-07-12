@@ -15,6 +15,7 @@ the stream.
 Only runs when the caller's `is_nano()` callable returns True — in Micro
 regime the ZP is parked out and there's no bright spot to chase.
 """
+import subprocess
 import threading
 from typing import Callable, Optional, Tuple
 
@@ -22,6 +23,19 @@ import numpy as np
 from PyQt5 import QtCore
 
 from ...pv import caput_bg
+
+
+def _caget_float(pv, timeout=1.5):
+    """Bounded subprocess caget → float or None. Used only in the tick,
+    so a few hundred ms of latency is fine."""
+    try:
+        r = subprocess.run(["caget", "-t", pv],
+                           capture_output=True, timeout=timeout, text=True)
+        if r.returncode != 0:
+            return None
+        return float(r.stdout.strip())
+    except Exception:
+        return None
 
 
 # Defaults match pystream's QGMax dialog so behaviour is consistent.
@@ -245,13 +259,22 @@ class HarmonicCorrection(QtCore.QObject):
         y_sign = +1 if peak_y < image_center_y else -1
         direction = y_sign * self.direction_sign
         shift = direction * self.step_size
-        # Relative move: caput to .RLV, which is the motor record's
-        # "move by this delta from current position" field. Caputting
-        # a small number like 0.01 to the base PV (or .VAL) would
-        # instead set the ABSOLUTE target to 0.01 mm and slam the
-        # piezo across its range.
-        rlv_pv = f"{self.qg_motor_pv}.RLV"
+        # Read current position and caput absolute target. Same pattern
+        # pystream uses — .RLV was observed to be ignored on the QG
+        # piezo record, but writing an absolute VAL always works.
+        rbv_pv = f"{self.qg_motor_pv}.RBV"
+        current = _caget_float(rbv_pv)
+        if current is None:
+            # Fall back to base PV (which for a motor is .VAL echoed).
+            current = _caget_float(self.qg_motor_pv)
+        if current is None:
+            print(f"[HARMONIC] mean={mean:.1f} peak=({peak_x},{peak_y}) "
+                  f"ratio={ratio:.2f} → cannot read {rbv_pv}, "
+                  "skipping nudge")
+            return
+        target = current + shift
         print(f"[HARMONIC] mean={mean:.1f} peak=({peak_x},{peak_y}) "
               f"ratio={ratio:.2f} > {self.ratio_threshold:.2f} → "
-              f"nudge {rlv_pv} by {shift:+.4f} mm")
-        caput_bg(rlv_pv, shift, t=3.0)
+              f"{self.qg_motor_pv} {current:+.4f} → {target:+.4f} "
+              f"(Δ {shift:+.4f} mm)")
+        caput_bg(self.qg_motor_pv, target, t=3.0)
