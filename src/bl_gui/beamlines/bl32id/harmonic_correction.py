@@ -39,35 +39,35 @@ DEFAULTS = {
 }
 
 
-def _decode_ntnd(pv_obj) -> Optional[np.ndarray]:
+def _decode_ntnd(ntnda) -> Optional[np.ndarray]:
     """Turn a pvaccess NTNDArray PV object into a 2-D numpy array, or
-    None on any structural mismatch. Handles all the common areaDetector
-    numeric dtypes (u8/u16/u32, s8/s16/s32, f32, f64)."""
+    None on any structural mismatch. Uses the same subscript-access
+    pattern as pystream's reshape_ntnda — .toDict() drops the payload of
+    the value union in some pvaccess versions, subscripting works."""
     try:
-        d = pv_obj.toDict()
-    except Exception:
-        return None
-    dims = d.get("dimension") or []
-    if len(dims) < 2:
-        return None
-    try:
+        dims = ntnda["dimension"]
+        if len(dims) < 2:
+            return None
         nx = int(dims[0]["size"])
         ny = int(dims[1]["size"])
+        if nx <= 0 or ny <= 0:
+            return None
+        # value is a union — one of *Value fields carries the raw array.
+        try:
+            field_key = ntnda.getSelectedUnionFieldName()
+            raw = ntnda["value"][0][field_key]
+        except Exception:
+            try:
+                field_key = next(iter(ntnda["value"][0].keys()))
+                raw = ntnda["value"][0][field_key]
+            except (StopIteration, KeyError):
+                return None
+        arr = np.asarray(raw)
+        if arr.size < ny * nx:
+            return None
+        return arr[: ny * nx].reshape((ny, nx))
     except Exception:
         return None
-    if nx <= 0 or ny <= 0:
-        return None
-    val = d.get("value", {})
-    arr = None
-    for key in ("ubyteValue", "ushortValue", "uintValue", "ulongValue",
-                "byteValue", "shortValue", "intValue", "longValue",
-                "floatValue", "doubleValue"):
-        if key in val:
-            arr = np.asarray(val[key])
-            break
-    if arr is None or arr.size < ny * nx:
-        return None
-    return arr[: ny * nx].reshape((ny, nx))
 
 
 def find_bright_spot(image: np.ndarray,
@@ -175,9 +175,11 @@ class HarmonicCorrection(QtCore.QObject):
             from pvaccess import Channel
             self._channel = Channel(self.image_pv)
             self._channel.subscribe("harm", self._on_frame)
-            # Explicit field request so the payload actually comes through.
-            self._channel.startMonitor(
-                "field(value,dimension,codec,uncompressedSize)")
+            # No field request — pystream's viewer subscribes plainly
+            # and gets full NTNDArray frames. Passing a field() request
+            # was observed to yield callbacks with empty dimensions on
+            # some pvaccess versions.
+            self._channel.startMonitor()
             print(f"[HARMONIC] monitor started on {self.image_pv}")
         except Exception as e:
             print(f"[HARMONIC] monitor start failed: {e}")
