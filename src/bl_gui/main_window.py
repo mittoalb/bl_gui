@@ -1894,9 +1894,11 @@ class Win(QtWidgets.QMainWindow):
                                   ("Z", 3, "zp_z_pv"),
                                   ("QG V", 4, "qg_v_pv"),
                                   ("QG H", 5, "qg_h_pv")):
-            # ZP is parked out in Micro mode; do not move it with energy.
-            if col in (1, 2, 3) and not self._nano_mode:
-                print(f"[ENERGY] {name}: skipping (MICRO regime — ZP parked out)")
+            # In Micro regime the ZP is parked out — leave X/Y alone so
+            # we don't shift the parked transverse position. Z is still
+            # driven (focus can matter even when parked).
+            if col in (1, 2) and not self._nano_mode:
+                print(f"[ENERGY] {name}: skipping (MICRO regime — ZP X/Y frozen)")
                 continue
             target_pv = pvs.get(pv_key)
             if not target_pv:
@@ -1973,12 +1975,15 @@ class Win(QtWidgets.QMainWindow):
                     (pvs.get("zp_z_pv"), 3),
                     (pvs.get("qg_v_pv"), 4),
                     (pvs.get("qg_h_pv"), 5)]
-        # In Micro regime the ZP is parked out — leave X/Y/Z alone in
-        # both the cal files (so the IOC's re-apply doesn't drive them)
-        # and in the direct-caput block below.
+        # In Micro regime, leave ZP X and Y alone so the parked
+        # transverse position stays put. Z stays in the interpolation
+        # (it's the focus axis and may still need to track energy even
+        # while parked). Applies to both the cal-file rows and the
+        # direct-caput block below.
         if not self._nano_mode:
-            axis_pvs = [(pv, col) for pv, col in axis_pvs if col not in (1, 2, 3)]
-            print("[ENERGY] MICRO regime — cal files & direct move: QG only, no ZP")
+            axis_pvs = [(pv, col) for pv, col in axis_pvs if col not in (1, 2)]
+            print("[ENERGY] MICRO regime — cal files & direct move: "
+                  "ZP X/Y frozen, Z + QG interpolated")
 
         try:
             os.makedirs(self._CAL_FILE_DIR, exist_ok=True)
