@@ -1272,7 +1272,6 @@ class Win(QtWidgets.QMainWindow):
                 "_tab_sizes": {k: list(v) for k, v in self._tab_sizes.items()},
                 "_tab_label_fs": self._tab_label_font_size,
                 "_deleted_panels": self._deleted_panels,
-                "_nano_mode": bool(self._nano_mode),
                 "_panels": {}, "_tab_map": {}, "_buttons": {}, "_styles": {},
                 "_title_fonts": {}, "_titles": {}, "_mcs": {}, "_pv_fields": {},
                 "_custom_rows": self._custom_rows,
@@ -1359,10 +1358,10 @@ class Win(QtWidgets.QMainWindow):
             with open(lay_path) as f: data = json.load(f)
             fs = data.get("_font_scale")
             if fs is not None: self.font_slider.setValue(int(fs))
-            nm = data.get("_nano_mode")
-            if nm is not None:
-                self._nano_mode = bool(nm)
-                print(f"[LOAD] regime -> {'NANO' if self._nano_mode else 'MICRO'}")
+            # Deliberately DO NOT read _nano_mode from the layout JSON.
+            # The regime file (~/.bl_gui/regime.txt) is the single source
+            # of truth; reading a stale layout value here would overwrite
+            # what __init__ just loaded from the file.
             # Restore tab label font size
             tlfs = data.get("_tab_label_fs")
             if tlfs is not None:
