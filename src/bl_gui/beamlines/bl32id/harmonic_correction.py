@@ -50,6 +50,12 @@ DEFAULTS = {
     "bg_inner_radius_px": 150,
     "ratio_threshold":   1.30,
     "direction_sign":    +1,        # flip to -1 if the correction goes the wrong way
+    # Burst mode: after a nudge, wait `settle_ms` for the motor + a new
+    # frame, then re-check the spot. Keep nudging until the spot is gone
+    # or `max_corrections_per_burst` is reached, then wait for the next
+    # 5 s tick. Prevents having to wait a full tick between corrections.
+    "settle_ms":                600,
+    "max_corrections_per_burst": 15,
 }
 
 
@@ -160,6 +166,10 @@ class HarmonicCorrection(QtCore.QObject):
         self._image_lock = threading.Lock()
         self._channel = None
         self._frames_seen = 0
+        # Burst state: 0 = idle, >0 = an active correction loop counting
+        # nudges. Used to prevent the 5 s tick from overlapping with a
+        # burst that's still cycling through nudges.
+        self._burst_iter = 0
 
     # ── Public API ────────────────────────────────────────────────────
     def set_enabled(self, on: bool):
@@ -222,6 +232,12 @@ class HarmonicCorrection(QtCore.QObject):
 
     # ── Timer tick ────────────────────────────────────────────────────
     def _tick(self):
+        # Prevent overlap: if a previous burst is still nudging & waiting
+        # for the motor to settle, skip this tick.
+        if self._burst_iter > 0:
+            print(f"[HARMONIC] tick skipped: burst still running "
+                  f"(iter {self._burst_iter}/{self.max_corrections_per_burst})")
+            return
         if not self._is_nano():
             print("[HARMONIC] tick skipped: MICRO regime (nano_mode=False)")
             return
@@ -232,26 +248,52 @@ class HarmonicCorrection(QtCore.QObject):
                   f"{self.image_pv} (frames seen: {self._frames_seen}) — "
                   f"is the camera acquiring?")
             return
+        print(f"[HARMONIC] tick: image {img.shape} dtype={img.dtype} "
+              f"min={img.min():.0f} max={img.max():.0f} mean={float(np.mean(img)):.1f} "
+              f"(frames seen: {self._frames_seen})")
+        # Kick off a correction burst — one shot now, then _step_burst
+        # re-checks every settle_ms until the spot is gone or the cap is
+        # hit.
+        self._burst_iter = 0
+        self._step_burst()
+
+    def _step_burst(self):
+        # Re-verify preconditions each iteration so a mid-burst regime
+        # switch or camera stop cleanly aborts the loop.
+        if not self._enabled or not self._is_nano():
+            print("[HARMONIC] burst stopped: disabled or MICRO regime")
+            self._burst_iter = 0
+            return
+        with self._image_lock:
+            img = self._latest_image
+        if img is None:
+            print("[HARMONIC] burst stopped: no frame available")
+            self._burst_iter = 0
+            return
         mean = float(np.mean(img))
         if mean < self.mean_min:
-            print(f"[HARMONIC] tick skipped: image mean={mean:.1f} < "
-                  f"{self.mean_min:g} (dim frame / no beam / shutter closed)")
+            print(f"[HARMONIC] burst stopped: image mean={mean:.1f} < "
+                  f"{self.mean_min:g}")
+            self._burst_iter = 0
             return
-        print(f"[HARMONIC] tick: image {img.shape} dtype={img.dtype} "
-              f"min={img.min():.0f} max={img.max():.0f} mean={mean:.1f} "
-              f"(frames seen: {self._frames_seen})")
         result = find_bright_spot(img, self.spot_radius_px,
                                   self.bg_inner_radius_px)
         if result is None:
-            print(f"[HARMONIC] tick skipped: find_bright_spot returned None "
-                  f"(image too small? spot_radius={self.spot_radius_px}, "
-                  f"bg_inner={self.bg_inner_radius_px}, "
-                  f"image dims={img.shape})")
+            print("[HARMONIC] burst stopped: could not compute spot ratio")
+            self._burst_iter = 0
             return
         ratio, peak_y, peak_x = result
         if ratio <= self.ratio_threshold:
-            print(f"[HARMONIC] no correction: peak=({peak_x},{peak_y}) "
-                  f"ratio={ratio:.2f} ≤ threshold {self.ratio_threshold:.2f}")
+            print(f"[HARMONIC] burst done at iter {self._burst_iter}: "
+                  f"peak=({peak_x},{peak_y}) ratio={ratio:.2f} ≤ threshold "
+                  f"{self.ratio_threshold:.2f} — spot cleared")
+            self._burst_iter = 0
+            return
+        if self._burst_iter >= self.max_corrections_per_burst:
+            print(f"[HARMONIC] burst cap reached "
+                  f"({self.max_corrections_per_burst} nudges); "
+                  f"spot still ratio={ratio:.2f} — waiting for next tick")
+            self._burst_iter = 0
             return
         # Push the spot away from the image centre: upper half → +1,
         # lower → -1, scaled by direction_sign for motor wiring.
@@ -259,22 +301,21 @@ class HarmonicCorrection(QtCore.QObject):
         y_sign = +1 if peak_y < image_center_y else -1
         direction = y_sign * self.direction_sign
         shift = direction * self.step_size
-        # Read current position and caput absolute target. Same pattern
-        # pystream uses — .RLV was observed to be ignored on the QG
-        # piezo record, but writing an absolute VAL always works.
         rbv_pv = f"{self.qg_motor_pv}.RBV"
         current = _caget_float(rbv_pv)
         if current is None:
-            # Fall back to base PV (which for a motor is .VAL echoed).
             current = _caget_float(self.qg_motor_pv)
         if current is None:
-            print(f"[HARMONIC] mean={mean:.1f} peak=({peak_x},{peak_y}) "
-                  f"ratio={ratio:.2f} → cannot read {rbv_pv}, "
-                  "skipping nudge")
+            print(f"[HARMONIC] burst stopped: cannot read {rbv_pv}")
+            self._burst_iter = 0
             return
         target = current + shift
-        print(f"[HARMONIC] mean={mean:.1f} peak=({peak_x},{peak_y}) "
-              f"ratio={ratio:.2f} > {self.ratio_threshold:.2f} → "
+        self._burst_iter += 1
+        print(f"[HARMONIC] nudge {self._burst_iter}/"
+              f"{self.max_corrections_per_burst}: mean={mean:.1f} "
+              f"peak=({peak_x},{peak_y}) ratio={ratio:.2f} → "
               f"{self.qg_motor_pv} {current:+.4f} → {target:+.4f} "
               f"(Δ {shift:+.4f} mm)")
         caput_bg(self.qg_motor_pv, target, t=3.0)
+        # Give the motor + camera time to settle, then re-check.
+        QtCore.QTimer.singleShot(self.settle_ms, self._step_burst)
