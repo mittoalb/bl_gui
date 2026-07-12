@@ -556,7 +556,21 @@ class Win(QtWidgets.QMainWindow):
             self._qgmax_timer.start()
         self._qgmax_buttons.append(qgmax_btn)
         self._style_qgmax_button(qgmax_btn, running=False)
-        p.setLayout(iol); p.setGeometry(0, iy, 860, 70)
+
+        # Harmonic Correction toggle — background 5s-tick worker that
+        # nudges QG V away from a central bright spot when in Nano mode.
+        # Independent of tomoscan / XANES / QGMax. Purely self-contained.
+        harm_btn = QtWidgets.QPushButton("Harmonic Correction")
+        harm_btn.setCheckable(True)
+        harm_btn.setFixedSize(160, 28)
+        harm_btn.toggled.connect(self._on_harmonic_toggled)
+        iol.addWidget(harm_btn, 0, len(inout_rows) + 2, 2, 1)
+        if not hasattr(self, "_harmonic_buttons"):
+            self._harmonic_buttons = []
+        self._harmonic_buttons.append(harm_btn)
+        self._style_harmonic_button(harm_btn, on=False)
+
+        p.setLayout(iol); p.setGeometry(0, iy, 1024, 70)
 
         # --- Energy ---
         p, _ = self._make_panel("Energy", 380, 300, tab_name)
@@ -1734,6 +1748,38 @@ class Win(QtWidgets.QMainWindow):
         caput_bg("32id:TXMOptics:EnergySet", 1)
 
     _CAL_FILE_DIR = "/home/beams/USERTXM/epics/synApps/support/txmoptics/iocBoot/iocTXMOptics"
+
+    def _on_harmonic_toggled(self, on):
+        # Lazy-instantiate the background worker on first toggle so we
+        # don't spin up a timer for users who never use this feature.
+        if not hasattr(self, "_harmonic"):
+            from .beamlines.bl32id.harmonic_correction import HarmonicCorrection
+            self._harmonic = HarmonicCorrection(
+                is_nano=lambda: bool(getattr(self, "_nano_mode", True)),
+                parent=self,
+            )
+        self._harmonic.set_enabled(on)
+        # Keep every mirror button (both tabs) in sync visually.
+        for b in getattr(self, "_harmonic_buttons", []):
+            if b.isChecked() != on:
+                b.blockSignals(True); b.setChecked(on); b.blockSignals(False)
+            self._style_harmonic_button(b, on=on)
+
+    def _style_harmonic_button(self, btn, on):
+        if on:
+            btn.setText("Harmonic Corr… ON")
+            btn.setStyleSheet(
+                "background:#27ae60;color:#fff;font:bold 10pt;"
+                "border:1px solid #2ecc71;border-radius:3px;")
+            btn.setToolTip("Every 5 s (Nano only): if the frame is bright and "
+                           "shows a central hot spot, nudge QG V (32idQG:m1).")
+        else:
+            btn.setText("Harmonic Correction")
+            btn.setStyleSheet(
+                "background:#2d2d2d;color:#e0e0e0;font:10pt;"
+                "border:1px solid #404040;border-radius:3px;")
+            btn.setToolTip("Enable a 5-s background loop that nudges QG V away "
+                           "from central bright spots in Nano mode.")
 
     def _trigger_qgmax(self):
         """Fire a one-shot QGMax optimization by writing pystream's request
