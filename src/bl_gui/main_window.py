@@ -106,11 +106,15 @@ class Win(QtWidgets.QMainWindow):
             "Expert Mode": (1800, 1000),
         }
         # Nano vs Micro regime. Nano = ZP in beam → interpolate ZP with
-        # energy. Micro = ZP parked out → skip ZP moves (QG still moves).
-        # Flipped by the Nano/Micro preset buttons; persisted in the
-        # layout JSON so it survives restarts. Default Nano to preserve
-        # pre-existing behaviour for anyone who never clicks a preset.
-        self._nano_mode = True
+        # energy. Micro = ZP parked out → skip ZP X/Y (QG still moves).
+        # Source of truth is ~/.bl_gui/regime.txt so any tool can update
+        # it; bl_gui re-reads at every energy decision so an out-of-band
+        # change is picked up without restarting.
+        from .beamlines.bl32id import regime as _regime
+        self._regime = _regime
+        self._nano_mode = _regime.is_nano()
+        print(f"[REGIME] startup -> {'NANO' if self._nano_mode else 'MICRO'} "
+              f"(from {_regime.STATE_FILE})")
 
         cw = QtWidgets.QWidget(); self.setCentralWidget(cw)
         root = QtWidgets.QVBoxLayout(cw); root.setContentsMargins(4, 4, 4, 4); root.setSpacing(4)
@@ -1701,26 +1705,36 @@ class Win(QtWidgets.QMainWindow):
             caput_bg(pv, val)
 
     def _on_preset_clicked(self, btn):
-        """Track Nano/Micro regime from the preset actions so ZP
-        interpolation can be skipped when the zone plate is parked out
-        (Micro). Detected by matching the well-known TXMOptics all-in /
-        all-out PVs — a user-edited preset that no longer contains
-        either leaves the state alone."""
+        """Track Nano/Micro regime from the preset actions and persist
+        it to ~/.bl_gui/regime.txt so it survives restarts and can be
+        read by other tools. Detected by matching the well-known
+        TXMOptics all-in / all-out PVs — a user-edited preset that no
+        longer contains either leaves the state alone."""
         action = (getattr(btn, 'action', '') or '')
         if 'MoveAllIn' in action:
-            if not self._nano_mode:
-                print("[PRESET] regime -> NANO (ZP moves with energy)")
-            self._nano_mode = True
+            new = "nano"
         elif 'MoveAllOut' in action:
-            if self._nano_mode:
-                print("[PRESET] regime -> MICRO (ZP frozen; QG still moves)")
-            self._nano_mode = False
+            new = "micro"
         else:
             return
+        was_nano = self._nano_mode
+        self._nano_mode = (new == "nano")
+        if was_nano != self._nano_mode:
+            print(f"[PRESET] regime -> {new.upper()}")
         try:
-            self._save_layout()
+            self._regime.write(new)
         except Exception as e:
-            print(f"[PRESET] save layout failed: {e}")
+            print(f"[PRESET] regime.write failed: {e}")
+
+    def _refresh_regime(self):
+        """Re-read regime from the persistent file before any decision
+        that depends on it. Cheap (one fs read) and catches any change
+        made by another tool since the last time we looked."""
+        new = self._regime.is_nano()
+        if new != self._nano_mode:
+            self._nano_mode = new
+            print(f"[REGIME] refreshed from file -> "
+                  f"{'NANO' if new else 'MICRO'}")
 
     def _on_set_energy(self):
         """Go button in the Energy panel. If the EPICS calibration-file PVs
@@ -1728,6 +1742,7 @@ class Win(QtWidgets.QMainWindow):
         calibration table (~/.bl_gui/bl32id_zp_calibration.json) to drive
         the ZP X/Y/Z motors; otherwise let the IOC handle it normally via
         EnergySet. The mono move is triggered in both cases."""
+        self._refresh_regime()
         # Simple rule: Use Calib YES → bl_gui's table is the authority for
         # motor positions; direct-move the motors. Use Calib NO → leave
         # motors alone. EPICS cal-file PVs are IGNORED here (only the
@@ -1755,7 +1770,10 @@ class Win(QtWidgets.QMainWindow):
         if not hasattr(self, "_harmonic"):
             from .beamlines.bl32id.harmonic_correction import HarmonicCorrection
             self._harmonic = HarmonicCorrection(
-                is_nano=lambda: bool(getattr(self, "_nano_mode", True)),
+                # Read the persistent file each tick — matches whatever
+                # tool last set the regime, not just bl_gui's in-memory
+                # copy.
+                is_nano=self._regime.is_nano,
                 parent=self,
             )
         self._harmonic.set_enabled(on)
@@ -1862,6 +1880,7 @@ class Win(QtWidgets.QMainWindow):
         from the ZP calibration table and caput the positions to each
         motor. Used when the EPICS cal-file PVs are empty: bl_gui acts
         as the calibration authority instead of the IOC."""
+        self._refresh_regime()
         sp = None
         for slot in self._pv_fields.values():
             f = slot.get("energy_sp")
@@ -1939,6 +1958,7 @@ class Win(QtWidgets.QMainWindow):
         comes from the ZP calibration tab). Each file holds X/Y/Z motor
         positions INTERPOLATED from the local calibration table at that
         energy."""
+        self._refresh_regime()
         sp_widget = None
         for slot in self._pv_fields.values():
             f = slot.get("energy_sp")
