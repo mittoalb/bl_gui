@@ -67,6 +67,18 @@ def _caget_float(pv, timeout=1.5):
         return None
 
 
+def _caget_str(pv, timeout=1.5):
+    """Bounded subprocess caget → stripped string or None."""
+    try:
+        r = subprocess.run(["caget", "-t", pv],
+                           capture_output=True, timeout=timeout, text=True)
+        if r.returncode != 0:
+            return None
+        return r.stdout.strip()
+    except Exception:
+        return None
+
+
 # Defaults match pystream's QGMax dialog so behaviour is consistent.
 DEFAULTS = {
     "interval_ms":       5000,
@@ -89,6 +101,24 @@ DEFAULTS = {
     # seconds, treat the cache as stale and skip. Guards against nudging
     # based on a frozen last-known frame when the camera stops acquiring.
     "max_frame_age_s":           3.0,
+    # Scan-state gate: only nudge while the tomoscan is acquiring flat
+    # fields. Reading the current HDF5 sub-path from TomoScan tells us
+    # what kind of frame the detector is producing right now:
+    #   /exchange/data        — projections (data)
+    #   /exchange/data_white  — flat fields (whites) ← we act here
+    #   /exchange/data_dark   — dark frames
+    # If scan_state_pv is empty, the gate is disabled and the correction
+    # runs on every tick (previous behaviour). Set scan_state_active to
+    # the empty string to also disable.
+    "scan_state_pv":     "32id:TomoScan:HDF5Location",
+    "scan_state_active": "/exchange/data_white",
+    # Fraction of each image dimension in which the peak may live. 0.5
+    # means search only the central 50% (i.e. ignore the outer 25% on
+    # each side). Physical spots caused by harmonics show up near the
+    # optical axis; detector-edge artifacts (dead columns, vignetting,
+    # gain-map borders) never do — a tight central search excludes them
+    # entirely, no matter how bright they are.
+    "center_search_frac": 0.5,
 }
 
 
@@ -126,12 +156,18 @@ def _decode_ntnd(ntnda) -> Optional[np.ndarray]:
 def find_bright_spot(image: np.ndarray,
                      spot_radius: float,
                      bg_inner_radius: float,
+                     center_search_frac: float = 0.4,
                      ) -> Optional[Tuple[float, int, int]]:
     """Return (ratio, peak_y, peak_x). Ratio is mean intensity inside a
     disk of ``spot_radius`` around the brightest coarse-block, divided by
     the mean intensity outside ``bg_inner_radius``. Returns None if the
-    image is too small or parameters are degenerate. Same formulation as
-    pystream QGMax's _find_bright_spot."""
+    image is too small or parameters are degenerate.
+
+    Peak search is restricted to the central ``center_search_frac`` of
+    each image dimension. 0.4 = central 40% (peak may live only in the
+    innermost 40% of the field on each axis; outer 30% on each side is
+    excluded). Set to 1.0 to search the whole image.
+    """
     if image.ndim == 3:
         image = image.mean(axis=-1)
     image = np.asarray(image, dtype=np.float32)
@@ -142,20 +178,52 @@ def find_bright_spot(image: np.ndarray,
         return None
 
     # Coarse block-mean smoothing to suppress single-pixel hot spots
-    # before locating the peak.
+    # before locating the peak. Peak search is confined to a central
+    # window whose half-size is center_search_frac/2 of each dimension
+    # — a real harmonic spot always lands near the optical axis, so
+    # excluding the outer part of the image entirely stops the
+    # detector's edge artefacts (vignetting, dead columns, gain-map
+    # borders) from masquerading as a bright spot.
     block = max(1, int(spot_radius))
     bh = h // block
     bw = w // block
+    frac = max(0.05, min(1.0, float(center_search_frac)))
+    # Half-window in blocks; must also leave bg_inner_radius margin so
+    # the background-mean disk stays inside the image.
+    hy_blocks = max(1, int(bh * frac / 2))
+    hx_blocks = max(1, int(bw * frac / 2))
+    margin_blocks = max(1, int(bg_inner_radius / block))
+    hy_blocks = max(hy_blocks, 1)
+    hx_blocks = max(hx_blocks, 1)
     if bh < 2 or bw < 2:
         py, px = np.unravel_index(int(np.argmax(image)), image.shape)
     else:
         coarse = image[: bh * block, : bw * block].reshape(
             bh, block, bw, block
         ).mean(axis=(1, 3))
-        by, bx = np.unravel_index(int(np.argmax(coarse)), coarse.shape)
+        cy = bh // 2
+        cx = bw // 2
+        # Combined constraint: within the central-fraction window AND
+        # at least margin_blocks from the image edge.
+        y_lo = max(cy - hy_blocks, margin_blocks)
+        y_hi = min(cy + hy_blocks, bh - margin_blocks)
+        x_lo = max(cx - hx_blocks, margin_blocks)
+        x_hi = min(cx + hx_blocks, bw - margin_blocks)
+        if y_hi <= y_lo or x_hi <= x_lo:
+            # Constraints collapse (tiny image); fall back to full-frame
+            # search rather than returning None.
+            by, bx = np.unravel_index(int(np.argmax(coarse)), coarse.shape)
+        else:
+            inner = coarse[y_lo:y_hi, x_lo:x_hi]
+            iy, ix = np.unravel_index(int(np.argmax(inner)), inner.shape)
+            by = iy + y_lo
+            bx = ix + x_lo
         py = int((by + 0.5) * block)
         px = int((bx + 0.5) * block)
 
+    # Even after the central-only search we clamp to keep the spot disk
+    # fully inside the image (defensive against integer rounding at the
+    # margin boundary).
     r = int(spot_radius)
     py = min(max(py, r), h - r - 1)
     px = min(max(px, r), w - r - 1)
@@ -206,6 +274,11 @@ class HarmonicCorrection(QtCore.QObject):
         # nudges. Used to prevent the 5 s tick from overlapping with a
         # burst that's still cycling through nudges.
         self._burst_iter = 0
+        # Track the last observed scan-state value so we only fire ONCE
+        # per entry into the "flat fields" state. Without this the 5 s
+        # tick would fire another nudge every tick that flat fields are
+        # still being collected, drifting the intensity.
+        self._last_scan_state = None
 
     # ── Public API ────────────────────────────────────────────────────
     def set_enabled(self, on: bool):
@@ -282,6 +355,34 @@ class HarmonicCorrection(QtCore.QObject):
         if not self._is_nano():
             print(f"{_TAG} {skip}: MICRO regime (nano_mode=False)")
             return
+        # Scan-state gate: only nudge on the FIRST tick we see the scan
+        # in the "flat field" state, then wait for the state to leave &
+        # re-enter before nudging again. Skipping the state check
+        # entirely if scan_state_pv is blank preserves the old
+        # unconditional behaviour for users who don't want the gate.
+        if self.scan_state_pv and self.scan_state_active:
+            state = _caget_str(self.scan_state_pv)
+            if state is None:
+                print(f"{_TAG} {skip}: could not read {self.scan_state_pv}")
+                return
+            if state != self.scan_state_active:
+                # Track transitions so leaving+re-entering the active
+                # state re-arms the one-shot below.
+                self._last_scan_state = state
+                print(f"{_TAG} {skip}: scan state {state!r} "
+                      f"(waiting for {self.scan_state_active!r})")
+                return
+            if self._last_scan_state == self.scan_state_active:
+                # Already nudged during this pass through the flat-field
+                # state — don't stack corrections that would drift the
+                # intensity.
+                print(f"{_TAG} {skip}: already nudged for this "
+                      f"{self.scan_state_active!r} pass — waiting for "
+                      f"state to leave and re-enter")
+                return
+            print(f"{_TAG} {_c('scan state entered', 'cyan')} "
+                  f"{self.scan_state_active!r} — arming one nudge")
+            self._last_scan_state = self.scan_state_active
         with self._image_lock:
             img = self._latest_image
             ts = self._latest_image_ts
@@ -332,7 +433,8 @@ class HarmonicCorrection(QtCore.QObject):
             self._burst_iter = 0
             return
         result = find_bright_spot(img, self.spot_radius_px,
-                                  self.bg_inner_radius_px)
+                                  self.bg_inner_radius_px,
+                                  center_search_frac=self.center_search_frac)
         if result is None:
             print(f"{_TAG} {stop}: could not compute spot ratio")
             self._burst_iter = 0
