@@ -46,7 +46,7 @@ DEFAULTS = {
     "image_pv":          "32idbSP1:Pva1:Image",
     "mean_pv":           "32idbSP1:Stats1:MeanValue_RBV",
     "qg_motor_pv":       "32idQG:m1",
-    "step_size":         0.01,      # mm
+    "step_size":         0.5,       # mm — one step is enough to clear the spot
     "spot_radius_px":    50,
     "bg_inner_radius_px": 150,
     "ratio_threshold":   1.30,
@@ -56,7 +56,7 @@ DEFAULTS = {
     # or `max_corrections_per_burst` is reached, then wait for the next
     # 5 s tick. Prevents having to wait a full tick between corrections.
     "settle_ms":                600,
-    "max_corrections_per_burst": 15,
+    "max_corrections_per_burst": 1,
     # If no new frame has arrived from the monitor within this many
     # seconds, treat the cache as stale and skip. Guards against nudging
     # based on a frozen last-known frame when the camera stops acquiring.

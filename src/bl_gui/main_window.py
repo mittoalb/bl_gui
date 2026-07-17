@@ -1509,6 +1509,16 @@ class Win(QtWidgets.QMainWindow):
                     if defaults and bd.get("bg") in ("#2d2d2d", None):
                         btn._bg, btn._fg, btn._font_size = defaults
                         btn._apply_style()
+                    # Re-wire the Nano/Micro preset handler that _build_
+                    # all_panels attached at initial construction — the
+                    # button was destroyed above and recreated fresh via
+                    # CfgButton.from_dict, so any prior connection is
+                    # gone. Without this, clicking Nano/Micro fires only
+                    # the caput and never writes ~/.bl_gui/regime.txt.
+                    action = getattr(btn, "action", "") or ""
+                    if "MoveAllIn" in action or "MoveAllOut" in action:
+                        btn.clicked.connect(
+                            lambda _=False, b=btn: self._on_preset_clicked(b))
                     lay = p.layout()
                     if isinstance(lay, QtWidgets.QGridLayout) and cols:
                         lay.addWidget(btn, idx // cols, idx % cols)
