@@ -16,6 +16,7 @@ Only runs when the caller's `is_nano()` callable returns True — in Micro
 regime the ZP is parked out and there's no bright spot to chase.
 """
 import subprocess
+import sys
 import threading
 import time
 from typing import Callable, Optional, Tuple
@@ -24,6 +25,33 @@ import numpy as np
 from PyQt5 import QtCore
 
 from ...pv import caput_bg
+
+
+# ANSI colour helpers. Colours are only emitted when stdout is a TTY
+# so pipes / log files stay clean (no `\033[...` litter).
+_USE_COLOR = sys.stdout.isatty()
+_C = {
+    "reset":  "\033[0m",
+    "bold":   "\033[1m",
+    "red":    "\033[31m",
+    "green":  "\033[32m",
+    "yellow": "\033[33m",
+    "blue":   "\033[34m",
+    "magenta":"\033[35m",
+    "cyan":   "\033[36m",
+}
+
+
+def _c(text: str, *styles: str) -> str:
+    if not _USE_COLOR:
+        return text
+    prefix = "".join(_C[s] for s in styles if s in _C)
+    return f"{prefix}{text}{_C['reset']}"
+
+
+# Prefix used on every log line so a `grep [HARMONIC]` still works even
+# once ANSI codes are attached to the surrounding text.
+_TAG = _c("[HARMONIC]", "bold", "cyan")
 
 
 def _caget_float(pv, timeout=1.5):
@@ -186,13 +214,14 @@ class HarmonicCorrection(QtCore.QObject):
             return
         self._enabled = on
         if on:
-            print(f"[HARMONIC] enabled — {self.interval_ms/1000:g}s tick, "
+            print(f"{_TAG} {_c('enabled', 'bold', 'green')} — "
+                  f"{self.interval_ms/1000:g}s tick, "
                   f"mean>{self.mean_min:g}, motor={self.qg_motor_pv}, "
                   f"step={self.step_size:g} mm")
             self._start_monitor()
             self._timer.start()
         else:
-            print("[HARMONIC] disabled")
+            print(f"{_TAG} {_c('disabled', 'bold', 'red')}")
             self._timer.stop()
             self._stop_monitor()
 
@@ -212,9 +241,10 @@ class HarmonicCorrection(QtCore.QObject):
             # was observed to yield callbacks with empty dimensions on
             # some pvaccess versions.
             self._channel.startMonitor()
-            print(f"[HARMONIC] monitor started on {self.image_pv}")
+            print(f"{_TAG} {_c('monitor started', 'green')} on "
+                  f"{self.image_pv}")
         except Exception as e:
-            print(f"[HARMONIC] monitor start failed: {e}")
+            print(f"{_TAG} {_c('monitor start failed', 'red')}: {e}")
             self._channel = None
 
     def _stop_monitor(self):
@@ -244,28 +274,30 @@ class HarmonicCorrection(QtCore.QObject):
     def _tick(self):
         # Prevent overlap: if a previous burst is still nudging & waiting
         # for the motor to settle, skip this tick.
+        skip = _c("tick skipped", "yellow")
         if self._burst_iter > 0:
-            print(f"[HARMONIC] tick skipped: burst still running "
+            print(f"{_TAG} {skip}: burst still running "
                   f"(iter {self._burst_iter}/{self.max_corrections_per_burst})")
             return
         if not self._is_nano():
-            print("[HARMONIC] tick skipped: MICRO regime (nano_mode=False)")
+            print(f"{_TAG} {skip}: MICRO regime (nano_mode=False)")
             return
         with self._image_lock:
             img = self._latest_image
             ts = self._latest_image_ts
         if img is None:
-            print(f"[HARMONIC] tick skipped: no frame received yet from "
+            print(f"{_TAG} {skip}: no frame received yet from "
                   f"{self.image_pv} (frames seen: {self._frames_seen}) — "
                   f"is the camera acquiring?")
             return
         age = time.monotonic() - ts
         if age > self.max_frame_age_s:
-            print(f"[HARMONIC] tick skipped: last frame is {age:.1f}s old "
+            print(f"{_TAG} {skip}: last frame is {age:.1f}s old "
                   f"(> {self.max_frame_age_s:g}s) — camera stopped?")
             return
-        print(f"[HARMONIC] tick: image {img.shape} dtype={img.dtype} "
-              f"min={img.min():.0f} max={img.max():.0f} mean={float(np.mean(img)):.1f} "
+        print(f"{_TAG} {_c('tick', 'cyan')}: image {img.shape} "
+              f"dtype={img.dtype} min={img.min():.0f} max={img.max():.0f} "
+              f"mean={float(np.mean(img)):.1f} "
               f"(frames seen: {self._frames_seen}, age {age:.1f}s)")
         # Kick off a correction burst — one shot now, then _step_burst
         # re-checks every settle_ms until the spot is gone or the cap is
@@ -276,44 +308,44 @@ class HarmonicCorrection(QtCore.QObject):
     def _step_burst(self):
         # Re-verify preconditions each iteration so a mid-burst regime
         # switch or camera stop cleanly aborts the loop.
+        stop = _c("burst stopped", "yellow")
         if not self._enabled or not self._is_nano():
-            print("[HARMONIC] burst stopped: disabled or MICRO regime")
+            print(f"{_TAG} {stop}: disabled or MICRO regime")
             self._burst_iter = 0
             return
         with self._image_lock:
             img = self._latest_image
             ts = self._latest_image_ts
         if img is None:
-            print("[HARMONIC] burst stopped: no frame available")
+            print(f"{_TAG} {stop}: no frame available")
             self._burst_iter = 0
             return
         age = time.monotonic() - ts
         if age > self.max_frame_age_s:
-            print(f"[HARMONIC] burst stopped: last frame is {age:.1f}s old "
+            print(f"{_TAG} {stop}: last frame is {age:.1f}s old "
                   f"(> {self.max_frame_age_s:g}s) — camera stopped mid-burst?")
             self._burst_iter = 0
             return
         mean = float(np.mean(img))
         if mean < self.mean_min:
-            print(f"[HARMONIC] burst stopped: image mean={mean:.1f} < "
-                  f"{self.mean_min:g}")
+            print(f"{_TAG} {stop}: image mean={mean:.1f} < {self.mean_min:g}")
             self._burst_iter = 0
             return
         result = find_bright_spot(img, self.spot_radius_px,
                                   self.bg_inner_radius_px)
         if result is None:
-            print("[HARMONIC] burst stopped: could not compute spot ratio")
+            print(f"{_TAG} {stop}: could not compute spot ratio")
             self._burst_iter = 0
             return
         ratio, peak_y, peak_x = result
         if ratio <= self.ratio_threshold:
-            print(f"[HARMONIC] burst done at iter {self._burst_iter}: "
-                  f"peak=({peak_x},{peak_y}) ratio={ratio:.2f} ≤ threshold "
-                  f"{self.ratio_threshold:.2f} — spot cleared")
+            print(f"{_TAG} {_c('spot cleared', 'bold', 'green')} at iter "
+                  f"{self._burst_iter}: peak=({peak_x},{peak_y}) "
+                  f"ratio={ratio:.2f} ≤ threshold {self.ratio_threshold:.2f}")
             self._burst_iter = 0
             return
         if self._burst_iter >= self.max_corrections_per_burst:
-            print(f"[HARMONIC] burst cap reached "
+            print(f"{_TAG} {_c('burst cap reached', 'yellow')} "
                   f"({self.max_corrections_per_burst} nudges); "
                   f"spot still ratio={ratio:.2f} — waiting for next tick")
             self._burst_iter = 0
@@ -329,16 +361,18 @@ class HarmonicCorrection(QtCore.QObject):
         if current is None:
             current = _caget_float(self.qg_motor_pv)
         if current is None:
-            print(f"[HARMONIC] burst stopped: cannot read {rbv_pv}")
+            print(f"{_TAG} {stop}: cannot read {rbv_pv}")
             self._burst_iter = 0
             return
         target = current + shift
         self._burst_iter += 1
-        print(f"[HARMONIC] nudge {self._burst_iter}/"
-              f"{self.max_corrections_per_burst}: mean={mean:.1f} "
-              f"peak=({peak_x},{peak_y}) ratio={ratio:.2f} → "
-              f"{self.qg_motor_pv} {current:+.4f} → {target:+.4f} "
-              f"(Δ {shift:+.4f} mm)")
+        print(f"{_TAG} {_c('nudge', 'bold', 'magenta')} "
+              f"{self._burst_iter}/{self.max_corrections_per_burst}: "
+              f"mean={mean:.1f} peak=({peak_x},{peak_y}) "
+              f"ratio={_c(f'{ratio:.2f}', 'bold', 'yellow')} → "
+              f"{self.qg_motor_pv} {current:+.4f} → "
+              f"{_c(f'{target:+.4f}', 'bold')} "
+              f"(Δ {_c(f'{shift:+.4f}', 'bold', 'magenta')} mm)")
         caput_bg(self.qg_motor_pv, target, t=3.0)
         # Give the motor + camera time to settle, then re-check.
         QtCore.QTimer.singleShot(self.settle_ms, self._step_burst)
