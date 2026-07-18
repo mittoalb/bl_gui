@@ -1913,8 +1913,10 @@ class Win(QtWidgets.QMainWindow):
         from .beamlines.bl32id import xanes_calib
         cfg = xanes_calib.load_config()
         pts = [p for p in (cfg.get("points") or []) if p and p[0] is not None]
-        pvs = cfg.get("pvs", dict(xanes_calib.DEFAULT_PVS))
-        print(f"[ENERGY] plugin config: {len(pts)} cal rows; pvs keys={list(pvs.keys())}")
+        motors = cfg.get("motors") or []
+        print(f"[ENERGY] plugin config: {len(pts)} cal rows; "
+              f"{len(motors)} motors, "
+              f"{sum(1 for m in motors if m.get('include', True))} included")
         if len(pts) < 2:
             print(f"[ENERGY] only {len(pts)} cal point(s) — need >= 2")
             return
@@ -1922,27 +1924,33 @@ class Win(QtWidgets.QMainWindow):
         def _interp(col_idx):
             return _polyfit_interp(pts, col_idx, e_eV)
 
-        for name, col, pv_key in (("X", 1, "zp_x_pv"),
-                                  ("Y", 2, "zp_y_pv"),
-                                  ("Z", 3, "zp_z_pv"),
-                                  ("QG V", 4, "qg_v_pv"),
-                                  ("QG H", 5, "qg_h_pv")):
-            # In Micro regime the ZP is parked out — leave X/Y alone so
-            # we don't shift the parked transverse position. Z is still
-            # driven (focus can matter even when parked).
-            if col in (1, 2) and not self._nano_mode:
+        # Iterate the motors list from the config. Column index is
+        # motors index + 1 (column 0 is Energy).
+        for i, m in enumerate(motors):
+            name    = m.get("label") or f"m{i+1}"
+            col     = i + 1
+            target_pv = (m.get("pv") or "").strip()
+            include = bool(m.get("include", True))
+            # Include=false → user opted this motor out entirely.
+            if not include:
+                print(f"[ENERGY] {name}: skipping (Include=off)")
+                continue
+            # Micro-regime auto-skip: motors labelled ZP X / ZP Y are
+            # frozen when the ZP is parked out. Label-based (case-
+            # insensitive substring) so renames or adding new ZP motors
+            # still work.
+            lbl = name.lower()
+            is_zp_xy = ("zp x" in lbl) or ("zp y" in lbl)
+            if is_zp_xy and not self._nano_mode:
                 print(f"[ENERGY] {name}: skipping (MICRO regime — ZP X/Y frozen)")
                 continue
-            target_pv = pvs.get(pv_key)
             if not target_pv:
-                print(f"[ENERGY] {name}: no PV configured (key={pv_key}), skipping")
+                print(f"[ENERGY] {name}: no PV configured, skipping")
                 continue
             v = _interp(col)
             if v is None:
                 print(f"[ENERGY] {name}: no cal data for column {col}, skipping")
                 continue
-            # Sync-caput to the motor's .VAL so we see success/fail now,
-            # not buried in an async worker.
             try:
                 r = subprocess.run(["caput", target_pv, f"{float(v):.6f}"],
                                    capture_output=True, timeout=5.0, text=True)
@@ -1990,7 +1998,7 @@ class Win(QtWidgets.QMainWindow):
         from .beamlines.bl32id import xanes_calib
         cfg = xanes_calib.load_config()
         pts = [p for p in (cfg.get("points") or []) if p and p[0] is not None]
-        pvs = cfg.get("pvs", dict(xanes_calib.DEFAULT_PVS))
+        motors = cfg.get("motors") or []
         try:
             range_keV = float(cfg.get("range_keV", xanes_calib.DEFAULT_RANGE_KEV))
         except (TypeError, ValueError):
@@ -2004,20 +2012,30 @@ class Win(QtWidgets.QMainWindow):
 
         e_lo_keV = e_keV - range_keV
         e_hi_keV = e_keV + range_keV
-        axis_pvs = [(pvs.get("zp_x_pv"), 1),
-                    (pvs.get("zp_y_pv"), 2),
-                    (pvs.get("zp_z_pv"), 3),
-                    (pvs.get("qg_v_pv"), 4),
-                    (pvs.get("qg_h_pv"), 5)]
-        # In Micro regime, leave ZP X and Y alone so the parked
-        # transverse position stays put. Z stays in the interpolation
-        # (it's the focus axis and may still need to track energy even
-        # while parked). Applies to both the cal-file rows and the
-        # direct-caput block below.
+        # Build (pv, col, label) triplets for every motor the user has
+        # flagged Include=true in the calibration tab. Column is
+        # motors index + 1 (column 0 is Energy).
+        axis_pvs = []
+        for i, m in enumerate(motors):
+            if not m.get("include", True):
+                continue
+            pv = (m.get("pv") or "").strip()
+            if not pv:
+                continue
+            axis_pvs.append((pv, i + 1, m.get("label", f"m{i+1}")))
+        # Micro-regime auto-skip: drop motors whose label looks like
+        # "ZP X" or "ZP Y" so the parked transverse position stays
+        # put. Applies to both the cal-file rows and the direct-caput
+        # block below.
         if not self._nano_mode:
-            axis_pvs = [(pv, col) for pv, col in axis_pvs if col not in (1, 2)]
-            print("[ENERGY] MICRO regime — cal files & direct move: "
-                  "ZP X/Y frozen, Z + QG interpolated")
+            before = len(axis_pvs)
+            axis_pvs = [(pv, col, lbl) for pv, col, lbl in axis_pvs
+                        if not (("zp x" in lbl.lower())
+                                or ("zp y" in lbl.lower()))]
+            skipped = before - len(axis_pvs)
+            print(f"[ENERGY] MICRO regime — cal files & direct move: "
+                  f"skipping {skipped} ZP X/Y motor(s), "
+                  f"{len(axis_pvs)} motors remain")
 
         try:
             os.makedirs(self._CAL_FILE_DIR, exist_ok=True)
@@ -2037,7 +2055,7 @@ class Win(QtWidgets.QMainWindow):
             try:
                 with open(fpath, "w") as f:
                     f.write(f"energy {e_target_keV:g}\n")
-                    for pv_name, col in axis_pvs:
+                    for pv_name, col, _lbl in axis_pvs:
                         if not pv_name: continue
                         v = _interp_at(col, e_target_eV)
                         if v is None: continue
@@ -2079,11 +2097,11 @@ class Win(QtWidgets.QMainWindow):
         # IOC's later re-application (via EnergySet) will write the same
         # values — idempotent.
         e_target_eV = e_keV * 1000.0
-        for pv_name, col in axis_pvs:
+        for pv_name, col, lbl in axis_pvs:
             if not pv_name: continue
             v = _interp_at(col, e_target_eV)
             if v is None: continue
-            print(f"[ENERGY] direct move {pv_name} -> {v:.6f} (col {col})")
+            print(f"[ENERGY] direct move {lbl} ({pv_name}) -> {v:.6f}")
             caput_bg(pv_name, float(v))
 
     def _apply_cam_binning(self):

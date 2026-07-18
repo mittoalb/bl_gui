@@ -1,12 +1,14 @@
-"""Zone-plate energy-calibration table for bl32-ID.
+"""ZP energy-calibration table for bl32-ID.
 
-Stores (E_eV, X_mm, Y_mm, Z_mm) tuples — the three ZP positioner axes
-at each energy point. Callers (XANES 2D scans, energy setpoint logic,
-etc.) can interpolate at run time. The table and the PV config persist
-in ~/.bl_gui/bl32id_zp_calibration.json so they survive restarts and
-are shared across machines whenever $HOME is on NFS.
+Stores an (E_eV, motor_1, motor_2, …) row per measured calibration
+point, plus a user-editable **motor list** that names each column and
+carries an ``include`` checkbox. Callers (XANES 2D scans, energy
+setpoint logic, etc.) iterate the motor list and interpolate only the
+motors flagged ``include``. The table and the config persist in
+``~/.bl_gui/bl32id_zp_calibration.json`` so they survive restarts and
+are shared across machines whenever ``$HOME`` is on NFS.
 
-Reads/writes PVs through `caget` / `caput` subprocesses to stay
+Reads/writes PVs through ``caget`` / ``caput`` subprocesses to stay
 consistent with the rest of bl_gui and to bound any CA wait with a
 timeout.
 """
@@ -22,14 +24,30 @@ _CALIB_FILE = os.path.expanduser("~/.bl_gui/bl32id_zp_calibration.json")
 DEFAULT_PVS = {
     "energy_rb_pv": "32ida:BraggERdbkAO",
     "energy_units": "keV",
-    "zp_x_pv":      "32idbTXM:mcs2:c1:m13",
-    "zp_y_pv":      "32idbTXM:mcs2:c1:m14",
-    "zp_z_pv":      "32idbTXM:mcs2:c1:m15",
-    "qg_v_pv":      "32idQG:m1",
-    "qg_h_pv":      "32idQG:m2",
 }
 
+# One entry per calibration column. `include=True` = interpolate and
+# write to the EPICS cal files / direct-caput. `include=False` = keep
+# the column in the table for reference but do not drive the motor.
+_DEFAULT_MOTORS = [
+    {"label": "ZP X",  "pv": "32idbTXM:mcs2:c1:m13", "include": True},
+    {"label": "ZP Y",  "pv": "32idbTXM:mcs2:c1:m14", "include": True},
+    {"label": "ZP Z",  "pv": "32idbTXM:mcs2:c1:m15", "include": True},
+    {"label": "QG V",  "pv": "32idQG:m1",             "include": True},
+    {"label": "QG H",  "pv": "32idQG:m2",             "include": True},
+]
+
 DEFAULT_RANGE_KEV = 0.5
+
+# ── Legacy PV keys used by the pre-motors-list schema. Kept only for
+# migration; not written to new saves.
+_LEGACY_PV_KEYS = [
+    ("zp_x_pv", "ZP X"),
+    ("zp_y_pv", "ZP Y"),
+    ("zp_z_pv", "ZP Z"),
+    ("qg_v_pv", "QG V"),
+    ("qg_h_pv", "QG H"),
+]
 
 
 def _caget(pv, timeout=2.0):
@@ -46,19 +64,51 @@ def _caget(pv, timeout=2.0):
 
 
 def _read_motor_rbv(pv):
-    """Prefer `.RBV`, fall back to the base PV."""
+    """Prefer ``.RBV``, fall back to the base PV."""
     if not pv:
         return None
     v = _caget(f"{pv}.RBV")
     return v if v is not None else _caget(pv)
 
 
+def _migrate(cfg):
+    """Fold a legacy config (with zp_x_pv / zp_y_pv / etc. in ``pvs``
+    and 6-column points) into the current schema with a ``motors``
+    list. Idempotent — a new-schema config is returned unchanged."""
+    cfg = dict(cfg or {})
+    if "motors" in cfg and isinstance(cfg["motors"], list):
+        return cfg
+    old_pvs = dict(cfg.get("pvs") or {})
+    motors = []
+    for key, label in _LEGACY_PV_KEYS:
+        pv = (old_pvs.pop(key, "") or "").strip()
+        motors.append({"label": label, "pv": pv, "include": True})
+    if not motors:
+        motors = [dict(m) for m in _DEFAULT_MOTORS]
+    cfg["motors"] = motors
+    # Keep only the non-motor keys in pvs (energy_rb_pv, energy_units).
+    cfg["pvs"] = {k: v for k, v in old_pvs.items()
+                  if k in DEFAULT_PVS or k == "energy_units"}
+    for k, v in DEFAULT_PVS.items():
+        cfg["pvs"].setdefault(k, v)
+    return cfg
+
+
 def load_config():
+    """Load the calibration config. Returns a dict with keys ``pvs``,
+    ``motors``, ``points`` and ``range_keV``. Missing keys are filled
+    with defaults; legacy schemas are migrated on the fly."""
     try:
         with open(_CALIB_FILE) as f:
-            return json.load(f)
+            raw = json.load(f)
     except Exception:
-        return {"pvs": dict(DEFAULT_PVS), "points": []}
+        raw = {}
+    cfg = _migrate(raw)
+    cfg.setdefault("pvs", dict(DEFAULT_PVS))
+    cfg.setdefault("motors", [dict(m) for m in _DEFAULT_MOTORS])
+    cfg.setdefault("points", [])
+    cfg.setdefault("range_keV", DEFAULT_RANGE_KEV)
+    return cfg
 
 
 def save_config(cfg):
@@ -67,104 +117,123 @@ def save_config(cfg):
         json.dump(cfg, f, indent=2)
 
 
+def included_motors(cfg=None):
+    """Convenience for consumers: return only the motors flagged
+    ``include=True`` from the current (or given) config. Each entry is
+    the full dict so callers can look at label + pv together."""
+    if cfg is None:
+        cfg = load_config()
+    return [m for m in (cfg.get("motors") or []) if m.get("include", True)
+            and (m.get("pv") or "").strip()]
+
+
 class XanesCalibWindow(QtWidgets.QMainWindow):
-    """ZP energy calibration table. Independent top-level window — not modal,
-    so the main GUI stays live while the table is open. All PVs are
-    user-editable; defaults are sane for bl32-ID. File format is
-    forward-compatible with the xanes_gui table."""
+    """ZP energy calibration table with a dynamic motor list. Independent
+    top-level window — not modal, so the main GUI stays live while it's
+    open."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        # Qt.Window = free-standing top-level, movable across screens;
-        # WA_DeleteOnClose so closing it actually frees resources.
         self.setWindowFlag(QtCore.Qt.Window, True)
         self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
         self.setWindowTitle("ZP Energy Calibration — bl32-ID")
-        self.resize(820, 600)
+        self.resize(900, 700)
         central = QtWidgets.QWidget(); self.setCentralWidget(central)
 
         cfg = load_config()
-        self._pvs = dict(DEFAULT_PVS); self._pvs.update(cfg.get("pvs", {}))
+        self._pvs = dict(cfg.get("pvs") or DEFAULT_PVS)
+        # Deep-copy the motors list so edits in the UI don't mutate the
+        # loaded dict until we explicitly save.
+        self._motors = [dict(m) for m in (cfg.get("motors") or _DEFAULT_MOTORS)]
 
         V = QtWidgets.QVBoxLayout(central)
 
-        # ── PV configuration ────────────────────────────────────────────
-        pv_box = QtWidgets.QGroupBox("Sources (PVs)")
+        # ── Non-motor PV configuration ─────────────────────────────
+        pv_box = QtWidgets.QGroupBox("Energy source")
         pl = QtWidgets.QFormLayout(pv_box)
         self._pv_edits = {}
-        for key, label in [
-            ("energy_rb_pv", "Energy RBV PV:"),
-            ("zp_x_pv",      "ZP X motor PV:"),
-            ("zp_y_pv",      "ZP Y motor PV:"),
-            ("zp_z_pv",      "ZP Z motor PV:"),
-            ("qg_v_pv",      "Queensgate V PV:"),
-            ("qg_h_pv",      "Queensgate H PV:"),
-        ]:
-            e = QtWidgets.QLineEdit(self._pvs[key])
-            pl.addRow(label, e)
-            self._pv_edits[key] = e
+        self._e_edit = QtWidgets.QLineEdit(self._pvs.get("energy_rb_pv", ""))
+        self._pv_edits["energy_rb_pv"] = self._e_edit
+        pl.addRow("Energy RBV PV:", self._e_edit)
         self._units_cmb = QtWidgets.QComboBox()
         self._units_cmb.addItems(["keV", "eV"])
         self._units_cmb.setCurrentText(self._pvs.get("energy_units", "keV"))
         pl.addRow("Energy units:", self._units_cmb)
         V.addWidget(pv_box)
-        # Note: the cal-file energy range is exposed in the Energy panel of
-        # the main GUI, so it's always visible without opening this dialog.
-        # It is still stored in this same config JSON under "range_keV".
 
-        # ── Table ───────────────────────────────────────────────────────
-        self.table = QtWidgets.QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(
-            ["Energy [eV]", "X [mm]", "Y [mm]", "Z [mm]",
-             "QG V [mm]", "QG H [mm]"])
+        # ── Motor list ─────────────────────────────────────────────
+        mot_box = QtWidgets.QGroupBox(
+            "Motors (columns) — check Include to interpolate")
+        ml = QtWidgets.QVBoxLayout(mot_box)
+        self.motor_table = QtWidgets.QTableWidget(0, 3)
+        self.motor_table.setHorizontalHeaderLabels(["Label", "PV", "Include"])
+        self.motor_table.horizontalHeader().setStretchLastSection(False)
+        self.motor_table.horizontalHeader().setSectionResizeMode(
+            0, QtWidgets.QHeaderView.Interactive)
+        self.motor_table.horizontalHeader().setSectionResizeMode(
+            1, QtWidgets.QHeaderView.Stretch)
+        self.motor_table.horizontalHeader().setSectionResizeMode(
+            2, QtWidgets.QHeaderView.ResizeToContents)
+        self.motor_table.setMaximumHeight(180)
+        ml.addWidget(self.motor_table)
+
+        mb = QtWidgets.QHBoxLayout()
+        bn_madd = QtWidgets.QPushButton("+ Motor")
+        bn_madd.clicked.connect(self._on_add_motor)
+        bn_mrm  = QtWidgets.QPushButton("− Remove selected")
+        bn_mrm.clicked.connect(self._on_remove_motor)
+        mb.addWidget(bn_madd); mb.addWidget(bn_mrm); mb.addStretch()
+        ml.addLayout(mb)
+        V.addWidget(mot_box)
+
+        # Populate the motor list. Signal-blocked so the initial fill
+        # doesn't recurse into _on_motors_changed → auto-save loop.
+        self._suppress_autosave = True
+        for m in self._motors:
+            self._append_motor_row(m)
+        self._suppress_autosave = False
+
+        # ── Data table ─────────────────────────────────────────────
+        self.table = QtWidgets.QTableWidget(0, 0)
         self.table.horizontalHeader().setStretchLastSection(True)
         V.addWidget(self.table, 1)
-        # Debounced auto-save so any table edit (including new rows added
-        # via "Save current E + ZP") lands in the JSON immediately. Without
-        # this, changes only persist on Save & Close / auto-save-on-close,
-        # and the main GUI's Go / Generate Cal Files reads a stale JSON
-        # while this window is still open.
+        self._rebuild_data_table_columns()
+
+        # Auto-save on any change (with 250 ms debounce so a burst of
+        # edits collapses into one write).
         self._autosave_timer = QtCore.QTimer(self)
         self._autosave_timer.setSingleShot(True)
         self._autosave_timer.setInterval(250)
         self._autosave_timer.timeout.connect(self._do_save)
-        # Connected BEFORE population so initial-load setItem calls do
-        # trigger the timer — they collapse into one save whose payload
-        # equals the loaded data, so the extra write is harmless.
-        self.table.itemChanged.connect(lambda *_: self._autosave_timer.start())
-        self.table.model().rowsInserted.connect(lambda *_: self._autosave_timer.start())
-        self.table.model().rowsRemoved.connect(lambda *_: self._autosave_timer.start())
 
-        for p in cfg.get("points", []):
-            # Legacy formats (all folded into 6-column [E, X, Y, Z, QGV, QGH]):
-            #   len==4 old:     [E, ZP, X, Z]       (ZP→Z)
-            #   len==5 old:     [E, ZP, X, Y, Z]    (ZP→Z)
-            #   len==4 recent:  [E, X, Y, Z]
-            #   len==6 current: [E, X, Y, Z, QGV, QGH]
-            if len(p) == 4 and p[1] is not None and p[2] is not None and p[3] is None:
-                p = [p[0], p[2], None, p[3] if p[3] is not None else p[1]]
-            elif len(p) == 5:
-                e, zp, x, y, z = p
-                if z is None:
-                    z = zp
-                p = [e, x, y, z]
-            # Extend to 6 columns.
-            while len(p) < 6:
-                p = list(p) + [None]
-            e, x, y, z, qgv, qgh = p[0], p[1], p[2], p[3], p[4], p[5]
-            if e is None:
-                continue
-            self._append_row(e, x, y, z, qgv, qgh)
+        self.motor_table.itemChanged.connect(self._on_motor_changed)
+        self.motor_table.model().rowsInserted.connect(
+            lambda *_: (not self._suppress_autosave) and self._autosave_timer.start())
+        self.motor_table.model().rowsRemoved.connect(
+            lambda *_: (not self._suppress_autosave) and self._autosave_timer.start())
 
-        # ── Action buttons ──────────────────────────────────────────────
+        self.table.itemChanged.connect(
+            lambda *_: (not self._suppress_autosave) and self._autosave_timer.start())
+        self.table.model().rowsInserted.connect(
+            lambda *_: (not self._suppress_autosave) and self._autosave_timer.start())
+        self.table.model().rowsRemoved.connect(
+            lambda *_: (not self._suppress_autosave) and self._autosave_timer.start())
+
+        # Load the saved data-point rows into the (now dynamic) table.
+        self._suppress_autosave = True
+        for p in (cfg.get("points") or []):
+            self._append_row_from_list(p)
+        self._suppress_autosave = False
+
+        # ── Action buttons ─────────────────────────────────────────
         H = QtWidgets.QHBoxLayout()
-        bn_save = QtWidgets.QPushButton("Save current E + ZP")
-        bn_save.setToolTip("Read the current energy RBV and ZP motor RBV via "
-                           "caget, append a row.")
+        bn_save = QtWidgets.QPushButton("Save current E + motors")
+        bn_save.setToolTip("Read the current energy RBV and each motor's RBV "
+                           "via caget, append a row.")
         bn_save.clicked.connect(self._on_save_current)
-        bn_rm = QtWidgets.QPushButton("Remove selected")
-        bn_rm.clicked.connect(self._on_remove)
-        bn_clr = QtWidgets.QPushButton("Clear all")
+        bn_rm = QtWidgets.QPushButton("Remove selected row")
+        bn_rm.clicked.connect(self._on_remove_row)
+        bn_clr = QtWidgets.QPushButton("Clear all rows")
         bn_clr.clicked.connect(self._on_clear)
         for b in (bn_save, bn_rm, bn_clr):
             H.addWidget(b)
@@ -176,16 +245,145 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
         H.addWidget(bn_close)
         V.addLayout(H)
 
-    # ── Table helpers ───────────────────────────────────────────────────
-    def _append_row(self, e_eV, x_mm=None, y_mm=None, z_mm=None,
-                    qgv_mm=None, qgh_mm=None):
+    # ── Motor-list helpers ─────────────────────────────────────────
+    def _append_motor_row(self, m):
+        r = self.motor_table.rowCount()
+        self.motor_table.insertRow(r)
+        self.motor_table.setItem(
+            r, 0, QtWidgets.QTableWidgetItem(m.get("label", "")))
+        self.motor_table.setItem(
+            r, 1, QtWidgets.QTableWidgetItem(m.get("pv", "")))
+        chk = QtWidgets.QTableWidgetItem()
+        chk.setFlags(chk.flags() | QtCore.Qt.ItemIsUserCheckable)
+        chk.setCheckState(QtCore.Qt.Checked if m.get("include", True)
+                          else QtCore.Qt.Unchecked)
+        chk.setTextAlignment(QtCore.Qt.AlignCenter)
+        self.motor_table.setItem(r, 2, chk)
+
+    def _on_add_motor(self):
+        self._suppress_autosave = True
+        self._append_motor_row({"label": "New", "pv": "", "include": True})
+        self._suppress_autosave = False
+        self._motors = self._collect_motors()
+        self._rebuild_data_table_columns()
+        self._autosave_timer.start()
+
+    def _on_remove_motor(self):
+        rows = sorted({i.row() for i in self.motor_table.selectedIndexes()},
+                      reverse=True)
+        if not rows:
+            return
+        # Ask before removing — data columns for those motors disappear
+        # too, and undo isn't cheap.
+        if QtWidgets.QMessageBox.question(
+                self, "Remove motor(s)",
+                f"Remove {len(rows)} motor(s) and drop their data columns "
+                "from every row?") != QtWidgets.QMessageBox.Yes:
+            return
+        self._suppress_autosave = True
+        for r in rows:
+            self.motor_table.removeRow(r)
+        self._suppress_autosave = False
+        self._motors = self._collect_motors()
+        self._rebuild_data_table_columns()
+        self._autosave_timer.start()
+
+    def _on_motor_changed(self, item):
+        if self._suppress_autosave:
+            return
+        # Label change → update the data table's header for this column.
+        # PV change → nothing structural to redraw.
+        # Include change → nothing structural, but affects downstream.
+        new_motors = self._collect_motors()
+        if len(new_motors) == len(self._motors):
+            # Just header labels might have changed.
+            self._motors = new_motors
+            self._sync_data_headers()
+        else:
+            # Shouldn't happen from an item edit, but guard anyway.
+            self._motors = new_motors
+            self._rebuild_data_table_columns()
+        self._autosave_timer.start()
+
+    def _collect_motors(self):
+        out = []
+        for r in range(self.motor_table.rowCount()):
+            lbl_it = self.motor_table.item(r, 0)
+            pv_it  = self.motor_table.item(r, 1)
+            chk_it = self.motor_table.item(r, 2)
+            label = (lbl_it.text() if lbl_it else "").strip() or f"m{r+1}"
+            pv    = (pv_it.text()  if pv_it  else "").strip()
+            include = bool(chk_it and chk_it.checkState() == QtCore.Qt.Checked)
+            out.append({"label": label, "pv": pv, "include": include})
+        return out
+
+    # ── Data-table helpers ─────────────────────────────────────────
+    def _headers(self):
+        cols = ["Energy [eV]"]
+        for m in self._motors:
+            cols.append(f"{m['label']} [mm]")
+        return cols
+
+    def _sync_data_headers(self):
+        self.table.setHorizontalHeaderLabels(self._headers())
+
+    def _rebuild_data_table_columns(self):
+        """Called when the motor list gains or loses a row. Preserves
+        existing data by column INDEX — dropped motors take their
+        column with them; new motors get empty cells in every row."""
+        prior_rows = []
+        for r in range(self.table.rowCount()):
+            row = []
+            for c in range(self.table.columnCount()):
+                it = self.table.item(r, c)
+                row.append(it.text() if it and it.text().strip() else "")
+            prior_rows.append(row)
+
+        want = 1 + len(self._motors)
+        self._suppress_autosave = True
+        self.table.setColumnCount(want)
+        self.table.setHorizontalHeaderLabels(self._headers())
+        # Re-fill preserved cells up to the new column count.
+        for r, row in enumerate(prior_rows):
+            for c in range(min(len(row), want)):
+                if row[c]:
+                    self.table.setItem(r, c, QtWidgets.QTableWidgetItem(row[c]))
+        self._suppress_autosave = False
+
+    def _append_row_from_list(self, values):
+        """Append a data row from a saved [E, v1, v2, …] list. Missing
+        trailing values become empty cells; extras are dropped."""
+        if not values or values[0] is None:
+            return
         r = self.table.rowCount()
         self.table.insertRow(r)
-        self.table.setItem(r, 0, QtWidgets.QTableWidgetItem(f"{float(e_eV):.3f}"))
-        for col, v in ((1, x_mm), (2, y_mm), (3, z_mm),
-                       (4, qgv_mm), (5, qgh_mm)):
-            if v is not None:
-                self.table.setItem(r, col, QtWidgets.QTableWidgetItem(f"{float(v):.6f}"))
+        try:
+            self.table.setItem(
+                r, 0, QtWidgets.QTableWidgetItem(f"{float(values[0]):.3f}"))
+        except (ValueError, TypeError):
+            return
+        for c in range(1, min(len(values), 1 + len(self._motors))):
+            v = values[c]
+            if v is None or v == "":
+                continue
+            try:
+                self.table.setItem(
+                    r, c, QtWidgets.QTableWidgetItem(f"{float(v):.6f}"))
+            except (ValueError, TypeError):
+                pass
+
+    def _append_row_live(self, e_eV, motor_values):
+        """Append a data row from live caget results (one value per motor
+        in the current motor order). None-valued cells are left empty."""
+        r = self.table.rowCount()
+        self.table.insertRow(r)
+        self.table.setItem(
+            r, 0, QtWidgets.QTableWidgetItem(f"{float(e_eV):.3f}"))
+        for c, v in enumerate(motor_values, start=1):
+            if v is None:
+                continue
+            self.table.setItem(
+                r, c, QtWidgets.QTableWidgetItem(f"{float(v):.6f}"))
 
     def _collect_points(self):
         pts = []
@@ -201,15 +399,18 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
             e = cell(0)
             if e is None:
                 continue
-            pts.append([e, cell(1), cell(2), cell(3), cell(4), cell(5)])
+            row = [e] + [cell(c) for c in range(1, 1 + len(self._motors))]
+            pts.append(row)
         return pts
 
     def _collect_pvs(self):
-        pvs = {k: w.text().strip() for k, w in self._pv_edits.items()}
-        pvs["energy_units"] = self._units_cmb.currentText()
+        pvs = {
+            "energy_rb_pv": self._e_edit.text().strip(),
+            "energy_units": self._units_cmb.currentText(),
+        }
         return pvs
 
-    # ── Button handlers ─────────────────────────────────────────────────
+    # ── Button handlers ────────────────────────────────────────────
     def _on_save_current(self):
         pvs = self._collect_pvs()
         rb = pvs["energy_rb_pv"]
@@ -224,18 +425,21 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
             return
         if pvs["energy_units"] == "keV":
             e_val *= 1000.0
-        x_val  = _read_motor_rbv(pvs["zp_x_pv"]) if pvs["zp_x_pv"] else None
-        y_val  = _read_motor_rbv(pvs["zp_y_pv"]) if pvs["zp_y_pv"] else None
-        z_val  = _read_motor_rbv(pvs["zp_z_pv"]) if pvs["zp_z_pv"] else None
-        qgv    = _read_motor_rbv(pvs.get("qg_v_pv")) if pvs.get("qg_v_pv") else None
-        qgh    = _read_motor_rbv(pvs.get("qg_h_pv")) if pvs.get("qg_h_pv") else None
-        if all(v is None for v in (x_val, y_val, z_val, qgv, qgh)):
+        # Snapshot the current motor list so any UI edit mid-caget
+        # doesn't misalign the columns we're about to write.
+        motors = self._collect_motors()
+        self._motors = motors
+        vals = [_read_motor_rbv(m["pv"]) if m["pv"] else None for m in motors]
+        if all(v is None for v in vals):
             QtWidgets.QMessageBox.warning(self, "Read failed",
                 "Could not read any of the configured motor RBVs.")
             return
-        self._append_row(e_val, x_val, y_val, z_val, qgv, qgh)
+        self._suppress_autosave = True
+        self._append_row_live(e_val, vals)
+        self._suppress_autosave = False
+        self._autosave_timer.start()
 
-    def _on_remove(self):
+    def _on_remove_row(self):
         rows = sorted({i.row() for i in self.table.selectedIndexes()},
                       reverse=True)
         for r in rows:
@@ -255,8 +459,6 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
             self.close()
 
     def closeEvent(self, event):
-        """Auto-save on any close (X button, Alt+F4, window-manager close)
-        so deleting rows and just closing the dialog actually persists."""
         try:
             if not getattr(self, "_saved_in_session", False):
                 self._do_save()
@@ -265,32 +467,31 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
         super().closeEvent(event)
 
     def _do_save(self):
-        # Force any in-progress cell edit to commit. QTableWidget's default
-        # delegate only writes the editor text into the item on focus-out
-        # or Enter; closing the window (or clicking Save & Close) with the
-        # cursor still in a cell would otherwise drop the last edit — a
-        # common way for QG values to silently fail to reach disk.
-        if self.table.state() == QtWidgets.QAbstractItemView.EditingState:
-            editor = QtWidgets.QApplication.focusWidget()
-            if editor is not None:
-                delegate = self.table.itemDelegate(self.table.currentIndex())
-                if delegate is not None:
-                    try:
-                        delegate.commitData.emit(editor)
-                        delegate.closeEditor.emit(editor)
-                    except Exception:
-                        pass
-            try:
-                self.table.setCurrentCell(-1, -1)
-            except Exception:
-                pass
+        # Force any in-progress cell edit to commit so a value typed but
+        # not yet Enter-committed still lands on disk.
+        for tbl in (self.motor_table, self.table):
+            if tbl.state() == QtWidgets.QAbstractItemView.EditingState:
+                editor = QtWidgets.QApplication.focusWidget()
+                if editor is not None:
+                    delegate = tbl.itemDelegate(tbl.currentIndex())
+                    if delegate is not None:
+                        try:
+                            delegate.commitData.emit(editor)
+                            delegate.closeEditor.emit(editor)
+                        except Exception:
+                            pass
+                try:
+                    tbl.setCurrentCell(-1, -1)
+                except Exception:
+                    pass
 
-        # Preserve range_keV (set from the main GUI's Energy panel) across
-        # this dialog's saves.
+        # Preserve range_keV (set from the main GUI's Energy panel).
         prior = load_config()
+        self._motors = self._collect_motors()
         cfg = {
-            "pvs": self._collect_pvs(),
-            "points": self._collect_points(),
+            "pvs":     self._collect_pvs(),
+            "motors":  self._motors,
+            "points":  self._collect_points(),
             "range_keV": prior.get("range_keV", DEFAULT_RANGE_KEV),
         }
         try:
@@ -302,17 +503,12 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
             return False
 
 
-# Keep references on the QApplication so non-modal windows aren't GC'd the
-# moment launch() returns.
+# Keep references on the QApplication so non-modal windows aren't GC'd
+# the moment launch() returns.
 _open_windows = []
 
 
 def launch(parent=None):
-    """Open the calibration window non-modally (main GUI stays responsive).
-
-    Subsequent calls bring the existing window to the front instead of
-    spawning duplicates."""
-    # If a window is already open, raise it instead of making a second one.
     for w in list(_open_windows):
         if w.isVisible():
             w.raise_(); w.activateWindow()
