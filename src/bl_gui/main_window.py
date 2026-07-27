@@ -1713,6 +1713,9 @@ class Win(QtWidgets.QMainWindow):
             ("32idbSP1:cam1:Acquire",      0, "camera"),
             ("32idbSoft:PLC1:ao1",         0, "He PLC AO1"),
             ("32idbTXM:uniblitz:control",  0, "uniblitz shutter"),
+            # Fire the .PROC of the B-shutter Close record — same
+            # action the "Close" button on the shutter card issues.
+            ("32idb:rshtrB:Close.PROC",    1, "B-station shutter"),
         ]
         for pv, val, label in actions:
             print(f"[ALLSTOP] {label}: caput {pv} {val}")
