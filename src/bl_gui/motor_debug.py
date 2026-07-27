@@ -129,6 +129,16 @@ class MotorDetailsDialog(QtWidgets.QDialog):
         if self._pve is not None:
             self._pve.monitor_many(self._pvs)
             self._pve.updated.connect(self._on_pv)
+            # PVEngine.monitor() is a no-op if the PV is already being
+            # watched (which most motor fields are, from the main
+            # window's MC subscription). In that case no fresh update
+            # fires, so the dialog would sit empty until a value
+            # happened to change. Pull each PV's current value once
+            # here so every field is populated immediately.
+            for pv in self._pvs:
+                v = self._pve.get(pv)
+                if v is not None:
+                    self._on_pv(pv, v)
 
     def _make_field(self, sfx, kind):
         if kind == "ro":

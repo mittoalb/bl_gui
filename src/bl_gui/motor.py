@@ -38,8 +38,21 @@ class MC(QtWidgets.QFrame):
         self._flash_timer.setInterval(400)
         self._flash_timer.timeout.connect(self._toggle_flash)
         L = QtWidgets.QVBoxLayout(self); L.setContentsMargins(3, 3, 3, 2); L.setSpacing(2)
+        # Header row: description label + small "…" button that opens
+        # the motor details dialog. The button is a tiny fixed-size
+        # gutter next to the blue desc so it doesn't crowd the card;
+        # the double-click on the label still works as a fallback.
+        desc_row = QtWidgets.QHBoxLayout()
+        desc_row.setContentsMargins(0, 0, 0, 0); desc_row.setSpacing(2)
         self.desc = QtWidgets.QLabel(label); self.desc.setAlignment(QtCore.Qt.AlignCenter)
-        self.desc.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred); L.addWidget(self.desc)
+        self.desc.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        desc_row.addWidget(self.desc, 1)
+        self.btn_details = QtWidgets.QPushButton("…")
+        self.btn_details.setFixedSize(18, 18)
+        self.btn_details.setToolTip("Open motor details")
+        self.btn_details.clicked.connect(self._open_debug)
+        desc_row.addWidget(self.btn_details, 0)
+        L.addLayout(desc_row)
         self.egu = QtWidgets.QLabel(""); self.egu.setAlignment(QtCore.Qt.AlignCenter)
         self.egu.setStyleSheet("color:#888; font:7pt;"); self.egu.setFixedHeight(12); L.addWidget(self.egu)
         self.rbv = QtWidgets.QLabel("---"); self.rbv.setAlignment(QtCore.Qt.AlignCenter)
@@ -164,6 +177,11 @@ class MC(QtWidgets.QFrame):
         sd=_fs(9); sr=_fs(12); sv=_fs(10); st=_fs(9); sb=_fs(8); stw=_fs(9)
         seg=_fs(8)
         self.desc.setStyleSheet(f"background:#1e5a8e;color:#fff;font:bold {sd}pt;padding:2px;border-radius:2px;")
+        self.btn_details.setStyleSheet(
+            f"QPushButton{{background:#2d2d2d;color:#e0e0e0;font:bold {sd}pt;"
+            "border:1px solid #404040;border-radius:2px;padding:0px;}}"
+            "QPushButton:hover{background:#3a3a3a;}"
+        )
         self.rbv.setStyleSheet(f"background:#000000;color:#2ecc71;font:bold {sr}pt 'Liberation Mono','DejaVu Sans Mono',monospace;padding:3px;border:1px solid #333;border-radius:2px;")
         # Dirty (un-committed edit) uses a blue background + amber border
         # so it's obvious you still owe an Enter. Clean is just the normal
