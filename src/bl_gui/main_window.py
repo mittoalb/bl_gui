@@ -148,6 +148,24 @@ class Win(QtWidgets.QMainWindow):
         self.add_panel_btn.clicked.connect(self._add_new_panel)
         top.addWidget(self.add_panel_btn)
 
+        # + Widget: dropdown of pre-built widget types. Each menu entry
+        # drops a new panel wrapping that widget on the current tab.
+        # Only visible in edit mode + expert tabs, same as + Panel.
+        # To add a new plugin, extend WIDGET_REGISTRY below — no other
+        # code changes needed here.
+        self.add_widget_btn = QtWidgets.QPushButton("+ Widget"); self.add_widget_btn.setFixedSize(80, 28)
+        self.add_widget_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;border:1px solid #404040;border-radius:3px;")
+        _wmenu = QtWidgets.QMenu(self.add_widget_btn)
+        _wmenu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;} "
+                             "QMenu::item:selected{background:#1e5a8e;}")
+        for label, (default_name, default_w, default_h, _factory) in \
+                self._widget_registry().items():
+            _wmenu.addAction(
+                label,
+                lambda checked=False, k=label: self._add_widget_from_registry(k))
+        self.add_widget_btn.setMenu(_wmenu)
+        top.addWidget(self.add_widget_btn)
+
         self.add_tab_btn = QtWidgets.QPushButton("+ Tab"); self.add_tab_btn.setFixedSize(60, 28)
         self.add_tab_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;border:1px solid #404040;border-radius:3px;")
         self.add_tab_btn.clicked.connect(self._add_new_tab)
@@ -160,6 +178,7 @@ class Win(QtWidgets.QMainWindow):
             self.font_lbl.setVisible(False)
             self.add_panel_btn.setVisible(False)
             self.add_tab_btn.setVisible(False)
+            self.add_widget_btn.setVisible(False)
 
         root.addLayout(top)
 
@@ -1101,6 +1120,7 @@ class Win(QtWidgets.QMainWindow):
             self._font_label_widget.setVisible(not is_user)
             self.add_panel_btn.setVisible(not is_user)
             self.add_tab_btn.setVisible(not is_user)
+            self.add_widget_btn.setVisible(not is_user)
 
     def _tab_context_menu(self, pos):
         if not self._allow_edit or not self._edit_mode: return
@@ -1232,6 +1252,82 @@ class Win(QtWidgets.QMainWindow):
         p.setGeometry(50, 50, 200, 100); p.set_edit(True)
         lay = QtWidgets.QVBoxLayout(); lay.setContentsMargins(6, 22, 6, 6); lay.addStretch(); p.setLayout(lay)
 
+    def _widget_registry(self):
+        """Registry of plugin widgets available under the + Widget menu.
+        Each entry: menu_label → (default_panel_name, default_w, default_h,
+        factory(parent) → QWidget). Factories receive the containing
+        Panel; they can read `parent.key` if they need per-instance
+        persistence keyed by panel. Add a new plugin by appending one
+        line here; nothing else in main_window needs to change."""
+        def _webview_factory(parent):
+            from .beamlines.bl32id.camera_view import CameraView
+            return CameraView(panel_key=getattr(parent, "key", None),
+                              parent=parent)
+
+        return {
+            "Web view / Camera": ("Web view", 480, 360, _webview_factory),
+            # Add more plugins here, e.g.:
+            # "Motion Pad":     ("Motion Pad", 360, 320, _motion_pad_factory),
+            # "Autofocus":      ("Autofocus",  300, 200, _autofocus_factory),
+        }
+
+    def _add_widget_from_registry(self, key, panel_name=None):
+        """Create a new panel on the current tab and drop the widget
+        produced by the registry entry `key` inside it. Panel geometry
+        starts at (50, 50) at the widget's default size; user can move
+        and resize in edit mode from there. When called from
+        _load_layout, `panel_name` is the saved panel base name so the
+        recreated panel key matches the saved geometry entry."""
+        entry = self._widget_registry().get(key)
+        if entry is None:
+            return
+        default_name, w, h, factory = entry
+        if panel_name is not None:
+            default_name = panel_name
+        # Give each new panel a unique name so a saved layout can carry
+        # multiple instances (Camera 1, Camera 2, …).
+        base = default_name
+        existing = {k.split("::", 1)[0] for k in self._panels}
+        name = base
+        n = 2
+        while name in existing:
+            name = f"{base} {n}"; n += 1
+        current_tab = self.tab_widget.tabText(self.tab_widget.currentIndex())
+        p, _ = self._make_panel(name, w, h, current_tab)
+        p.setGeometry(50, 50, w, h)
+        # Force a minimum panel size so a saved layout can't crush the
+        # widget to invisibility on the next restart. User can still
+        # drag-resize the panel in edit mode to make it bigger.
+        p.setMinimumSize(240, 140)
+        # Match whatever edit-mode state the window is currently in.
+        # Hardcoding True made the panel draggable in normal mode when
+        # _load_layout invoked us on startup.
+        p.set_edit(getattr(self, "_edit_mode", False))
+        lay = QtWidgets.QVBoxLayout()
+        lay.setContentsMargins(6, 22, 6, 6)
+        widget = factory(p)
+        lay.addWidget(widget)
+        p.setLayout(lay)
+        # Explicitly show the widget in case something in the panel's
+        # edit-mode toggle above suppressed it.
+        widget.show()
+        p.show()
+        # Track so _save_layout can persist the widget-kind, and
+        # _load_layout can rebuild it via _add_widget_from_registry.
+        if not hasattr(self, "_plugin_widgets"):
+            self._plugin_widgets = {}
+        self._plugin_widgets[p.key] = key
+        # If this panel key was previously marked deleted, un-delete it —
+        # the user re-added it, so on next load it must NOT be skipped.
+        # Fixes the "widget vanishes on restart even though it saved
+        # fine" bug where a stale _deleted_panels entry silently
+        # suppressed the re-added widget.
+        if p.key in self._deleted_panels:
+            self._deleted_panels.remove(p.key)
+            print(f"[WIDGET] '{p.key}' removed from _deleted_panels")
+        print(f"[WIDGET] added '{name}' ({w}x{h}) on tab {current_tab!r}; "
+              f"panel geometry now {p.geometry().width()}x{p.geometry().height()}")
+
     # ── font scale ───────────────────────────────────────────────────
 
     def _change_font_scale(self, pct):
@@ -1247,13 +1343,20 @@ class Win(QtWidgets.QMainWindow):
             p.set_edit(on)
             for w in p.findChildren(QtWidgets.QPushButton):
                 if not isinstance(w, CfgButton): w.setEnabled(not on)
-            for w in p.findChildren(QtWidgets.QLineEdit): w.setEnabled(not on)
+            for w in p.findChildren(QtWidgets.QLineEdit):
+                # Plugin widgets (e.g. web view URL bar) can mark
+                # themselves as always-enabled so their config field
+                # stays editable while the panel is being repositioned.
+                if w.property("_bl_gui_always_enabled"):
+                    continue
+                w.setEnabled(not on)
             for w in p.findChildren(QtWidgets.QComboBox): w.setEnabled(not on)
         # Enable "Edit PV..." right-click on each PVField while in edit mode
         for slot in self._pv_fields.values():
             for f in slot.values():
                 f.set_edit_mode(on)
         self.add_panel_btn.setVisible(on); self.add_tab_btn.setVisible(on)
+        self.add_widget_btn.setVisible(on)
         if on:
             self.statusBar().showMessage(
                 "EDIT MODE — drag/resize panels, right-click panels/motors/PV fields to edit. "
@@ -1279,6 +1382,7 @@ class Win(QtWidgets.QMainWindow):
                 "_panels": {}, "_tab_map": {}, "_buttons": {}, "_styles": {},
                 "_title_fonts": {}, "_titles": {}, "_mcs": {}, "_pv_fields": {},
                 "_custom_rows": self._custom_rows,
+                "_plugin_widgets": dict(getattr(self, "_plugin_widgets", {})),
                 "_io_labels": {fid: labels[0].text()
                                for fid, labels in getattr(self, "_io_labels", {}).items()
                                if labels}}
@@ -1406,7 +1510,48 @@ class Win(QtWidgets.QMainWindow):
                     except ValueError:
                         pass
             self._next_panel_id = max_id
+            # First rebuild plugin widget panels (Web view etc.) from
+            # _plugin_widgets so their panel keys exist before the
+            # generic recreate-as-MC loop below claims them.
+            plug = data.get("_plugin_widgets") or {}
+            self._plugin_widgets = {}
+            print(f"[LOAD] _plugin_widgets in JSON: {plug}")
+            for pk, kind in plug.items():
+                if pk in self._panels:
+                    print(f"[LOAD] plugin {pk!r}: panel key already exists, skipping")
+                    continue
+                if pk in data.get("_deleted_panels", []):
+                    print(f"[LOAD] plugin {pk!r}: in _deleted_panels, skipping")
+                    continue
+                tab_name = tab_map.get(pk) or _DEFAULT_TABS[-1]
+                canvas = self._tab_canvases.get(tab_name)
+                if canvas is None:
+                    print(f"[LOAD] SKIP plugin (no canvas): {pk!r}  tab={tab_name!r} "
+                          f"available_tabs={list(self._tab_canvases.keys())}")
+                    continue
+                # Point the current tab at the saved one so
+                # _add_widget_from_registry (which reads current tab)
+                # places the widget on the right canvas.
+                for i in range(self.tab_widget.count()):
+                    if self.tab_widget.tabText(i) == tab_name:
+                        self.tab_widget.setCurrentIndex(i)
+                        break
+                base = pk.split("::")[0].split("#")[0]
+                print(f"[LOAD] plugin: recreating {pk!r} kind={kind!r} "
+                      f"on tab={tab_name!r} base={base!r}")
+                self._add_widget_from_registry(kind, panel_name=base)
+                print(f"[LOAD] plugin: after recreate, _panels has "
+                      f"key {pk!r}: {pk in self._panels}")
             recreated = 0
+            # Build a name-based fallback so panels created BEFORE the
+            # _plugin_widgets tracking was added still come back as
+            # plugin widgets instead of empty MC frames. Match on the
+            # panel's default_name field in the registry.
+            registry = self._widget_registry()
+            plugin_default_names = {
+                default_name: reg_key
+                for reg_key, (default_name, _w, _h, _f) in registry.items()
+            }
             for k, rect in panels_saved.items():
                 if k in self._panels:
                     continue    # default panel, already exists
@@ -1420,6 +1565,20 @@ class Win(QtWidgets.QMainWindow):
                     continue
                 # Reconstruct a base title from the key: "Base#N::Tab" -> "Base"
                 base = k.split("::")[0].split("#")[0]
+                # Name-based auto-detection: any orphan panel whose base
+                # name matches a plugin registry entry gets rebuilt as
+                # that plugin. Covers layouts saved before we started
+                # writing _plugin_widgets explicitly.
+                matched_kind = plugin_default_names.get(base)
+                if matched_kind is not None:
+                    print(f"[LOAD] plugin (name-match): rebuilding {k!r} "
+                          f"as {matched_kind!r}")
+                    for i in range(self.tab_widget.count()):
+                        if self.tab_widget.tabText(i) == tab_name:
+                            self.tab_widget.setCurrentIndex(i); break
+                    self._add_widget_from_registry(matched_kind, panel_name=base)
+                    recreated += 1
+                    continue
                 new_p = Panel(base + " (copy)", k, canvas)
                 # Use the saved MC list to decide layout orientation + contents
                 mc_list = mcs_saved.get(k, [])
@@ -2211,6 +2370,13 @@ def main():
     # readable when viewing across monitors of very different sizes.
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
+    # Required so QWebEngineView (Camera live-view widget, etc.) can be
+    # imported after QApplication is created. Without this,
+    # `import PyQt5.QtWebEngineWidgets` raises
+    # "Qt.AA_ShareOpenGLContexts must be set before a QCoreApplication
+    # instance is created" and the Camera panel silently reports the
+    # module as missing even when PyQtWebEngine IS installed.
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_ShareOpenGLContexts, True)
 
     app = QtWidgets.QApplication(sys.argv); app.setApplicationName("Beamline GUI")
     # App-wide UI font — DejaVu Sans is the crispest readable sans on APS
