@@ -2370,13 +2370,43 @@ def main():
     # readable when viewing across monitors of very different sizes.
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
-    # Required so QWebEngineView (Camera live-view widget, etc.) can be
-    # imported after QApplication is created. Without this,
-    # `import PyQt5.QtWebEngineWidgets` raises
-    # "Qt.AA_ShareOpenGLContexts must be set before a QCoreApplication
-    # instance is created" and the Camera panel silently reports the
-    # module as missing even when PyQtWebEngine IS installed.
-    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_ShareOpenGLContexts, True)
+    # AA_ShareOpenGLContexts is REQUIRED for QtWebEngine (Web-view /
+    # Camera plugin) to import after QApplication is created. But
+    # setting it triggers immediate GLX initialisation, which
+    # ABORT-crashes on machines without a working OpenGL stack (older
+    # beamline hosts, headless setups). Enable it only when both:
+    #   - PyQtWebEngine is actually installed (user asked for it), and
+    #   - the user hasn't set BL_GUI_NO_WEBENGINE=1 to opt out (escape
+    #     hatch for a machine that has PyQtWebEngine but broken GLX).
+    _skip_webengine = os.environ.get("BL_GUI_NO_WEBENGINE", "").strip().lower() in (
+        "1", "true", "yes")
+    # Auto-skip when running over SSH X-forwarding: GLX indirect
+    # rendering isn't compatible with QtWebEngine's OpenGL contexts
+    # and produces exactly the "Could not initialize GLX / Aborted"
+    # crash we're trying to prevent. SSH_CONNECTION is set by sshd on
+    # login shells; DISPLAY starting with "localhost:" is the classic
+    # X-forwarding sign.
+    _display = os.environ.get("DISPLAY", "")
+    _looks_like_ssh = bool(os.environ.get("SSH_CONNECTION")) or \
+                      _display.startswith("localhost:")
+    if _looks_like_ssh and not _skip_webengine:
+        _skip_webengine = True
+        print("[GUI] SSH X-forwarding detected — auto-skipping "
+              "QtWebEngine to avoid GLX init crash. "
+              "Set BL_GUI_NO_WEBENGINE=0 to override.")
+    _webengine_ok = False
+    if not _skip_webengine:
+        try:
+            import PyQt5.QtWebEngineWidgets  # noqa: F401
+            _webengine_ok = True
+        except Exception:
+            _webengine_ok = False
+    if _webengine_ok:
+        QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_ShareOpenGLContexts, True)
+        print("[GUI] QtWebEngine enabled (AA_ShareOpenGLContexts set)")
+    else:
+        print("[GUI] QtWebEngine disabled — Web-view plugin will show an "
+              "install/opt-in hint. Set BL_GUI_NO_WEBENGINE=1 to force off.")
 
     app = QtWidgets.QApplication(sys.argv); app.setApplicationName("Beamline GUI")
     # App-wide UI font — DejaVu Sans is the crispest readable sans on APS
