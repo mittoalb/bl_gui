@@ -15,6 +15,7 @@ the stream.
 Only runs when the caller's `is_nano()` callable returns True — in Micro
 regime the ZP is parked out and there's no bright spot to chase.
 """
+import os
 import subprocess
 import sys
 import threading
@@ -27,9 +28,13 @@ from PyQt5 import QtCore
 from ...pv import caput_bg
 
 
-# ANSI colour helpers. Colours are only emitted when stdout is a TTY
-# so pipes / log files stay clean (no `\033[...` litter).
-_USE_COLOR = sys.stdout.isatty()
+# ANSI colour helpers. On by default so bl_gui's terminal log stays
+# readable regardless of how the app was launched (some launchers
+# de-tty stdout at import time, which used to silently turn colours
+# off forever). Set BL_GUI_NO_COLOR=1 to force plain text — useful
+# for redirecting to a log file.
+_USE_COLOR = os.environ.get("BL_GUI_NO_COLOR", "").strip().lower() not in (
+    "1", "true", "yes")
 _C = {
     "reset":  "\033[0m",
     "bold":   "\033[1m",
