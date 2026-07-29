@@ -334,11 +334,6 @@ class MC(QtWidgets.QFrame):
         if w is not None and hasattr(win, "add_pv_row_dialog"):
             win.add_pv_row_dialog(w)
 
-    def mouseDoubleClickEvent(self, e):
-        """Double-click anywhere on the card opens the full motor details dialog."""
-        self._open_debug()
-        super().mouseDoubleClickEvent(e)
-
     def _open_debug(self):
         from .motor_debug import MotorDetailsDialog
         dlg = MotorDetailsDialog(self, parent=self)
