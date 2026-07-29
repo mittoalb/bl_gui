@@ -2344,6 +2344,12 @@ def main():
     of a file that ships with the package (e.g. 'bl32id.json' resolves to
     the one bundled next to layout.json).
     """
+    # Wrap stdout so every [TAG] prefix in log lines is coloured. Must
+    # run before any other print in this session (including the CONFIG
+    # / REGIME / LOAD lines below) so nothing escapes plain.
+    from .log_color import install as _install_log_color
+    _install_log_color()
+
     args = sys.argv[1:]
     allow_edit = "edit" in args
     args = [a for a in args if a != "edit"]
