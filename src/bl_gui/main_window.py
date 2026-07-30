@@ -166,6 +166,19 @@ class Win(QtWidgets.QMainWindow):
         self.add_widget_btn.setMenu(_wmenu)
         top.addWidget(self.add_widget_btn)
 
+        # Snapshots browser — always visible (not gated on edit mode).
+        # Autosaver runs regardless; this just opens the browser to
+        # inspect / restore past states.
+        self.snap_btn = QtWidgets.QPushButton("Snapshots")
+        self.snap_btn.setFixedSize(90, 28)
+        self.snap_btn.setStyleSheet(
+            "background:#2d2d2d;color:#e0e0e0;font:9pt;"
+            "border:1px solid #404040;border-radius:3px;")
+        self.snap_btn.setToolTip("Browse hourly state snapshots and restore "
+                                 "a past state PV-by-PV.")
+        self.snap_btn.clicked.connect(self._open_snapshot_window)
+        top.addWidget(self.snap_btn)
+
         self.add_tab_btn = QtWidgets.QPushButton("+ Tab"); self.add_tab_btn.setFixedSize(60, 28)
         self.add_tab_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;border:1px solid #404040;border-radius:3px;")
         self.add_tab_btn.clicked.connect(self._add_new_tab)
@@ -1805,6 +1818,49 @@ class Win(QtWidgets.QMainWindow):
         import threading
         threading.Thread(target=self._pve.monitor_many, args=(pv_list,),
                          daemon=True, name="pv-monitor-setup").start()
+        # Kick off the hourly snapshot autosaver as soon as the PV
+        # engine exists. First tick fires after the interval so the
+        # very first snapshot has real PV data (not the pre-monitor
+        # empty-cache) to compare against.
+        self._start_snapshot_autosaver()
+
+    # ── Snapshot autosaver ────────────────────────────────────────
+    _SNAPSHOT_INTERVAL_MS = 60 * 60 * 1000   # 1 hour
+
+    def _start_snapshot_autosaver(self):
+        if getattr(self, "_snap_timer", None) is not None:
+            return
+        self._snap_timer = QtCore.QTimer(self)
+        self._snap_timer.setInterval(self._SNAPSHOT_INTERVAL_MS)
+        self._snap_timer.timeout.connect(self._snapshot_tick)
+        self._snap_timer.start()
+        print(f"[SNAPSHOT] autosaver armed — {self._SNAPSHOT_INTERVAL_MS/1000/60:g} min interval")
+
+    def _snapshot_tick(self):
+        """One-hour tick. Take a fresh sample, compare against the
+        most recent saved snapshot, write only if anything changed."""
+        from . import snapshot as _snap
+        if not hasattr(self, "_pve"):
+            return
+        pv_names = list(self._pve._channels.keys())
+        if not pv_names:
+            print("[SNAPSHOT] tick skipped: no PVs monitored yet")
+            return
+        curr = _snap.take_snapshot(pv_names, self._pve.get)
+        prev = _snap.newest_snapshot()
+        changed = _snap.diff_pv_values(prev or {}, curr)
+        # First-ever tick has prev=None → always saves. Subsequent
+        # ticks with zero change do nothing.
+        if prev is not None and not changed:
+            print("[SNAPSHOT] tick: no PV changes, skipping save")
+            return
+        path, offset = _snap.save_snapshot(curr)
+        print(f"[SNAPSHOT] saved {path}@{offset}  "
+              f"({len(curr.get('pvs') or {})} PVs, {len(changed)} changed)")
+
+    def _open_snapshot_window(self):
+        from .snapshot_window import launch as _snap_launch
+        _snap_launch(parent=self)
 
     @QtCore.pyqtSlot(str, str)
     def _on_pv(self, pv_name, value):
