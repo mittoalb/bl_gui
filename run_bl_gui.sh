@@ -40,4 +40,24 @@ if [ "$sourced" -eq 0 ]; then
 fi
 
 conda activate pystream
-exec bl_gui bl32id.json "$@"
+
+# Args: ./run_bl_gui.sh [edit] [LAYOUT_NAME]
+#   ./run_bl_gui.sh                 -> default layout, view mode
+#   ./run_bl_gui.sh edit            -> default layout, edit mode
+#   ./run_bl_gui.sh MyGui           -> load ~/.bl_gui/MyGui.json (create if missing), view
+#   ./run_bl_gui.sh edit MyGui      -> same, edit mode
+#   ./run_bl_gui.sh MyGui.json edit -> either order works
+# 'edit' is a keyword; the other argument (if any) is treated as the layout name.
+_edit=""
+_layout=""
+for a in "$@"; do
+    if [ "$a" = "edit" ]; then
+        _edit="edit"
+    else
+        _layout="$a"
+    fi
+done
+if [ -z "$_layout" ]; then
+    _layout="bl32id.json"
+fi
+exec bl_gui "$_layout" ${_edit:+edit}

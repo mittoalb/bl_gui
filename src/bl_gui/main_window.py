@@ -77,7 +77,7 @@ def _lay_path():
 from .widgets import CfgButton, Panel, _ButtonEditFilter, _change_font_size, _duplicate_widget, _edit_widget
 
 class Win(QtWidgets.QMainWindow):
-    def __init__(self, allow_edit=False):
+    def __init__(self, allow_edit=False, blank=False):
         super().__init__()
         self._allow_edit = allow_edit
         # Beamline name = currently loaded layout file's basename (no .json).
@@ -202,10 +202,15 @@ class Win(QtWidgets.QMainWindow):
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
         root.addWidget(self.tab_widget)
 
-        # Create tabs and build identical panels on each
+        # Create tabs. If `blank=True` (new user layout), leave them
+        # empty so the user gets a real from-scratch canvas — no
+        # pre-baked motor cards / shutters / etc. to delete first.
+        # Otherwise populate with the built-in default panels.
         for tab_name in _DEFAULT_TABS:
             self._create_tab(tab_name)
-            self._build_all_panels(tab_name)
+            if not blank:
+                self._build_all_panels(tab_name)
+        self._blank_layout = bool(blank)
 
         self._current_tab = ""
         self._load_layout()
@@ -1267,22 +1272,78 @@ class Win(QtWidgets.QMainWindow):
 
     def _widget_registry(self):
         """Registry of plugin widgets available under the + Widget menu.
-        Each entry: menu_label → (default_panel_name, default_w, default_h,
-        factory(parent) → QWidget). Factories receive the containing
-        Panel; they can read `parent.key` if they need per-instance
-        persistence keyed by panel. Add a new plugin by appending one
-        line here; nothing else in main_window needs to change."""
+        Each entry: menu_label → (default_panel_name, default_w,
+        default_h, factory(parent) → QWidget). Factories receive the
+        containing Panel; they can read `parent.key` if they need
+        per-instance persistence keyed by panel. Add a new entry by
+        appending one line here; nothing else in main_window needs to
+        change. Post-creation, _add_widget_from_registry inspects the
+        widget's type and hooks it into the correct subscription list
+        (self.mcs for MCs, self._pv_fields for PVField/ValveField)."""
         def _webview_factory(parent):
             from .beamlines.bl32id.camera_view import CameraView
             return CameraView(panel_key=getattr(parent, "key", None),
                               parent=parent)
 
+        def _motor_factory(parent):
+            return MC("New Motor", "")
+
+        def _valve_factory(parent):
+            from .pv_field import ValveField
+            fid = self._new_field_id("valve")
+            return ValveField(status_pv="", on_pv="", off_pv="",
+                              field_id=fid,
+                              label_text="New Valve",
+                              on_text="On", off_text="Off",
+                              parent=parent)
+
+        def _toggle_factory(parent):
+            from .pv_field import ToggleField
+            fid = self._new_field_id("toggle")
+            return ToggleField(status_pv="", open_pv="", close_pv="",
+                               field_id=fid,
+                               label_text="Toggle",
+                               parent=parent)
+
+        def _sp_factory(parent):
+            from .pv_field import PVField
+            return PVField('sp', "", field_id=self._new_field_id("sp"),
+                           placeholder="setpoint", parent=parent)
+
+        def _rb_factory(parent):
+            from .pv_field import PVField
+            return PVField('rb', "", field_id=self._new_field_id("rb"),
+                           parent=parent)
+
+        def _led_factory(parent):
+            from .pv_field import PVField
+            return PVField('led', "", field_id=self._new_field_id("led"),
+                           parent=parent)
+
+        def _btn_factory(parent):
+            from .pv_field import PVField
+            return PVField('btn', "", field_id=self._new_field_id("btn"),
+                           button_text="Action", button_value=1,
+                           parent=parent)
+
         return {
-            "Web view / Camera": ("Web view", 480, 360, _webview_factory),
-            # Add more plugins here, e.g.:
-            # "Motion Pad":     ("Motion Pad", 360, 320, _motion_pad_factory),
-            # "Autofocus":      ("Autofocus",  300, 200, _autofocus_factory),
+            "Motor card":         ("Motor", 130, 200, _motor_factory),
+            "Valve / Shutter":    ("Valve", 260, 90,  _valve_factory),
+            "Toggle button":      ("Toggle", 180, 90, _toggle_factory),
+            "Setpoint field (SP)": ("Setpoint", 240, 60, _sp_factory),
+            "Readback field (RB)": ("Readback", 240, 60, _rb_factory),
+            "LED indicator":      ("LED",   140, 60,  _led_factory),
+            "Action button":      ("Action", 180, 60, _btn_factory),
+            "Web view / Camera":  ("Web view", 480, 360, _webview_factory),
         }
+
+    def _new_field_id(self, prefix: str) -> str:
+        """Generate a unique field_id for a dynamically-added PV field.
+        Increments a per-session counter so multiple widgets of the
+        same kind don't collide."""
+        counter = getattr(self, "_field_id_counter", 0) + 1
+        self._field_id_counter = counter
+        return f"{prefix}_{counter}"
 
     def _add_widget_from_registry(self, key, panel_name=None):
         """Create a new panel on the current tab and drop the widget
@@ -1321,6 +1382,30 @@ class Win(QtWidgets.QMainWindow):
         widget = factory(p)
         lay.addWidget(widget)
         p.setLayout(lay)
+        # Type-specific registration so the PV engine / save-load
+        # infrastructure treats the widget the same as one built by
+        # _build_all_panels.
+        from .pv_field import PVField, ValveField, ToggleField
+        pv_names_new = []
+        if isinstance(widget, MC):
+            self.mcs.append(widget)
+            pv_names_new.extend(widget.get_pvs())
+        elif isinstance(widget, (PVField, ValveField, ToggleField)):
+            slot = self._pv_fields.setdefault(p.key, {})
+            slot[widget.field_id] = widget
+            pv_names_new.extend(getattr(widget, "monitored_pvs",
+                                        lambda: [])() or [])
+        # If the engine is already running, subscribe to the new PVs
+        # so the widget starts receiving updates immediately (rather
+        # than waiting for the next full restart).
+        pve = getattr(self, "_pve", None)
+        if pve is not None and pv_names_new:
+            import threading
+            threading.Thread(target=pve.monitor_many,
+                             args=([p for p in pv_names_new if p],),
+                             daemon=True,
+                             name=f"pv-monitor-new-{p.key}").start()
+
         # Explicitly show the widget in case something in the panel's
         # edit-mode toggle above suppressed it.
         widget.show()
@@ -2412,21 +2497,46 @@ def main():
 
     layout_arg = args[0] if args else None
     if layout_arg:
-        # Resolve in this order: absolute, cwd-relative, bundled-with-package.
+        # Normalise: ensure a .json extension so "MyGui" and "MyGui.json"
+        # both resolve to the same file.
+        if not layout_arg.endswith(".json"):
+            layout_arg_ext = layout_arg + ".json"
+        else:
+            layout_arg_ext = layout_arg
+        # Resolve in this order: absolute, cwd-relative, bundled-with-package,
+        # bundled layouts dir, per-user config dir.
         pkg_dir = os.path.dirname(os.path.abspath(_theme_mod.__file__))
+        user_dir = os.path.expanduser("~/.bl_gui")
         candidates = [
-            layout_arg,
-            os.path.join(os.getcwd(), layout_arg),
-            os.path.join(pkg_dir, layout_arg),
-            os.path.join(pkg_dir, "layouts", layout_arg),
+            layout_arg_ext,
+            os.path.join(os.getcwd(), layout_arg_ext),
+            os.path.join(pkg_dir, layout_arg_ext),
+            os.path.join(pkg_dir, "layouts", layout_arg_ext),
+            os.path.join(user_dir, layout_arg_ext),
         ]
         chosen = next((c for c in candidates if os.path.isfile(c)), None)
         if chosen is None:
-            print(f"[ERROR] layout file not found: {layout_arg}")
-            print("Tried:\n  " + "\n  ".join(candidates))
-            sys.exit(2)
+            # Layout doesn't exist yet — treat it as a NEW layout the
+            # user wants to build from scratch. Point the save path at
+            # ~/.bl_gui/<name>.json so the first save creates it, and
+            # start bl_gui with the bundled defaults so there's a
+            # canvas to work on (user can delete panels for a truly
+            # blank slate).
+            try:
+                os.makedirs(user_dir, exist_ok=True)
+            except Exception:
+                pass
+            chosen = os.path.join(user_dir, layout_arg_ext)
+            print(f"[CONFIG] new layout '{layout_arg_ext}' — will be "
+                  f"created on first save at {chosen}")
+            _blank_layout = True
+        else:
+            _blank_layout = False
         _theme_mod._LAY = os.path.abspath(chosen)
-        print(f"[CONFIG] using layout: {_theme_mod._LAY}")
+        print(f"[CONFIG] using layout: {_theme_mod._LAY}"
+              + ("  (BLANK — no default panels)" if _blank_layout else ""))
+    else:
+        _blank_layout = False
 
     # HiDPI scaling — makes the GUI adapt to the display DPI so text stays
     # readable when viewing across monitors of very different sizes.
@@ -2478,6 +2588,6 @@ def main():
     _ui_font.setStyleHint(QtGui.QFont.SansSerif)
     app.setFont(_ui_font)
     _press_flash = _PressFlash(app); app.installEventFilter(_press_flash)
-    w = Win(allow_edit=allow_edit); w.show()
+    w = Win(allow_edit=allow_edit, blank=_blank_layout); w.show()
     app.aboutToQuit.connect(w.close)
     sys.exit(app.exec_())
