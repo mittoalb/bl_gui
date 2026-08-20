@@ -29,43 +29,11 @@ def _user_lay_path():
     return os.path.expanduser(f"~/.bl_gui/{bl_name}.json")
 
 
-def _polyfit_interp(pts, col_idx, e_eV_target):
-    """Fit a polynomial (degree auto-chosen up to 3) through the
-    (Energy, axis-value) pairs from the calibration table and evaluate
-    at ``e_eV_target``. Degree is clamped to ``len(points) - 1`` so we
-    never over-fit. Returns None if fewer than 2 usable points exist."""
-    try:
-        import numpy as _np
-    except Exception:
-        _np = None
-    es, vs = [], []
-    for row in pts:
-        if len(row) <= col_idx: continue
-        if row[0] is None or row[col_idx] is None: continue
-        es.append(float(row[0])); vs.append(float(row[col_idx]))
-    if len(es) < 2:
-        return None
-    if _np is None:
-        # Fallback to piecewise linear if numpy unavailable.
-        order = sorted(range(len(es)), key=lambda i: es[i])
-        es = [es[i] for i in order]; vs = [vs[i] for i in order]
-        if e_eV_target <= es[0]:
-            if len(es) < 2: return vs[0]
-            slope = (vs[1] - vs[0]) / (es[1] - es[0])
-            return vs[0] + slope * (e_eV_target - es[0])
-        if e_eV_target >= es[-1]:
-            slope = (vs[-1] - vs[-2]) / (es[-1] - es[-2])
-            return vs[-1] + slope * (e_eV_target - es[-1])
-        for i in range(1, len(es)):
-            if es[i] >= e_eV_target:
-                frac = (e_eV_target - es[i-1]) / (es[i] - es[i-1])
-                return vs[i-1] + frac * (vs[i] - vs[i-1])
-        return None
-    # Polynomial fit: deg = min(3, N-1). 2 points → linear, 3 → quad,
-    # 4+ → cubic. Using np.polyfit / np.polyval (no scipy dependency).
-    deg = min(3, len(es) - 1)
-    coeffs = _np.polyfit(es, vs, deg)
-    return float(_np.polyval(coeffs, e_eV_target))
+# Kept as a module-level name for anything that used to import
+# ``main_window._polyfit_interp``. The implementation now lives in
+# ``bl_gui.headless.calib`` so the CLI, the agent, and this GUI share
+# one copy of the polyfit + linear-fallback logic.
+from .headless.calib import _polyfit_interp  # noqa: E402
 
 
 def _lay_path():
@@ -2196,7 +2164,13 @@ class Win(QtWidgets.QMainWindow):
         """Linear-interpolate X/Y/Z/QG-V/QG-H at the current Energy SP
         from the ZP calibration table and caput the positions to each
         motor. Used when the EPICS cal-file PVs are empty: bl_gui acts
-        as the calibration authority instead of the IOC."""
+        as the calibration authority instead of the IOC.
+
+        The compute+caput core lives in ``bl_gui.headless.calib`` so
+        the CLI and the AI agent share it. This method stays thin: it
+        reads the widget SP, refreshes the regime, delegates, then
+        prints one line per motor in the historical ``[ENERGY]``
+        format so anything grepping the log keeps working."""
         self._refresh_regime()
         sp = None
         for slot in self._pv_fields.values():
@@ -2211,60 +2185,37 @@ class Win(QtWidgets.QMainWindow):
         except (ValueError, AttributeError):
             print("[ENERGY] energy setpoint not numeric; aborting")
             return
-        e_eV = e_keV * 1000.0
 
-        from .beamlines.bl32id import xanes_calib
-        cfg = xanes_calib.load_config()
-        pts = [p for p in (cfg.get("points") or []) if p and p[0] is not None]
-        motors = cfg.get("motors") or []
-        print(f"[ENERGY] plugin config: {len(pts)} cal rows; "
-              f"{len(motors)} motors, "
-              f"{sum(1 for m in motors if m.get('include', True))} included")
-        if len(pts) < 2:
-            print(f"[ENERGY] only {len(pts)} cal point(s) — need >= 2")
-            return
+        from .headless.calib import move_motors_to_energy
+        # ``_nano_mode`` is refreshed above; when False (micro), the
+        # helper will skip ZP X/Y motors identically to the previous
+        # inline logic. Passing respect_regime=True is what preserves
+        # that behaviour — the helper reads regime.is_nano() itself.
+        rows = move_motors_to_energy(e_keV, dry_run=False,
+                                     respect_regime=True)
 
-        def _interp(col_idx):
-            return _polyfit_interp(pts, col_idx, e_eV)
-
-        # Iterate the motors list from the config. Column index is
-        # motors index + 1 (column 0 is Energy).
-        for i, m in enumerate(motors):
-            name    = m.get("label") or f"m{i+1}"
-            col     = i + 1
-            target_pv = (m.get("pv") or "").strip()
-            include = bool(m.get("include", True))
-            # Include=false → user opted this motor out entirely.
-            if not include:
-                print(f"[ENERGY] {name}: skipping (Include=off)")
-                continue
-            # Micro-regime auto-skip: motors labelled ZP X / ZP Y are
-            # frozen when the ZP is parked out. Label-based (case-
-            # insensitive substring) so renames or adding new ZP motors
-            # still work.
-            lbl = name.lower()
-            is_zp_xy = ("zp x" in lbl) or ("zp y" in lbl)
-            if is_zp_xy and not self._nano_mode:
-                print(f"[ENERGY] {name}: skipping (MICRO regime — ZP X/Y frozen)")
-                continue
-            if not target_pv:
-                print(f"[ENERGY] {name}: no PV configured, skipping")
-                continue
-            v = _interp(col)
-            if v is None:
-                print(f"[ENERGY] {name}: no cal data for column {col}, skipping")
-                continue
-            try:
-                r = subprocess.run(["caput", target_pv, f"{float(v):.6f}"],
-                                   capture_output=True, timeout=5.0, text=True)
-                if r.returncode == 0:
-                    print(f"[ENERGY] {name} @ {e_keV:g} keV -> {v:.6f}  "
-                          f"caput {target_pv} OK  stdout={r.stdout.strip()!r}")
+        for r in rows:
+            name, pv = r["label"], r["pv"]
+            if r["status"] == "skip":
+                # Match legacy phrasing so log-scrapers keep matching.
+                if "MICRO" in r["reason"]:
+                    print(f"[ENERGY] {name}: skipping "
+                          f"(MICRO regime — ZP X/Y frozen)")
+                elif "Include=off" in r["reason"]:
+                    print(f"[ENERGY] {name}: skipping (Include=off)")
                 else:
-                    print(f"[ENERGY] {name} caput {target_pv} rc={r.returncode} "
-                          f"stderr={r.stderr.strip()!r}")
-            except Exception as ex:
-                print(f"[ENERGY] {name} caput {target_pv} EXC: {ex}")
+                    print(f"[ENERGY] {name}: skipping ({r['reason']})")
+            elif r["status"] == "error":
+                print(f"[ENERGY] {name}: {r['reason']}, skipping")
+            elif r["status"] == "ok":
+                print(f"[ENERGY] {name} @ {e_keV:g} keV -> {r['target']:.6f}  "
+                      f"caput {pv} OK")
+            elif r["status"] == "caput_failed":
+                print(f"[ENERGY] {name} caput {pv} FAILED "
+                      f"(target={r['target']:.6f})")
+            else:
+                print(f"[ENERGY] {name} status={r['status']} "
+                      f"target={r['target']}  reason={r['reason']}")
 
     def _on_cal_range_changed(self, value):
         """Persist the ± energy range into the calibration config JSON as

@@ -17,6 +17,7 @@ dependencies = [
 
 [project.scripts]
 bl_gui = "bl_gui.main_window:main"
+bl-cli = "bl_gui.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
