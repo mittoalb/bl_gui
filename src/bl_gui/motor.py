@@ -30,10 +30,29 @@ class MC(QtWidgets.QFrame):
         self._movn = "0"; self._dmov = "0"; self._hls = "0"; self._lls = "0"; self._lvio = "0"
         self.setMinimumWidth(100); self.setMinimumHeight(140)
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        self.setStyleSheet("MC{background:#2e2e2e;border:1px solid #484848;border-radius:3px;}")
+        self._ss_idle = "MC{background:#2e2e2e;border:1px solid #484848;border-radius:3px;}"
+        self._ss_flash = "MC{background:#f39c12;border:2px solid #f1c40f;border-radius:3px;}"
+        self.setStyleSheet(self._ss_idle)
+        self._flash_on = False
+        self._flash_timer = QtCore.QTimer(self)
+        self._flash_timer.setInterval(400)
+        self._flash_timer.timeout.connect(self._toggle_flash)
         L = QtWidgets.QVBoxLayout(self); L.setContentsMargins(3, 3, 3, 2); L.setSpacing(2)
+        # Header row: description label + small "…" button that opens
+        # the motor details dialog. The button is a tiny fixed-size
+        # gutter next to the blue desc so it doesn't crowd the card;
+        # the double-click on the label still works as a fallback.
+        desc_row = QtWidgets.QHBoxLayout()
+        desc_row.setContentsMargins(0, 0, 0, 0); desc_row.setSpacing(2)
         self.desc = QtWidgets.QLabel(label); self.desc.setAlignment(QtCore.Qt.AlignCenter)
-        self.desc.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred); L.addWidget(self.desc)
+        self.desc.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        desc_row.addWidget(self.desc, 1)
+        self.btn_details = QtWidgets.QPushButton("…")
+        self.btn_details.setFixedSize(18, 18)
+        self.btn_details.setToolTip("Open motor details")
+        self.btn_details.clicked.connect(self._open_debug)
+        desc_row.addWidget(self.btn_details, 0)
+        L.addLayout(desc_row)
         self.egu = QtWidgets.QLabel(""); self.egu.setAlignment(QtCore.Qt.AlignCenter)
         self.egu.setStyleSheet("color:#888; font:7pt;"); self.egu.setFixedHeight(12); L.addWidget(self.egu)
         self.rbv = QtWidgets.QLabel("---"); self.rbv.setAlignment(QtCore.Qt.AlignCenter)
@@ -41,7 +60,12 @@ class MC(QtWidgets.QFrame):
         self.val = QtWidgets.QLineEdit(); self.val.setAlignment(QtCore.Qt.AlignCenter)
         self.val.setPlaceholderText("go to")
         self.val.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        self.val.returnPressed.connect(lambda: caput_bg(f"{self.pv}.VAL", self.val.text())); L.addWidget(self.val)
+        # Dirty highlight: blue while typing an un-committed value, back
+        # to plain once the user presses Enter (which caputs to .VAL).
+        self._val_dirty = False
+        self.val.returnPressed.connect(self._on_val_return)
+        self.val.textEdited.connect(self._on_val_edited)
+        L.addWidget(self.val)
         tw = QtWidgets.QHBoxLayout(); tw.setSpacing(2); tw.setContentsMargins(0, 0, 0, 0)
         self.btn_twr = QtWidgets.QPushButton("\u25C0")
         self.btn_twr.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
@@ -49,16 +73,36 @@ class MC(QtWidgets.QFrame):
         self.twv = QtWidgets.QLineEdit(""); self.twv.setAlignment(QtCore.Qt.AlignCenter)
         self.twv.setPlaceholderText("step")
         self.twv.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        self.twv.returnPressed.connect(self._on_twv_return); tw.addWidget(self.twv)
+        self._twv_dirty = False
+        self.twv.returnPressed.connect(self._on_twv_return)
+        self.twv.textEdited.connect(self._on_twv_edited)
+        tw.addWidget(self.twv)
+        # Live-mirror <pv>.TWV so what's in the box is always what the
+        # tweak buttons will actually move by. When EPICS TWV is 0 on
+        # first read, seed it to 1% of |RBV| so users see a sane
+        # starting value instead of an empty field.
+        self._epics_twv = None
+        self._twv_defaulted = False
         self.btn_twf = QtWidgets.QPushButton("\u25B6")
         self.btn_twf.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         self.btn_twf.clicked.connect(lambda: caput_bg(f"{self.pv}.TWF", 1)); tw.addWidget(self.btn_twf)
         L.addLayout(tw)
         self.stat = QtWidgets.QLabel(""); self.stat.setAlignment(QtCore.Qt.AlignCenter)
         self.stat.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred); L.addWidget(self.stat)
+        # STOP + SET on one row. SET opens a dialog that writes .SET=1,
+        # .VAL=new, .SET=0 so the position is redefined without moving the
+        # motor (same as EPICS medm's 'Set' mode).
+        sr = QtWidgets.QHBoxLayout(); sr.setSpacing(2); sr.setContentsMargins(0, 0, 0, 0)
         self.btn_stop = QtWidgets.QPushButton("STOP")
         self.btn_stop.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        self.btn_stop.clicked.connect(lambda: caput_bg(f"{self.pv}.STOP", 1)); L.addWidget(self.btn_stop)
+        self.btn_stop.clicked.connect(lambda: caput_bg(f"{self.pv}.STOP", 1))
+        sr.addWidget(self.btn_stop, 3)
+        self.btn_set = QtWidgets.QPushButton("SET")
+        self.btn_set.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.btn_set.setFixedWidth(max(36, _fs(40)))
+        self.btn_set.clicked.connect(self._on_set_position)
+        sr.addWidget(self.btn_set, 1)
+        L.addLayout(sr)
         # Enable / Disable toggle (uses APS _able PV convention)
         self._enabled = True
         self.btn_able = QtWidgets.QPushButton("Enabled")
@@ -68,15 +112,46 @@ class MC(QtWidgets.QFrame):
         self.lim = QtWidgets.QFrame(); self.lim.setFixedHeight(3); self.lim.setStyleSheet("background:#404040;"); L.addWidget(self.lim)
         self._apply_fonts()
 
+    def _on_val_return(self):
+        caput_bg(f"{self.pv}.VAL", self.val.text())
+        # The value has been committed to the IOC; drop the dirty flag
+        # so the field returns to its normal colour.
+        self._val_dirty = False
+        self._apply_fonts()
+
+    def _on_val_edited(self, _=None):
+        # First keystroke flips to dirty; subsequent ones are no-ops
+        # because _apply_fonts only runs when the state actually changes.
+        if not self._val_dirty:
+            self._val_dirty = True
+            self._apply_fonts()
+
     def _on_twv_return(self):
-        # Push the new step to the IOC *and* persist it to the layout file
-        # right now, so the value survives even if the GUI is killed hard
-        # (no clean closeEvent).
+        # Push the new step to the IOC. Do NOT touch the layout file — any
+        # layout save must be triggered explicitly by the user so we don't
+        # stomp on hand-edited bl32id.json.
         caput_bg(f"{self.pv}.TWV", self.twv.text())
-        win = self.window()
-        if win is not None and hasattr(win, "_save_layout"):
-            try: win._save_layout()
-            except Exception as e: print(f"[TWV] save failed: {e}")
+        self._twv_dirty = False
+        self._apply_fonts()
+
+    def _on_twv_edited(self, _=None):
+        if not self._twv_dirty:
+            self._twv_dirty = True
+            self._apply_fonts()
+
+    def _on_set_position(self):
+        """Redefine position via EPICS .SET=1 → .VAL → .SET=0."""
+        try: current = float(self.rbv.text())
+        except (ValueError, TypeError): current = 0.0
+        new_val, ok = QtWidgets.QInputDialog.getDouble(
+            self, f"SET — {self._label}", "New position:",
+            current, -1e9, 1e9, 6)
+        if not ok:
+            return
+        caput_bg(f"{self.pv}.SET", 1)
+        QtCore.QTimer.singleShot(200, lambda p=self.pv, v=new_val: caput_bg(f"{p}.VAL", v))
+        QtCore.QTimer.singleShot(700, lambda p=self.pv: caput_bg(f"{p}.SET", 0))
+        print(f"[SET] {self.pv} -> {new_val}")
 
     def _toggle_enable(self):
         # Flip state locally and write to <pv>_able (APS convention: 0=Enable, 1=Disable)
@@ -99,14 +174,42 @@ class MC(QtWidgets.QFrame):
             )
 
     def _apply_fonts(self):
-        sd=_fs(9); sr=_fs(12); sv=_fs(10); st=_fs(8); sb=_fs(8); stw=_fs(8)
+        sd=_fs(9); sr=_fs(12); sv=_fs(10); st=_fs(9); sb=_fs(8); stw=_fs(9)
+        seg=_fs(8)
         self.desc.setStyleSheet(f"background:#1e5a8e;color:#fff;font:bold {sd}pt;padding:2px;border-radius:2px;")
-        self.rbv.setStyleSheet(f"background:#000000;color:#2ecc71;font:bold {sr}pt monospace;padding:3px;border:1px solid #333;border-radius:2px;")
-        self.val.setStyleSheet(f"font:{sv}pt;"); self.twv.setStyleSheet(f"font:{st}pt;")
+        self.btn_details.setStyleSheet(
+            f"QPushButton{{background:#2d2d2d;color:#e0e0e0;font:bold {sd}pt;"
+            "border:1px solid #404040;border-radius:2px;padding:0px;}}"
+            "QPushButton:hover{background:#3a3a3a;}"
+        )
+        self.rbv.setStyleSheet(f"background:#000000;color:#2ecc71;font:bold {sr}pt 'Liberation Mono','DejaVu Sans Mono',monospace;padding:3px;border:1px solid #333;border-radius:2px;")
+        # Dirty (un-committed edit) uses a blue background + amber border
+        # so it's obvious you still owe an Enter. Clean is just the normal
+        # font override the app-level theme sets.
+        _dirty_ss = (
+            "QLineEdit{{background:#2980b9;color:#fff;padding:2px 5px;"
+            "border:1px solid #f39c12;border-radius:3px;"
+            "font:bold {pt}pt 'Liberation Mono','DejaVu Sans Mono',monospace;}}"
+            "QLineEdit:focus{{background:#3498db;border:1px solid #f1c40f;}}"
+        )
+        if getattr(self, "_val_dirty", False):
+            self.val.setStyleSheet(_dirty_ss.format(pt=sv))
+        else:
+            self.val.setStyleSheet(f"font:{sv}pt;")
+        if getattr(self, "_twv_dirty", False):
+            self.twv.setStyleSheet(_dirty_ss.format(pt=st))
+        else:
+            self.twv.setStyleSheet(f"font:bold {st}pt;")
+        # Units label (egu) — now scales with the font slider too.
+        self.egu.setStyleSheet(f"color:#888;font:{seg}pt;")
+        self.egu.setFixedHeight(max(12, seg + 4))
         self.btn_twr.setStyleSheet(f"font:{stw}pt;padding:0 2px;"); self.btn_twf.setStyleSheet(f"font:{stw}pt;padding:0 2px;")
         self.btn_twr.setFixedWidth(max(18, _fs(18))); self.btn_twf.setFixedWidth(max(18, _fs(18)))
         self.stat.setStyleSheet(f"font:{_fs(8)}pt;")
         self.btn_stop.setStyleSheet(f"background:#c0392b;color:#fff;font:bold {sb}pt;padding:1px;border:1px solid #e74c3c;border-radius:2px;")
+        self.btn_set.setStyleSheet(
+            f"background:#f39c12;color:#000;font:bold {sb}pt;"
+            "padding:1px;border:1px solid #f1c40f;border-radius:2px;")
         # Refresh the enable/disable button colour + font
         self.set_enabled(self._enabled)
 
@@ -114,14 +217,52 @@ class MC(QtWidgets.QFrame):
         self._apply_fonts()
 
     def get_pvs(self):
-        base = [f"{self.pv}.{f}" for f in ("RBV","DMOV","MOVN","DESC","EGU","HLS","LLS","LVIO")]
+        base = [f"{self.pv}.{f}" for f in ("RBV","DMOV","MOVN","DESC","EGU","HLS","LLS","LVIO","TWV")]
         base.append(f"{self.pv}_able")
         return base
 
+    def _maybe_default_twv(self, rbv=None):
+        """One-shot seed of <pv>.TWV to 1% of |RBV| if EPICS reports TWV
+        is currently 0. Skipped if EPICS already has a step, if we've
+        already seeded once, or if we don't yet know either value."""
+        if self._twv_defaulted:
+            return
+        if self._epics_twv is None:
+            return
+        if self._epics_twv != 0.0:
+            self._twv_defaulted = True
+            return
+        if rbv is None:
+            try:
+                rbv = float(self.rbv.text())
+            except (ValueError, TypeError):
+                return
+        if rbv == 0.0:
+            return
+        step = abs(rbv) * 0.01
+        caput_bg(f"{self.pv}.TWV", f"{step:.6g}")
+        self._twv_defaulted = True
+
     def apply_one(self, field, value):
         if field == "RBV":
-            try: self.rbv.setText(f"{float(value):.4f}")
-            except (ValueError, TypeError): self.rbv.setText(str(value))
+            try:
+                rbv = float(value)
+                self.rbv.setText(f"{rbv:.4f}")
+            except (ValueError, TypeError):
+                self.rbv.setText(str(value))
+                rbv = None
+            self._maybe_default_twv(rbv=rbv)
+        elif field == "TWV":
+            try:
+                tv = float(value)
+            except (ValueError, TypeError):
+                return
+            self._epics_twv = tv
+            # Live-update the display, but don't clobber whatever the user
+            # is currently typing.
+            if not self.twv.hasFocus():
+                self.twv.setText(f"{tv:.6g}" if tv != 0 else "")
+            self._maybe_default_twv()
         elif field == "DESC":
             if not self._custom_label:
                 self.desc.setText(value)
@@ -136,12 +277,23 @@ class MC(QtWidgets.QFrame):
 
     def _update_status(self):
         ss = _fs(8)
-        if self._movn in ("1", "1.0"):
+        moving = self._movn in ("1", "1.0")
+        if moving:
             self.stat.setText("Moving"); self.stat.setStyleSheet(f"font:bold {ss}pt;color:#e74c3c;")
+            if not self._flash_timer.isActive():
+                self._flash_timer.start()
         elif self._dmov in ("1", "1.0"):
             self.stat.setText("Done"); self.stat.setStyleSheet(f"font:{ss}pt;color:#2ecc71;")
         else:
             self.stat.setText(""); self.stat.setStyleSheet(f"font:{ss}pt;")
+        if not moving and self._flash_timer.isActive():
+            self._flash_timer.stop()
+            self._flash_on = False
+            self.setStyleSheet(self._ss_idle)
+
+    def _toggle_flash(self):
+        self._flash_on = not self._flash_on
+        self.setStyleSheet(self._ss_flash if self._flash_on else self._ss_idle)
 
     def set_edit_mode(self, on):
         """Called by the owning Panel to enable/disable per-motor editing."""
@@ -153,6 +305,12 @@ class MC(QtWidgets.QFrame):
         menu = QtWidgets.QMenu(self)
         menu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;}"
                            "QMenu::item:selected{background:#1e5a8e;}")
+        if self.pv:
+            act = menu.addAction(f"Copy PV: {self.pv}")
+            act.triggered.connect(
+                lambda _=False, p=self.pv:
+                    QtWidgets.QApplication.clipboard().setText(p))
+            menu.addSeparator()
         menu.addAction("Motor Details...", self._open_debug)
         if self._panel_edit_mode:
             from .widgets import _edit_widget, _duplicate_widget, _change_font_size, _delete_widget
@@ -175,11 +333,6 @@ class MC(QtWidgets.QFrame):
         win = self.window()
         if w is not None and hasattr(win, "add_pv_row_dialog"):
             win.add_pv_row_dialog(w)
-
-    def mouseDoubleClickEvent(self, e):
-        """Double-click anywhere on the card opens the full motor details dialog."""
-        self._open_debug()
-        super().mouseDoubleClickEvent(e)
 
     def _open_debug(self):
         from .motor_debug import MotorDetailsDialog
@@ -214,7 +367,7 @@ _DEFAULT_TABS = ["User Mode", "Expert Mode"]
 
 def _rb():
     lbl = QtWidgets.QLabel("---")
-    lbl.setStyleSheet("color:#2ecc71;font:bold 10pt monospace;")
+    lbl.setStyleSheet("color:#2ecc71;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;")
     return lbl
 
 

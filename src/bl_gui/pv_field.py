@@ -13,8 +13,61 @@ three PVs and participates in the same save/load machinery.
 Right-click (in panel edit mode) exposes 'Edit PV...' so each field's PV
 can be reassigned at runtime and saved with the layout.
 """
+import subprocess
+
 from PyQt5 import QtCore, QtWidgets
 from .pv import caput_bg
+
+
+# ── Setpoint field styles ───────────────────────────────────────────────
+# Clean = the field's value matches what the IOC has (nothing pending).
+# Dirty = user has typed a value that hasn't been caput yet. The colour
+# swap is the visual reminder that Enter is still required — the display
+# no longer tells the truth about the PV until the user commits.
+_SP_STYLE_CLEAN = (
+    "QLineEdit{background:#2c3e50;color:#ecf0f1;"
+    "border:1px solid #3498db;border-radius:3px;"
+    "padding:4px 6px;font:10pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+    "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}"
+)
+_SP_STYLE_DIRTY = (
+    "QLineEdit{background:#2980b9;color:#fff;"
+    "border:1px solid #f39c12;border-radius:3px;"
+    "padding:4px 6px;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+    "QLineEdit:focus{background:#3498db;border:1px solid #f1c40f;}"
+)
+
+
+def _sp_values_equal(a, b):
+    """Compare two setpoint value strings, tolerating numeric formatting
+    differences (\"5\" vs \"5.000000\") that show up when the IOC echoes
+    a caput back with its own precision."""
+    a = "" if a is None else str(a).strip()
+    b = "" if b is None else str(b).strip()
+    if a == b:
+        return True
+    try:
+        return float(a) == float(b)
+    except (ValueError, TypeError):
+        return False
+
+
+def _copy_to_clipboard(text):
+    if text:
+        QtWidgets.QApplication.clipboard().setText(text)
+
+
+def _add_copy_pv_entries(menu, items):
+    """Append `Copy PV: <name>` entries for each (label, pv) tuple where pv
+    is non-empty. Returns True if any entry was added."""
+    any_added = False
+    for label, pv in items:
+        if not pv:
+            continue
+        act = menu.addAction(f"Copy {label}: {pv}")
+        act.triggered.connect(lambda _=False, p=pv: _copy_to_clipboard(p))
+        any_added = True
+    return any_added
 
 
 class PVField(QtWidgets.QWidget):
@@ -54,12 +107,20 @@ class PVField(QtWidgets.QWidget):
 
         if self.kind == 'sp':
             w = QtWidgets.QLineEdit()
+            # Distinct bluish background so editable fields are obviously
+            # different from read-only readbacks / labels. Switches to the
+            # DIRTY style whenever the typed text stops matching the PV.
+            w.setStyleSheet(_SP_STYLE_CLEAN)
             if self._placeholder:
                 w.setPlaceholderText(self._placeholder)
             w.returnPressed.connect(self._on_sp_return)
+            # textEdited fires on user keystrokes only (not on our own
+            # setText during PV echoes), so it's the right hook to detect
+            # a pending edit without recursing on our own updates.
+            w.textEdited.connect(lambda _=None: self._update_sp_dirty())
         elif self.kind == 'rb':
             w = QtWidgets.QLabel("---")
-            w.setStyleSheet("color:#2ecc71;font:bold 10pt monospace;")
+            w.setStyleSheet("color:#2ecc71;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;")
         elif self.kind == 'cmb':
             w = QtWidgets.QComboBox()
             if self._choices:
@@ -107,11 +168,32 @@ class PVField(QtWidgets.QWidget):
     # ── Signals to PV ────────────────────────────────────────────────
     def _on_sp_return(self):
         if self.pv:
-            caput_bg(self.pv, self._inner.text())
+            val = self._inner.text()
+            print(f"[SP] {self.field_id}: caput {self.pv} {val!r}")
+            caput_bg(self.pv, val)
+
+    def _update_sp_dirty(self):
+        """Colour the setpoint field so it's obvious when what you see
+        doesn't match what the PV actually has (i.e. you typed but
+        haven't hit Enter). Clears itself as soon as the IOC echoes
+        your commit back."""
+        if self.kind != 'sp' or self._inner is None:
+            return
+        pv_val = getattr(self, '_pv_value', None)
+        dirty = (pv_val is not None
+                 and not _sp_values_equal(self._inner.text(), pv_val))
+        if getattr(self, '_sp_dirty', None) == dirty:
+            return
+        self._sp_dirty = dirty
+        self._inner.setStyleSheet(_SP_STYLE_DIRTY if dirty else _SP_STYLE_CLEAN)
 
     def _on_cmb_changed(self, idx):
         if self.pv and idx >= 0:
-            caput_bg(self.pv, idx)
+            # caput the label, not the local index. Local index depends on
+            # the order we listed choices in; sending the string lets the
+            # IOC (mbbo / bo with ZRST/ONAM etc.) resolve it correctly
+            # regardless of how the choices are ordered in the GUI.
+            caput_bg(self.pv, self._inner.currentText())
 
     def _on_btn_clicked(self):
         if self.pv and self._button_value is not None:
@@ -159,10 +241,24 @@ class PVField(QtWidgets.QWidget):
             finally:
                 self._inner.blockSignals(False)
         elif self.kind == 'sp':
+            # Apply the field's fmt (if given) so IOC echoes like
+            # "6.9999999999" show as "7.000" instead of the raw float.
+            # Dirty-check comparison is numeric so the formatted string
+            # still matches whatever the user typed.
+            text = str(value)
+            if self._fmt:
+                try:
+                    text = format(float(value), self._fmt)
+                except (ValueError, TypeError):
+                    pass
+            # Remember the actual PV value regardless of focus so the
+            # dirty check compares against ground truth, not stale state.
+            self._pv_value = text
             if not self._inner.hasFocus():
                 self._inner.blockSignals(True)
-                self._inner.setText(str(value))
+                self._inner.setText(text)
                 self._inner.blockSignals(False)
+            self._update_sp_dirty()
         elif self.kind == 'led':
             v = str(value).strip().lower()
             on = False
@@ -198,15 +294,20 @@ class PVField(QtWidgets.QWidget):
         self._edit_mode = bool(on)
 
     def contextMenuEvent(self, e):
-        if not self._edit_mode:
-            return super().contextMenuEvent(e)
         menu = QtWidgets.QMenu(self)
         menu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;}"
                            "QMenu::item:selected{background:#1e5a8e;}")
-        menu.addAction("Edit PV...", self._edit_pv_dialog)
-        menu.addAction("Delete Row", self._delete_row)
-        menu.addSeparator()
-        menu.addAction("Add PV Row here...", self._add_row_here)
+        items = [("PV", self.pv), ("on PV", self.on_pv), ("off PV", self.off_pv)]
+        added = _add_copy_pv_entries(menu, items)
+        if self._edit_mode:
+            if added:
+                menu.addSeparator()
+            menu.addAction("Edit PV...", self._edit_pv_dialog)
+            menu.addAction("Delete Row", self._delete_row)
+            menu.addSeparator()
+            menu.addAction("Add PV Row here...", self._add_row_here)
+        if menu.isEmpty():
+            return super().contextMenuEvent(e)
         menu.exec_(e.globalPos())
         e.accept()
 
@@ -285,7 +386,10 @@ class ValveField(QtWidgets.QWidget):
 
     def __init__(self, status_pv, on_pv, off_pv, field_id,
                  label_text="", on_text="On", off_text="Off",
-                 pulse=True, parent=None):
+                 status_on_text=None, status_off_text=None,
+                 on_value=1, off_value=1,
+                 pulse=True, btn_width=38, invert_status=False,
+                 vertical=False, highlight_buttons=False, parent=None):
         super().__init__(parent)
         self.field_id = field_id
         self.status_pv = (status_pv or "").strip()
@@ -297,6 +401,66 @@ class ValveField(QtWidgets.QWidget):
         # .PROC fields and level-driven controls (like uniblitz) want a
         # single write and must not be pulsed. Off by default for shutters.
         self._pulse = bool(pulse)
+        # Shutter CLSD_PL records use 1=closed / 0=open (inverse of the
+        # valve on/off convention). invert_status flips the interpretation.
+        self._invert_status = bool(invert_status)
+        # Labels shown on the status indicator (default ON/OFF; shutters
+        # want OPEN/CLOSED).
+        self._status_on_text = status_on_text or "ON"
+        self._status_off_text = status_off_text or "OFF"
+        # Values written by the on/off buttons. Default 1/1 matches the
+        # traditional "two-trigger" pattern (separate on/off PVs, each
+        # triggered with a 1). For a single-PV toggle (e.g. Uniblitz), set
+        # on_value=1, off_value=0.
+        self._on_value = on_value
+        self._off_value = off_value
+        # Highlight-mode: hide the status label and instead render the
+        # "active" button brightly / the inactive one dim. Useful for a
+        # Run/Stop pair where we want to see at a glance which state is
+        # current without a separate label.
+        self._highlight_buttons = bool(highlight_buttons)
+
+        if vertical:
+            # Column layout: name on top, status below, Open/Close buttons
+            # side-by-side at the bottom. Used by the shutter panel.
+            L = QtWidgets.QVBoxLayout(self)
+            L.setContentsMargins(4, 4, 4, 4); L.setSpacing(4)
+
+            self.name_lbl = QtWidgets.QLabel(self.label_text)
+            self.name_lbl.setAlignment(QtCore.Qt.AlignCenter)
+            self.name_lbl.setStyleSheet("font:bold 10pt;color:#73dfff;padding:2px;")
+            L.addWidget(self.name_lbl)
+
+            self.status_lbl = QtWidgets.QLabel("---")
+            self.status_lbl.setAlignment(QtCore.Qt.AlignCenter)
+            self.status_lbl.setStyleSheet(
+                "background:#404040;color:#e0e0e0;font:bold 11pt;"
+                "border:1px solid #606060;border-radius:3px;padding:4px;")
+            self.status_lbl.setMinimumHeight(28)
+            L.addWidget(self.status_lbl)
+
+            btn_row = QtWidgets.QHBoxLayout(); btn_row.setSpacing(4)
+            self.btn_on = QtWidgets.QPushButton(on_text)
+            self.btn_on.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
+                                      QtWidgets.QSizePolicy.Preferred)
+            self.btn_on.setMinimumHeight(32)
+            self.btn_on.setStyleSheet(
+                "background:#27ae60;color:#fff;font:bold 10pt;padding:4px;"
+                "border:1px solid #2ecc71;border-radius:3px;")
+            self.btn_on.clicked.connect(lambda: self._fire(self.on_pv, self._on_value))
+            btn_row.addWidget(self.btn_on)
+
+            self.btn_off = QtWidgets.QPushButton(off_text)
+            self.btn_off.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
+                                       QtWidgets.QSizePolicy.Preferred)
+            self.btn_off.setMinimumHeight(32)
+            self.btn_off.setStyleSheet(
+                "background:#c0392b;color:#fff;font:bold 10pt;padding:4px;"
+                "border:1px solid #e74c3c;border-radius:3px;")
+            self.btn_off.clicked.connect(lambda: self._fire(self.off_pv, self._off_value))
+            btn_row.addWidget(self.btn_off)
+            L.addLayout(btn_row)
+            return
 
         L = QtWidgets.QHBoxLayout(self)
         L.setContentsMargins(0, 0, 0, 0); L.setSpacing(4)
@@ -317,28 +481,33 @@ class ValveField(QtWidgets.QWidget):
         self.status_lbl.setMinimumWidth(50)
         L.addWidget(self.status_lbl, 1)
 
-        self.btn_on = QtWidgets.QPushButton(on_text); self.btn_on.setFixedWidth(38)
-        self.btn_on.setStyleSheet("background:#27ae60;color:#fff;font:8pt;padding:1px;")
-        self.btn_on.clicked.connect(lambda: self._fire(self.on_pv))
+        fs = 8 if btn_width <= 50 else 10
+        self.btn_on = QtWidgets.QPushButton(on_text); self.btn_on.setFixedWidth(btn_width)
+        self.btn_on.setStyleSheet(
+            f"background:#27ae60;color:#fff;font:bold {fs}pt;padding:4px;")
+        self.btn_on.clicked.connect(lambda: self._fire(self.on_pv, self._on_value))
         L.addWidget(self.btn_on)
 
-        self.btn_off = QtWidgets.QPushButton(off_text); self.btn_off.setFixedWidth(38)
-        self.btn_off.setStyleSheet("background:#c0392b;color:#fff;font:8pt;padding:1px;")
-        self.btn_off.clicked.connect(lambda: self._fire(self.off_pv))
+        self.btn_off = QtWidgets.QPushButton(off_text); self.btn_off.setFixedWidth(btn_width)
+        self.btn_off.setStyleSheet(
+            f"background:#c0392b;color:#fff;font:bold {fs}pt;padding:4px;")
+        self.btn_off.clicked.connect(lambda: self._fire(self.off_pv, self._off_value))
         L.addWidget(self.btn_off)
 
-    def _fire(self, pv):
+    def _fire(self, pv, value=1):
         if pv:
             if self._pulse:
-                print(f"[VALVE] {self.field_id}: fire -> {pv}  (pulse 1,0)")
-                caput_bg(pv, 1)
+                print(f"[VALVE] {self.field_id}: fire -> {pv}={value}  (pulse {value},0)")
+                caput_bg(pv, value)
                 QtCore.QTimer.singleShot(300, lambda p=pv: caput_bg(p, 0))
             else:
-                print(f"[VALVE] {self.field_id}: fire -> {pv}  (single 1)")
-                caput_bg(pv, 1)
-            if pv == self.on_pv:
+                print(f"[VALVE] {self.field_id}: fire -> {pv}={value}")
+                caput_bg(pv, value)
+            # The "going_on" intent is whichever button was clicked, even
+            # if on_pv == off_pv (single-PV toggles like Uniblitz).
+            if value == self._on_value and (pv == self.on_pv):
                 self._show_pending(True)
-            elif pv == self.off_pv:
+            elif value == self._off_value and (pv == self.off_pv):
                 self._show_pending(False)
 
     def _show_pending(self, going_on):
@@ -347,6 +516,36 @@ class ValveField(QtWidgets.QWidget):
             "background:#2980b9;color:#fff;font:bold 10pt;"
             "border:1px solid #3a95d8;border-radius:2px;padding:2px 6px;"
         )
+        # Safety net so we don't get stuck on "?" forever. Cases where the
+        # status monitor doesn't fire after a click:
+        #   - Edge-triggered PLC bit clicked in the same direction it was
+        #     already in → no state change → no monitor event.
+        #   - CA monitor subscription dropped that particular update.
+        # After 2s we force a caget and reflect whatever the PV really says.
+        if not hasattr(self, "_pending_timer"):
+            self._pending_timer = QtCore.QTimer(self)
+            self._pending_timer.setSingleShot(True)
+            self._pending_timer.timeout.connect(self._resync_status)
+        self._pending_timer.start(2000)
+
+    def _resync_status(self):
+        """Force-read the status PV via caget. Fallback for when the CA
+        monitor doesn't deliver an event after a caput."""
+        if not self.status_pv:
+            return
+        try:
+            r = subprocess.run(["caget", "-t", self.status_pv],
+                               capture_output=True, timeout=2.0, text=True)
+        except Exception as e:
+            print(f"[VALVE] {self.field_id}: resync caget failed: {e}")
+            return
+        if r.returncode != 0:
+            print(f"[VALVE] {self.field_id}: resync caget rc={r.returncode} "
+                  f"stderr={r.stderr.strip()!r}")
+            return
+        v = r.stdout.strip()
+        if v:
+            self.update_value(v)
 
     # ── PV interface used by the window ──────────────────────────────
     def monitored_pvs(self):
@@ -354,25 +553,57 @@ class ValveField(QtWidgets.QWidget):
 
     def update_value(self, value):
         """Called by the window when the status PV fires."""
+        # A real monitor event arrived — cancel any pending resync so we
+        # don't do an unnecessary caget right after a legitimate update.
+        t = getattr(self, "_pending_timer", None)
+        if t is not None and t.isActive():
+            t.stop()
         v = str(value).strip()
         lv = v.lower()
         on = False
         try:
             on = float(v) != 0.0
         except (ValueError, TypeError):
-            on = lv in ("on", "open", "true", "high", "yes", "1")
+            on = lv in ("on", "open", "true", "high", "yes", "1",
+                        "run", "running", "active", "busy", "start",
+                        "started", "enable", "enabled",
+                        "acquire", "acquiring")
+        if self._invert_status:
+            on = not on
         print(f"[VALVE] {self.field_id}: status={value!r} -> {'ON' if on else 'OFF'}")
+        if self._highlight_buttons:
+            # Hide the status label; active button bright, inactive dim.
+            self.status_lbl.hide()
+            active_on = (
+                "background:#27ae60;color:#fff;font:bold 10pt;padding:4px;"
+                "border:2px solid #2ecc71;border-radius:3px;")
+            inactive_on = (
+                "background:#1e3d2a;color:#888;font:10pt;padding:4px;"
+                "border:1px solid #2c5e41;border-radius:3px;")
+            active_off = (
+                "background:#c0392b;color:#fff;font:bold 10pt;padding:4px;"
+                "border:2px solid #e74c3c;border-radius:3px;")
+            inactive_off = (
+                "background:#4a1b15;color:#888;font:10pt;padding:4px;"
+                "border:1px solid #7a2a22;border-radius:3px;")
+            if on:
+                self.btn_on.setStyleSheet(active_on)
+                self.btn_off.setStyleSheet(inactive_off)
+            else:
+                self.btn_on.setStyleSheet(inactive_on)
+                self.btn_off.setStyleSheet(active_off)
+            return
         if on:
-            self.status_lbl.setText("ON")
+            self.status_lbl.setText(self._status_on_text)
             self.status_lbl.setStyleSheet(
-                "background:#27ae60;color:#fff;font:bold 10pt;"
-                "border:1px solid #2ecc71;border-radius:2px;padding:2px 6px;"
+                "background:#27ae60;color:#fff;font:bold 11pt;"
+                "border:1px solid #2ecc71;border-radius:3px;padding:4px;"
             )
         else:
-            self.status_lbl.setText("OFF")
+            self.status_lbl.setText(self._status_off_text)
             self.status_lbl.setStyleSheet(
-                "background:#c0392b;color:#fff;font:bold 10pt;"
-                "border:1px solid #e74c3c;border-radius:2px;padding:2px 6px;"
+                "background:#c0392b;color:#fff;font:bold 11pt;"
+                "border:1px solid #e74c3c;border-radius:3px;padding:4px;"
             )
 
     # ── Save / load support ──────────────────────────────────────────
@@ -390,31 +621,40 @@ class ValveField(QtWidgets.QWidget):
         }
 
     def set_pvs_dict(self, d):
+        # Accept legacy toggle-style keys (open/close/open_text/close_text)
+        # so shutter rows saved before ValveField unification still load.
         self.status_pv = (d.get("status") or "").strip()
-        self.on_pv = (d.get("on") or "").strip()
-        self.off_pv = (d.get("off") or "").strip()
+        self.on_pv = (d.get("on") or d.get("open") or "").strip()
+        self.off_pv = (d.get("off") or d.get("close") or "").strip()
         if "label" in d:
             self.label_text = d["label"] or ""
             self.name_lbl.setText(self.label_text)
-        if "on_text" in d and d["on_text"]:
-            self.btn_on.setText(d["on_text"])
-        if "off_text" in d and d["off_text"]:
-            self.btn_off.setText(d["off_text"])
+        t_on = d.get("on_text") or d.get("open_text")
+        if t_on: self.btn_on.setText(t_on)
+        t_off = d.get("off_text") or d.get("close_text")
+        if t_off: self.btn_off.setText(t_off)
 
     # ── Edit mode (right-click to change all 3 PVs) ──────────────────
     def set_edit_mode(self, on):
         self._edit_mode = bool(on)
 
     def contextMenuEvent(self, e):
-        if not self._edit_mode:
-            return super().contextMenuEvent(e)
         menu = QtWidgets.QMenu(self)
         menu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;}"
                            "QMenu::item:selected{background:#1e5a8e;}")
-        menu.addAction("Edit Valve PVs...", self._edit_pvs_dialog)
-        menu.addAction("Delete Row", self._delete_row)
-        menu.addSeparator()
-        menu.addAction("Add PV Row here...", self._add_row_here)
+        added = _add_copy_pv_entries(menu, [
+            ("status PV", self.status_pv),
+            ("on PV", self.on_pv),
+            ("off PV", self.off_pv),
+        ])
+        if self._edit_mode:
+            if added: menu.addSeparator()
+            menu.addAction("Edit Valve PVs...", self._edit_pvs_dialog)
+            menu.addAction("Delete Row", self._delete_row)
+            menu.addSeparator()
+            menu.addAction("Add PV Row here...", self._add_row_here)
+        if menu.isEmpty():
+            return super().contextMenuEvent(e)
         menu.exec_(e.globalPos())
         e.accept()
 
@@ -489,7 +729,9 @@ class ToggleField(QtWidgets.QWidget):
 
     def __init__(self, status_pv, open_pv, close_pv, field_id,
                  label_text="", open_text="Open", close_text="Close",
-                 open_value=1, close_value=1, parent=None):
+                 open_value=1, close_value=1,
+                 pulse=False, invert_status=False,
+                 state_label=False, parent=None):
         super().__init__(parent)
         self.field_id = field_id
         self.status_pv = (status_pv or "").strip()
@@ -502,6 +744,19 @@ class ToggleField(QtWidgets.QWidget):
         self._close_value = close_value
         self._is_open = False
         self._edit_mode = False
+        # Edge-triggered PLCs need a 1,0 pulse so the next click works; normal
+        # bi/bo records must not be pulsed (a 0 follow-up immediately reverses
+        # the action). Default off — enable explicitly for pulsed outputs.
+        self._pulse = bool(pulse)
+        # For records like CLSD_PL where 1=closed/0=open, the "state is on"
+        # interpretation is inverted. Shutter users set invert_status=True.
+        self._invert_status = bool(invert_status)
+        # state_label mode: button text is the CURRENT STATE (e.g. "YES" /
+        # "NO") rather than the action the click will perform. Colour still
+        # follows state (green=on, red=off). When state_label=False (default)
+        # the button reads like a shutter: it says "Close" when open, "Open"
+        # when closed — i.e. what clicking will do.
+        self._state_label = bool(state_label)
 
         L = QtWidgets.QVBoxLayout(self)
         L.setContentsMargins(2, 2, 2, 2); L.setSpacing(2)
@@ -521,70 +776,61 @@ class ToggleField(QtWidgets.QWidget):
     # ── Behaviour ────────────────────────────────────────────────────
     def _restyle(self):
         if self._is_open:
-            # Currently open → next click will close it.
-            self.btn.setText(self.close_text)
+            # State is ON. In state_label mode the text shows the on-state
+            # name (open_text); in action-label mode it shows what clicking
+            # does (close_text).
+            self.btn.setText(self.open_text if self._state_label else self.close_text)
+            bg = "#27ae60" if self._state_label else "#c0392b"
+            bd = "#2ecc71" if self._state_label else "#e74c3c"
             self.btn.setStyleSheet(
-                "background:#c0392b;color:#fff;font:bold 11pt;"
-                "border:1px solid #e74c3c;border-radius:3px;padding:4px;"
+                f"background:{bg};color:#fff;font:bold 11pt;"
+                f"border:1px solid {bd};border-radius:3px;padding:4px;"
             )
         else:
-            self.btn.setText(self.open_text)
+            self.btn.setText(self.close_text if self._state_label else self.open_text)
+            bg = "#c0392b" if self._state_label else "#27ae60"
+            bd = "#e74c3c" if self._state_label else "#2ecc71"
             self.btn.setStyleSheet(
-                "background:#27ae60;color:#fff;font:bold 11pt;"
-                "border:1px solid #2ecc71;border-radius:3px;padding:4px;"
+                f"background:{bg};color:#fff;font:bold 11pt;"
+                f"border:1px solid {bd};border-radius:3px;padding:4px;"
             )
 
     def _on_click(self):
         if self._is_open and self.close_pv:
-            print(f"[SHUTTER] {self.field_id}: fire -> {self.close_pv}  (pulse)")
-            self._pulse(self.close_pv, self._close_value)
-            self._show_pending("closing")
+            self._fire(self.close_pv, self._close_value)
         elif (not self._is_open) and self.open_pv:
-            print(f"[SHUTTER] {self.field_id}: fire -> {self.open_pv}  (pulse)")
-            self._pulse(self.open_pv, self._open_value)
-            self._show_pending("opening")
+            self._fire(self.open_pv, self._open_value)
 
-    def _pulse(self, pv, val):
-        # Write the trigger value then clear to 0 after 300 ms. Trigger bits
-        # on edge-triggered PLCs latch — without the clear, the next click
-        # does nothing.
+    def _fire(self, pv, val):
+        print(f"[TOGGLE] {self.field_id}: caput {pv} {val}")
         caput_bg(pv, val)
-        QtCore.QTimer.singleShot(300, lambda p=pv: caput_bg(p, 0))
-
-    def _show_pending(self, label):
-        # Immediate visual feedback — the button turns blue with a '...'
-        # marker until the status PV confirms the real state.
-        self.btn.setText(f"{label}...")
-        self.btn.setStyleSheet(
-            "background:#2980b9;color:#fff;font:bold 11pt;"
-            "border:1px solid #3a95d8;border-radius:3px;padding:4px;"
-        )
+        if self._pulse:
+            QtCore.QTimer.singleShot(300, lambda p=pv: caput_bg(p, 0))
 
     # ── PV interface ─────────────────────────────────────────────────
     def monitored_pvs(self):
         return [self.status_pv] if self.status_pv else []
 
     def update_value(self, value):
-        """Update state from status PV. Most APS shutter 'CLSD_PL' records
-        use 1 = closed (i.e. beam NOT present). Users can invert the
-        interpretation via the edit dialog later if needed."""
-        v = str(value).strip().lower()
-        # Heuristic: open/true/1/etc → OPEN; close/closed/0 → CLOSED
+        """Update state from status PV. Standard semantic: truthy (1/Yes/On/
+        Open/True/High) = state ON, falsy = OFF. For inverted records like
+        CLSD_PL (1=closed), pass invert_status=True to the constructor."""
+        v = str(value).strip()
+        lv = v.lower()
+        on = False
         try:
-            num = float(v)
-            # Treat numeric 0 as "closed" for SBS/FES CLSD_PL semantics too
-            open_now = (num == 0.0)
+            on = float(v) != 0.0
         except (ValueError, TypeError):
-            if v in ("open", "on", "true", "high", "1"):
-                open_now = True
-            elif v in ("closed", "close", "off", "false", "low", "0"):
-                open_now = False
-            else:
-                open_now = False
-        self._is_open = bool(open_now)
+            on = lv in ("on", "open", "true", "high", "yes", "1",
+                        "run", "running", "active", "busy", "start",
+                        "started", "enable", "enabled",
+                        "acquire", "acquiring")
+        if self._invert_status:
+            on = not on
+        self._is_open = bool(on)
         self._restyle()
-        print(f"[SHUTTER] {self.field_id}: status={value!r} -> "
-              f"{'OPEN' if self._is_open else 'CLOSED'}")
+        print(f"[TOGGLE] {self.field_id}: status={value!r} -> "
+              f"{'ON' if self._is_open else 'OFF'}")
 
     @property
     def pv(self):
@@ -620,15 +866,22 @@ class ToggleField(QtWidgets.QWidget):
         self._edit_mode = bool(on)
 
     def contextMenuEvent(self, e):
-        if not self._edit_mode:
-            return super().contextMenuEvent(e)
         menu = QtWidgets.QMenu(self)
         menu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;}"
                            "QMenu::item:selected{background:#1e5a8e;}")
-        menu.addAction("Edit Toggle...", self._edit_dialog)
-        menu.addAction("Delete Row", self._delete_row)
-        menu.addSeparator()
-        menu.addAction("Add PV Row here...", self._add_row_here)
+        added = _add_copy_pv_entries(menu, [
+            ("status PV", self.status_pv),
+            ("open PV", self.open_pv),
+            ("close PV", self.close_pv),
+        ])
+        if self._edit_mode:
+            if added: menu.addSeparator()
+            menu.addAction("Edit Toggle...", self._edit_dialog)
+            menu.addAction("Delete Row", self._delete_row)
+            menu.addSeparator()
+            menu.addAction("Add PV Row here...", self._add_row_here)
+        if menu.isEmpty():
+            return super().contextMenuEvent(e)
         menu.exec_(e.globalPos())
         e.accept()
 

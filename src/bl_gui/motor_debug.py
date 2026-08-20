@@ -52,14 +52,47 @@ _SECTIONS = [
         ("MSTA", "Status (raw mask)",    "ro"),
     ]),
     ("Control", [
-        ("SET",  "Set/Use mode",      "cmb:Use,Set"),
-        ("CNEN", "Controller enabled","cmb:Disabled,Enabled"),
-        ("DISP", "Disable puts",      "rw"),
-        ("STOP", "STOP",              "btn:1"),
-        ("HOMF", "Home forward",      "btn:1"),
-        ("HOMR", "Home reverse",      "btn:1"),
+        ("SET",  "Set/Use mode",         "cmb:Use,Set"),
+        # CNEN — standard motor record torque/coil enable. Stays "---"
+        # on drivers that don't implement it (e.g. some Aerotech
+        # rotaries), which is why the second row exists.
+        ("CNEN", "Torque enable (CNEN)", "cmb:Disable,Enable"),
+        # <pv>_able — APS convention used by many drivers (Delta Tau,
+        # Aerotech Ensemble, IMS via wrapper). Note the inverted
+        # semantics: 0=enable, 1=disable. Combo order matches the
+        # index → written value mapping.
+        ("_able", "APS torque enable",   "cmb:Enable,Disable"),
+        ("DISP", "Disable puts",         "rw"),
+        ("STOP", "STOP",                 "btn:1"),
+        ("HOMF", "Home forward",         "btn:1"),
+        ("HOMR", "Home reverse",         "btn:1"),
     ]),
 ]
+
+
+def _pv_for(base, sfx):
+    """Compose a full PV name for a sfx entry from _SECTIONS.
+
+    - "CNEN"   → "<base>.CNEN"   (standard motor-record field)
+    - "_able"  → "<base>_able"   (APS-convention external PV)
+    - ":x"     → "<base>:x"      (colon-separated sibling PV)
+    """
+    if sfx.startswith(("_", ":")):
+        return f"{base}{sfx}"
+    return f"{base}.{sfx}"
+
+
+def _sfx_from_pv(base, pv_name):
+    """Inverse of _pv_for — recover the sfx key so _on_pv can look up
+    the widget that owns this PV in self._fields."""
+    if not pv_name.startswith(base):
+        return None
+    tail = pv_name[len(base):]
+    if tail.startswith("."):
+        return tail[1:]
+    if tail.startswith(("_", ":")):
+        return tail
+    return None
 
 
 class MotorDetailsDialog(QtWidgets.QDialog):
@@ -76,7 +109,7 @@ class MotorDetailsDialog(QtWidgets.QDialog):
             "QGroupBox::title{subcontrol-origin:margin;left:8px;padding:0 4px;}"
             "QLabel{color:#e0e0e0;background:transparent;}"
             "QLineEdit,QComboBox{background:#2d2d2d;color:#e0e0e0;padding:2px 5px;"
-            "border:1px solid #404040;border-radius:3px;font:9pt monospace;}"
+            "border:1px solid #404040;border-radius:3px;font:9pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
             "QPushButton{background:#2d2d2d;color:#e0e0e0;padding:4px 10px;"
             "border:1px solid #404040;border-radius:3px;}"
             "QPushButton:hover{background:#3a3a3a;}"
@@ -107,8 +140,11 @@ class MotorDetailsDialog(QtWidgets.QDialog):
                 gl.addWidget(QtWidgets.QLabel(lbl + ":"), row, 0)
                 w = self._make_field(sfx, kind)
                 gl.addWidget(w, row, 1)
-                gl.addWidget(QtWidgets.QLabel(f".{sfx}"), row, 2)
-                self._pvs.append(f"{self.pv}.{sfx}")
+                # Suffix column shows the actual PV tail (e.g. ".CNEN"
+                # for motor-record fields, "_able" for external PVs).
+                display = sfx if sfx.startswith(("_", ":")) else f".{sfx}"
+                gl.addWidget(QtWidgets.QLabel(display), row, 2)
+                self._pvs.append(_pv_for(self.pv, sfx))
             vbox.addWidget(gb)
 
         vbox.addStretch()
@@ -129,11 +165,21 @@ class MotorDetailsDialog(QtWidgets.QDialog):
         if self._pve is not None:
             self._pve.monitor_many(self._pvs)
             self._pve.updated.connect(self._on_pv)
+            # PVEngine.monitor() is a no-op if the PV is already being
+            # watched (which most motor fields are, from the main
+            # window's MC subscription). In that case no fresh update
+            # fires, so the dialog would sit empty until a value
+            # happened to change. Pull each PV's current value once
+            # here so every field is populated immediately.
+            for pv in self._pvs:
+                v = self._pve.get(pv)
+                if v is not None:
+                    self._on_pv(pv, v)
 
     def _make_field(self, sfx, kind):
         if kind == "ro":
             w = QtWidgets.QLabel("---")
-            w.setStyleSheet("color:#2ecc71;font:bold 10pt monospace;padding:2px 4px;"
+            w.setStyleSheet("color:#2ecc71;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;padding:2px 4px;"
                             "background:#000;border:1px solid #333;border-radius:2px;")
             self._fields[sfx] = w
             return w
@@ -141,31 +187,32 @@ class MotorDetailsDialog(QtWidgets.QDialog):
             val = kind.split(":", 1)[1]
             b = QtWidgets.QPushButton(sfx)
             b.setStyleSheet("background:#c0392b;color:#fff;font:bold 9pt;padding:4px;")
-            b.clicked.connect(lambda _=False, s=sfx, v=val: caput_bg(f"{self.pv}.{s}", v))
+            b.clicked.connect(
+                lambda _=False, s=sfx, v=val:
+                    caput_bg(_pv_for(self.pv, s), v))
             self._fields[sfx] = b
             return b
         if kind.startswith("cmb:"):
             choices = kind.split(":", 1)[1].split(",")
             c = QtWidgets.QComboBox(); c.addItems(choices)
             c.currentIndexChanged.connect(
-                lambda idx, s=sfx: caput_bg(f"{self.pv}.{s}", idx)
+                lambda idx, s=sfx: caput_bg(_pv_for(self.pv, s), idx)
             )
             self._fields[sfx] = c
             return c
         # rw
         le = QtWidgets.QLineEdit()
         le.returnPressed.connect(
-            lambda s=sfx, e=le: caput_bg(f"{self.pv}.{s}", e.text())
+            lambda s=sfx, e=le: caput_bg(_pv_for(self.pv, s), e.text())
         )
         self._fields[sfx] = le
         return le
 
     @QtCore.pyqtSlot(str, str)
     def _on_pv(self, pv_name, value):
-        prefix = f"{self.pv}."
-        if not pv_name.startswith(prefix):
+        sfx = _sfx_from_pv(self.pv, pv_name)
+        if sfx is None:
             return
-        sfx = pv_name[len(prefix):]
         w = self._fields.get(sfx)
         if w is None:
             return

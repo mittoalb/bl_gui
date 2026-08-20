@@ -14,6 +14,7 @@ class PVEngine(QtCore.QObject):
         super().__init__(parent)
         self._channels: Dict[str, Channel] = {}
         self._lock = threading.Lock()
+        self._shutting_down = False
 
     def monitor(self, pv_name: str):
         with self._lock:
@@ -62,6 +63,10 @@ class PVEngine(QtCore.QObject):
             return None
 
     def _on_change(self, pv_name, pv_obj):
+        if self._shutting_down:
+            # A late pvaccess callback after stop_all would emit into a
+            # Qt object that's on its way out → segfault. Drop it.
+            return
         try:
             val = self._extract(pv_obj)
             self.updated.emit(pv_name, val)
@@ -69,6 +74,14 @@ class PVEngine(QtCore.QObject):
             pass
 
     def stop_all(self):
+        # Block further callbacks from re-entering the Qt event loop before
+        # we start tearing channels down, so a monitor callback arriving on
+        # a pvaccess thread mid-shutdown can't segfault the app.
+        self._shutting_down = True
+        try:
+            self.updated.disconnect()
+        except Exception:
+            pass
         with self._lock:
             for name, ch in self._channels.items():
                 try:

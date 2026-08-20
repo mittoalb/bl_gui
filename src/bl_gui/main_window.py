@@ -15,13 +15,69 @@ from . import theme as _theme_mod
 from .theme import _IMG, _PANEL_SS, _PANEL_SS_EDIT, _SS
 
 
-def _lay_path():
-    """Return the current layout-file path (may be overridden by main() CLI)."""
+def _bundled_lay_path():
+    """Path to the beamline default layout bundled with the package
+    (and committed to git). Used as a read-only template."""
     return _theme_mod._LAY
+
+
+def _user_lay_path():
+    """Per-user layout override path: ~/.bl_gui/<bl_name>.json.
+    Every save writes here so one user's layout cannot overwrite another's,
+    and the shared beamline template in the repo stays pristine."""
+    bl_name = os.path.splitext(os.path.basename(_theme_mod._LAY))[0]
+    return os.path.expanduser(f"~/.bl_gui/{bl_name}.json")
+
+
+def _polyfit_interp(pts, col_idx, e_eV_target):
+    """Fit a polynomial (degree auto-chosen up to 3) through the
+    (Energy, axis-value) pairs from the calibration table and evaluate
+    at ``e_eV_target``. Degree is clamped to ``len(points) - 1`` so we
+    never over-fit. Returns None if fewer than 2 usable points exist."""
+    try:
+        import numpy as _np
+    except Exception:
+        _np = None
+    es, vs = [], []
+    for row in pts:
+        if len(row) <= col_idx: continue
+        if row[0] is None or row[col_idx] is None: continue
+        es.append(float(row[0])); vs.append(float(row[col_idx]))
+    if len(es) < 2:
+        return None
+    if _np is None:
+        # Fallback to piecewise linear if numpy unavailable.
+        order = sorted(range(len(es)), key=lambda i: es[i])
+        es = [es[i] for i in order]; vs = [vs[i] for i in order]
+        if e_eV_target <= es[0]:
+            if len(es) < 2: return vs[0]
+            slope = (vs[1] - vs[0]) / (es[1] - es[0])
+            return vs[0] + slope * (e_eV_target - es[0])
+        if e_eV_target >= es[-1]:
+            slope = (vs[-1] - vs[-2]) / (es[-1] - es[-2])
+            return vs[-1] + slope * (e_eV_target - es[-1])
+        for i in range(1, len(es)):
+            if es[i] >= e_eV_target:
+                frac = (e_eV_target - es[i-1]) / (es[i] - es[i-1])
+                return vs[i-1] + frac * (vs[i] - vs[i-1])
+        return None
+    # Polynomial fit: deg = min(3, N-1). 2 points → linear, 3 → quad,
+    # 4+ → cubic. Using np.polyfit / np.polyval (no scipy dependency).
+    deg = min(3, len(es) - 1)
+    coeffs = _np.polyfit(es, vs, deg)
+    return float(_np.polyval(coeffs, e_eV_target))
+
+
+def _lay_path():
+    """Layout path actually used by load/save: prefer the user override
+    (if it exists) on load; save always goes there so the bundled copy
+    is never touched by a user session."""
+    u = _user_lay_path()
+    return u if os.path.isfile(u) else _bundled_lay_path()
 from .widgets import CfgButton, Panel, _ButtonEditFilter, _change_font_size, _duplicate_widget, _edit_widget
 
 class Win(QtWidgets.QMainWindow):
-    def __init__(self, allow_edit=False):
+    def __init__(self, allow_edit=False, blank=False):
         super().__init__()
         self._allow_edit = allow_edit
         # Beamline name = currently loaded layout file's basename (no .json).
@@ -49,6 +105,20 @@ class Win(QtWidgets.QMainWindow):
             "User Mode": (1000, 600),
             "Expert Mode": (1800, 1000),
         }
+        # Nano vs Micro regime. Nano = ZP in beam → interpolate ZP with
+        # energy. Micro = ZP parked out → skip ZP X/Y (QG still moves).
+        # Source of truth is ~/.bl_gui/regime.txt so any tool can update
+        # it; bl_gui re-reads at every energy decision so an out-of-band
+        # change is picked up without restarting.
+        from .beamlines.bl32id import regime as _regime
+        self._regime = _regime
+        # Create the file with "nano" as the default if it doesn't
+        # exist yet, so the file is always present on disk and the
+        # user can edit it directly to change the regime.
+        _regime.ensure_exists("nano")
+        self._nano_mode = _regime.is_nano()
+        print(f"[REGIME] startup -> {'NANO' if self._nano_mode else 'MICRO'} "
+              f"(from {_regime.STATE_FILE})")
 
         cw = QtWidgets.QWidget(); self.setCentralWidget(cw)
         root = QtWidgets.QVBoxLayout(cw); root.setContentsMargins(4, 4, 4, 4); root.setSpacing(4)
@@ -78,6 +148,37 @@ class Win(QtWidgets.QMainWindow):
         self.add_panel_btn.clicked.connect(self._add_new_panel)
         top.addWidget(self.add_panel_btn)
 
+        # + Widget: dropdown of pre-built widget types. Each menu entry
+        # drops a new panel wrapping that widget on the current tab.
+        # Only visible in edit mode + expert tabs, same as + Panel.
+        # To add a new plugin, extend WIDGET_REGISTRY below — no other
+        # code changes needed here.
+        self.add_widget_btn = QtWidgets.QPushButton("+ Widget"); self.add_widget_btn.setFixedSize(80, 28)
+        self.add_widget_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;border:1px solid #404040;border-radius:3px;")
+        _wmenu = QtWidgets.QMenu(self.add_widget_btn)
+        _wmenu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;} "
+                             "QMenu::item:selected{background:#1e5a8e;}")
+        for label, (default_name, default_w, default_h, _factory) in \
+                self._widget_registry().items():
+            _wmenu.addAction(
+                label,
+                lambda checked=False, k=label: self._add_widget_from_registry(k))
+        self.add_widget_btn.setMenu(_wmenu)
+        top.addWidget(self.add_widget_btn)
+
+        # Snapshots browser — always visible (not gated on edit mode).
+        # Autosaver runs regardless; this just opens the browser to
+        # inspect / restore past states.
+        self.snap_btn = QtWidgets.QPushButton("Snapshots")
+        self.snap_btn.setFixedSize(90, 28)
+        self.snap_btn.setStyleSheet(
+            "background:#2d2d2d;color:#e0e0e0;font:9pt;"
+            "border:1px solid #404040;border-radius:3px;")
+        self.snap_btn.setToolTip("Browse hourly state snapshots and restore "
+                                 "a past state PV-by-PV.")
+        self.snap_btn.clicked.connect(self._open_snapshot_window)
+        top.addWidget(self.snap_btn)
+
         self.add_tab_btn = QtWidgets.QPushButton("+ Tab"); self.add_tab_btn.setFixedSize(60, 28)
         self.add_tab_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;border:1px solid #404040;border-radius:3px;")
         self.add_tab_btn.clicked.connect(self._add_new_tab)
@@ -90,6 +191,7 @@ class Win(QtWidgets.QMainWindow):
             self.font_lbl.setVisible(False)
             self.add_panel_btn.setVisible(False)
             self.add_tab_btn.setVisible(False)
+            self.add_widget_btn.setVisible(False)
 
         root.addLayout(top)
 
@@ -100,10 +202,15 @@ class Win(QtWidgets.QMainWindow):
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
         root.addWidget(self.tab_widget)
 
-        # Create tabs and build identical panels on each
+        # Create tabs. If `blank=True` (new user layout), leave them
+        # empty so the user gets a real from-scratch canvas — no
+        # pre-baked motor cards / shutters / etc. to delete first.
+        # Otherwise populate with the built-in default panels.
         for tab_name in _DEFAULT_TABS:
             self._create_tab(tab_name)
-            self._build_all_panels(tab_name)
+            if not blank:
+                self._build_all_panels(tab_name)
+        self._blank_layout = bool(blank)
 
         self._current_tab = ""
         self._load_layout()
@@ -121,6 +228,24 @@ class Win(QtWidgets.QMainWindow):
         if self._allow_edit:
             QtCore.QTimer.singleShot(0, lambda: self._toggle_edit(True))
         QtCore.QTimer.singleShot(300, self._start_monitors)
+
+        # Explicit save: Ctrl+S / menu. The GUI no longer auto-saves the
+        # layout on close — this is the only way a save happens outside of
+        # exiting edit mode, preventing accidental overwrites.
+        menubar = self.menuBar()
+        file_menu = menubar.addMenu("File")
+        save_action = file_menu.addAction("Save Layout")
+        save_action.setShortcut(QtGui.QKeySequence("Ctrl+S"))
+        save_action.triggered.connect(self._explicit_save_layout)
+
+        # Keyboard zoom: Ctrl+=, Ctrl+-, Ctrl+0 to boost/shrink/reset font
+        # scale without needing to see the top-bar slider.
+        for keys, delta in (("Ctrl+=", +10), ("Ctrl++", +10), ("Ctrl+-", -10)):
+            sc = QtWidgets.QShortcut(QtGui.QKeySequence(keys), self)
+            sc.activated.connect(lambda d=delta: self.font_slider.setValue(
+                max(50, min(200, self.font_slider.value() + d))))
+        sc0 = QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+0"), self)
+        sc0.activated.connect(lambda: self.font_slider.setValue(100))
 
     # ── helpers ───────────────────────────────────────────────────────
 
@@ -264,10 +389,64 @@ class Win(QtWidgets.QMainWindow):
                 field.setParent(None); field.deleteLater()
 
     def _pv_field_rebind(self, field, old_pv, new_pv):
-        """Called by PVField._edit_pv_dialog after the user changes a PV.
-        Subscribes the new PV on the live engine."""
+        """Called by PVField / ValveField / ToggleField after the user
+        changes a PV. Subscribes the new PV on the live engine AND
+        propagates the change to the matching widget in every other tab
+        so edits made in User Mode immediately reflect in Expert Mode
+        (and vice-versa)."""
         if hasattr(self, '_pve') and new_pv:
             self._pve.monitor_many([new_pv])
+        self._propagate_field_change(field)
+
+    def _propagate_field_change(self, source):
+        """Copy the full state of ``source`` onto every other field with
+        the same field_id living in a sibling tab's copy of the same
+        panel. Panel keys are ``"<Base>::<Tab>"`` so we match on the
+        ``Base`` component."""
+        fid = getattr(source, "field_id", None)
+        if not fid:
+            return
+        # Locate the source's panel key.
+        src_key = None
+        for key, slot in self._pv_fields.items():
+            if slot.get(fid) is source:
+                src_key = key; break
+        if src_key is None:
+            return
+        src_base = src_key.split("::")[0]
+        # Snapshot source state for efficient copying.
+        src_dict = source.get_pvs_dict() if hasattr(source, "get_pvs_dict") else None
+        src_pv = getattr(source, "pv", None)
+
+        for key, slot in self._pv_fields.items():
+            if key == src_key:
+                continue
+            if key.split("::")[0] != src_base:
+                continue
+            sibling = slot.get(fid)
+            if sibling is None or sibling is source:
+                continue
+            if src_dict is not None and hasattr(sibling, "set_pvs_dict"):
+                sibling.set_pvs_dict(src_dict)
+            elif src_pv is not None and hasattr(sibling, "pv"):
+                sibling.pv = src_pv
+            # If it's a simple sp/rb QLineEdit/QLabel inside the PVField,
+            # mirror its text too so the other tab's view updates visually.
+            if hasattr(source, "_inner") and hasattr(sibling, "_inner"):
+                try:
+                    s_txt = source._inner.text() if hasattr(source._inner, "text") else None
+                except Exception:
+                    s_txt = None
+                if s_txt is not None:
+                    try:
+                        sibling._inner.blockSignals(True)
+                        if hasattr(sibling._inner, "setText"):
+                            sibling._inner.setText(s_txt)
+                    except Exception:
+                        pass
+                    finally:
+                        try: sibling._inner.blockSignals(False)
+                        except Exception: pass
 
     def _create_tab(self, name):
         canvas = QtWidgets.QWidget()
@@ -299,23 +478,28 @@ class Win(QtWidgets.QMainWindow):
     def _build_all_panels(self, tab_name):
         x, y = 0, 0; GAP = 4
 
-        # --- Shutters (separate Open / Close buttons) ---
-        p, _ = self._make_panel("Shutters", 400, 120, tab_name)
-        lay = QtWidgets.QVBoxLayout(); lay.setContentsMargins(6, 22, 6, 4); lay.setSpacing(4)
+        # --- Shutters (3 shutters horizontally; each column: name / status / Open+Close) ---
+        p, _ = self._make_panel("Shutters", 560, 170, tab_name)
+        lay = QtWidgets.QHBoxLayout(); lay.setContentsMargins(6, 22, 6, 6); lay.setSpacing(10)
         shutter_rows = [
-            # (field_id, label, status PV, Open PV, Close PV)
-            ("shtr_A", "A-Stn",    "PB:32ID:STA_A_FES_CLSD_PL", "32idb:rshtrA:Open.PROC",     "32idb:rshtrA:Close.PROC"),
-            ("shtr_B", "B-Stn",    "PB:32ID:STA_B_SBS_CLSD_PL", "32idb:rshtrB:Open.PROC",     "32idb:rshtrB:Close.PROC"),
-            ("shtr_U", "Uniblitz", "",                           "32idbTXM:uniblitz:control", "32idbTXM:uniblitz:control"),
+            # (field_id, label, status PV, Open PV, Close PV, invert_status, on_value, off_value)
+            # CLSD_PL records read 1=closed, so invert the on/off mapping.
+            # Uniblitz is a single-PV binary toggle: 1=open, 0=closed — the
+            # status PV is the same PV we write, no inversion needed.
+            ("shtr_A", "A-Stn",    "PB:32ID:STA_A_FES_CLSD_PL", "32idb:rshtrA:Open.PROC",     "32idb:rshtrA:Close.PROC",   True,  1, 1),
+            ("shtr_B", "B-Stn",    "PB:32ID:STA_B_SBS_CLSD_PL", "32idb:rshtrB:Open.PROC",     "32idb:rshtrB:Close.PROC",   True,  1, 1),
+            ("shtr_U", "Uniblitz", "32idbTXM:uniblitz:control", "32idbTXM:uniblitz:control", "32idbTXM:uniblitz:control", False, "Open", "Close"),
         ]
         slot = self._pv_fields.setdefault(p.key, {})
-        for fid, lbl, st_pv, o_pv, c_pv in shutter_rows:
+        for fid, lbl, st_pv, o_pv, c_pv, inv, ov, ofv in shutter_rows:
             vf = ValveField(status_pv=st_pv, on_pv=o_pv, off_pv=c_pv, field_id=fid,
                             label_text=lbl, on_text="Open", off_text="Close",
-                            pulse=False, parent=p)
-            lay.addWidget(vf)
+                            status_on_text="OPEN", status_off_text="CLOSED",
+                            on_value=ov, off_value=ofv,
+                            pulse=False, invert_status=inv, vertical=True, parent=p)
+            lay.addWidget(vf, 1)
             slot[fid] = vf
-        p.setLayout(lay); p.setGeometry(x, y, 400, 120); x += 404
+        p.setLayout(lay); p.setGeometry(x, y, 560, 170); x += 564
 
         # --- Beam Info ---
         p, _ = self._make_panel("Beam", 350, 90, tab_name)
@@ -331,10 +515,24 @@ class Win(QtWidgets.QMainWindow):
         # --- Presets ---
         p, _ = self._make_panel("Presets", 200, 80, tab_name)
         pl = QtWidgets.QHBoxLayout(); pl.setContentsMargins(6, 20, 6, 4); pl.setSpacing(4)
-        bn = QtWidgets.QPushButton("Nano"); bn.setStyleSheet("background:#27ae60;color:#fff;font:bold 11pt;")
-        bn.clicked.connect(lambda: caput_bg("32id:TXMOptics:MoveAllIn",1)); pl.addWidget(bn)
-        bm = QtWidgets.QPushButton("Micro"); bm.setStyleSheet("background:#27ae60;color:#fff;font:bold 11pt;")
-        bm.clicked.connect(lambda: caput_bg("32id:TXMOptics:MoveAllOut",1)); pl.addWidget(bm)
+        # Presets are CfgButtons so they: (1) get duplicated when the panel
+        # is duplicated, (2) are editable via right-click in edit mode,
+        # (3) save/load through the normal _buttons path.
+        p._cfg_btn_defaults = ("#27ae60", "#ffffff", 11)
+        presets = [
+            ("Nano",  "caput", "32id:TXMOptics:MoveAllIn 1"),
+            ("Micro", "caput", "32id:TXMOptics:MoveAllOut 1"),
+        ]
+        p._default_btn_specs = presets
+        bg_pr, fg_pr, fs_pr = p._cfg_btn_defaults
+        for lbl, atype, action in presets:
+            b = CfgButton(lbl, action_type=atype, action=action,
+                          bg=bg_pr, fg=fg_pr, font_size=fs_pr, parent=p)
+            b.setMinimumHeight(34)
+            b.clicked.connect(
+                lambda _=False, btn=b: self._on_preset_clicked(btn))
+            pl.addWidget(b)
+            p.custom_buttons.append(b)
         p.setLayout(pl); p.setGeometry(x, y, 200, 80)
 
         # --- Motor groups ---
@@ -363,8 +561,19 @@ class Win(QtWidgets.QMainWindow):
             ("io_diff",     "Diff",    "32id:TXMOptics:MoveDiffuserIn",   "32id:TXMOptics:MoveDiffuserOut"),
         ]
         slot = self._pv_fields.setdefault(p.key, {})
+        # Keep ALL In/Out label widgets across tabs so a rename applies
+        # consistently everywhere. Indexed by fid → list of labels.
+        if not hasattr(self, "_io_labels"):
+            self._io_labels = {}
         for col, (fid, lbl, pv_in, pv_out) in enumerate(inout_rows):
-            iol.addWidget(QtWidgets.QLabel(lbl), 0, col, alignment=QtCore.Qt.AlignCenter)
+            label = QtWidgets.QLabel(lbl)
+            label.setAlignment(QtCore.Qt.AlignCenter)
+            label.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+            label.customContextMenuRequested.connect(
+                lambda _pos, f=fid: self._rename_io_label_by_fid(f))
+            label.setToolTip("Right-click to rename")
+            iol.addWidget(label, 0, col, alignment=QtCore.Qt.AlignCenter)
+            self._io_labels.setdefault(fid, []).append(label)
             pf = PVField('btn_pair', "", fid, button_text="In/Out",
                          on_pv=pv_in, off_pv=pv_out, on_value=1, off_value=1, parent=p)
             iol.addWidget(pf, 1, col)
@@ -374,22 +583,96 @@ class Win(QtWidgets.QMainWindow):
         bp.setStyleSheet("background:#27ae60;color:#fff;font:bold 10pt;border-radius:3px;")
         bp.clicked.connect(lambda: subprocess.Popen(["/home/beams/USERTXM/scripts/start_pystream.sh"], start_new_session=True))
         iol.addWidget(bp, 0, len(inout_rows), 2, 1)
-        p.setLayout(iol); p.setGeometry(0, iy, 760, 70)
+        # QGMax one-shot optimization — writes the request file that
+        # pystream's background watcher picks up. The button polls the
+        # response file to show live running/idle state.
+        qgmax_btn = QtWidgets.QPushButton("QGMax")
+        qgmax_btn.setFixedSize(90, 28)
+        qgmax_btn.clicked.connect(self._trigger_qgmax)
+        iol.addWidget(qgmax_btn, 0, len(inout_rows) + 1, 2, 1)
+        self._qgmax_btn = qgmax_btn
+        # Only create the polling infrastructure once across both tabs.
+        if not hasattr(self, "_qgmax_buttons"):
+            self._qgmax_buttons = []
+            self._qgmax_running = False
+            self._qgmax_timer = QtCore.QTimer(self)
+            self._qgmax_timer.setInterval(500)
+            self._qgmax_timer.timeout.connect(self._poll_qgmax_status)
+            self._qgmax_timer.start()
+        self._qgmax_buttons.append(qgmax_btn)
+        self._style_qgmax_button(qgmax_btn, running=False)
+
+        # Harmonic Correction toggle — background 5s-tick worker that
+        # nudges QG V away from a central bright spot when in Nano mode.
+        # Independent of tomoscan / XANES / QGMax. Purely self-contained.
+        harm_btn = QtWidgets.QPushButton("Harmonic Correction")
+        harm_btn.setCheckable(True)
+        harm_btn.setFixedSize(160, 28)
+        harm_btn.toggled.connect(self._on_harmonic_toggled)
+        iol.addWidget(harm_btn, 0, len(inout_rows) + 2, 2, 1)
+        if not hasattr(self, "_harmonic_buttons"):
+            self._harmonic_buttons = []
+        self._harmonic_buttons.append(harm_btn)
+        self._style_harmonic_button(harm_btn, on=False)
+
+        p.setLayout(iol); p.setGeometry(0, iy, 1024, 70)
 
         # --- Energy ---
-        p, _ = self._make_panel("Energy", 340, 280, tab_name)
+        p, _ = self._make_panel("Energy", 380, 300, tab_name)
         el = QtWidgets.QFormLayout(); el.setContentsMargins(6, 22, 6, 6); el.setSpacing(4)
-        # Every field is a PVField with a stable id → right-click allows
-        # per-beamline PV reassignment, and the PV is persisted in layout.json.
+
+        # Top row: big Energy setpoint + Bragg readback + Go button all on
+        # the same line — this is the main user-facing control so they must
+        # be easy to read and act on without hunting for a separate button.
+        slot = self._pv_fields.setdefault(p.key, {})
+        energy_sp = PVField(kind='sp', pv="32id:TXMOptics:Energy",
+                            field_id="energy_sp", placeholder="keV",
+                            fmt=".3f", parent=p)
+        bragg_rb  = PVField(kind='rb', pv="32ida:BraggERdbkAO",
+                            field_id="bragg_rbv", fmt=".3f", parent=p)
+        energy_go = PVField(kind='btn', pv="32id:TXMOptics:EnergySet",
+                            field_id="energy_set",
+                            button_text="Go", button_value=1, parent=p)
+        energy_sp._inner.setMinimumHeight(36)
+        energy_sp._inner.setStyleSheet(
+            "QLineEdit{background:#2c3e50;color:#ecf0f1;"
+            "border:1px solid #3498db;border-radius:3px;"
+            "padding:4px 8px;font:bold 15pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+            "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}")
+        bragg_rb._inner.setMinimumHeight(36)
+        bragg_rb._inner.setStyleSheet(
+            "color:#2ecc71;background:transparent;font:bold 15pt 'Liberation Mono','DejaVu Sans Mono',monospace;padding:4px 6px;")
+        energy_go._inner.setMinimumHeight(36)
+        energy_go._inner.setStyleSheet(
+            "background:#27ae60;color:#fff;font:bold 13pt;"
+            "border:1px solid #2ecc71;border-radius:3px;padding:4px 16px;")
+        row = QtWidgets.QWidget()
+        hl = QtWidgets.QHBoxLayout(row); hl.setContentsMargins(0, 0, 0, 0); hl.setSpacing(6)
+        hl.addWidget(energy_sp, 1); hl.addWidget(bragg_rb, 1); hl.addWidget(energy_go, 0)
+        el.addRow("Energy (keV):", row)
+        slot["energy_sp"] = energy_sp
+        slot["bragg_rbv"] = bragg_rb
+        slot["energy_set"] = energy_go
+        # Replace Go's default caput with a handler that first falls back to
+        # the ZP calibration plugin when both EPICS cal-file PVs are blank.
+        try: energy_go._inner.clicked.disconnect()
+        except TypeError: pass
+        energy_go._inner.clicked.connect(self._on_set_energy)
+        # Enforce 6.5-12 keV range on the SP: hijack returnPressed so
+        # out-of-range values never reach caput.
+        try: energy_sp._inner.returnPressed.disconnect()
+        except TypeError: pass
+        energy_sp._inner.returnPressed.connect(
+            lambda e=energy_sp: self._on_energy_sp_return(e))
+        energy_sp._inner.setToolTip("Allowed range: 6.5 – 12 keV")
+
+        # Every remaining field is a PVField with a stable id → right-click
+        # allows per-beamline PV reassignment, and the PV is persisted in
+        # layout.json.
         energy_fields = [
-            ('sp',  "Energy (keV):", "energy_sp",       "32id:TXMOptics:Energy",                   dict(placeholder="keV")),
-            ('rb',  "Bragg RBV:",    "bragg_rbv",       "32ida:BraggERdbkAO",                      dict(fmt=".3f")),
             ('sp',  "Detune (eV):",  "energy_detune",   "32id:TXMOptics:EnergyDetune",             {}),
-            ('cmb', "Use Calib:",    "energy_usecalib", "32id:TXMOptics:EnergyUseCalibration",     dict(choices=["No", "Yes"])),
             ('sp',  "Cal File 1:",   "energy_calfile1", "32id:TXMOptics:EnergyCalibrationFileOne", dict(placeholder="calib file 1")),
             ('sp',  "Cal File 2:",   "energy_calfile2", "32id:TXMOptics:EnergyCalibrationFileTwo", dict(placeholder="calib file 2")),
-            ('rb',  "Und E (keV):",  "und_energy_rbv",  "S32ID:USID:EnergyM.VAL",                  dict(fmt=".3f")),
-            ('btn', "Set Energy:",   "energy_set",      "32id:TXMOptics:EnergySet",                dict(button_text="Go", button_value=1)),
         ]
         self._register_pv_fields(p, energy_fields, el)
 
@@ -398,25 +681,110 @@ class Win(QtWidgets.QMainWindow):
             ('led', "Busy:", "energy_busy_led", "32id:TXMOptics:EnergyBusy", {}),
         ], el)
 
-        p.setLayout(el); p.setGeometry(700 + GAP, 84 + GAP, 340, 280)
+        # Use Calibration — single state-aware toggle button. Colour = current
+        # state (green/ON = using calibration, red/OFF = not). Button text
+        # describes what clicking will do.
+        use_calib = ToggleField(
+            status_pv="32id:TXMOptics:EnergyUseCalibration",
+            open_pv="32id:TXMOptics:EnergyUseCalibration",
+            close_pv="32id:TXMOptics:EnergyUseCalibration",
+            field_id="energy_usecalib",
+            label_text="",
+            open_text="YES",          # shown when state is ON (green)
+            close_text="NO",          # shown when state is OFF (red)
+            open_value="Yes", close_value="No",
+            state_label=True,
+            parent=p,
+        )
+        use_calib.name_lbl.hide()
+        el.addRow("Use Calib:", use_calib)
+        self._pv_fields[p.key]["energy_usecalib"] = use_calib
+
+        # Zone-plate / energy calibration table (opens the external xanes_gui
+        # GUI_2D window). Kept as a plain launcher button — no PV binding.
+        from .beamlines.bl32id import xanes_calib
+        calib_btn = QtWidgets.QPushButton("ZP Calibration...")
+        calib_btn.setStyleSheet(
+            "background:#1e5a8e;color:#fff;font:bold 9pt;"
+            "border:1px solid #2980b9;border-radius:3px;padding:4px 10px;")
+        calib_btn.clicked.connect(lambda: xanes_calib.launch(self))
+        el.addRow("Calibration:", calib_btn)
+
+        # Cal files: a ± range spinbox (persisted in the calibration
+        # config JSON) + a button to generate the two Energy_*keV.txt
+        # files from the ZP calibration table without triggering EnergySet.
+        range_spin = QtWidgets.QDoubleSpinBox()
+        range_spin.setDecimals(3)
+        range_spin.setRange(0.001, 50.0)
+        range_spin.setSingleStep(0.05)
+        range_spin.setSuffix(" keV")
+        try:
+            _initial_range = float(xanes_calib.load_config().get(
+                "range_keV", xanes_calib.DEFAULT_RANGE_KEV))
+        except Exception:
+            _initial_range = xanes_calib.DEFAULT_RANGE_KEV
+        range_spin.setValue(_initial_range)
+        range_spin.valueChanged.connect(self._on_cal_range_changed)
+        range_spin.setToolTip("Half-width used when generating cal files: "
+                              "low file at E−range, high file at E+range.")
+        el.addRow("Range ± (keV):", range_spin)
+        self._cal_range_spin = range_spin
+
+        gen_btn = QtWidgets.QPushButton("Generate Cal Files")
+        gen_btn.setStyleSheet(
+            "background:#8e44ad;color:#fff;font:bold 9pt;"
+            "border:1px solid #9b59b6;border-radius:3px;padding:4px 10px;")
+        gen_btn.setToolTip(
+            "Writes Energy_<E±range>keV.txt files from the ZP calibration "
+            "table and sets EnergyCalibrationFileOne/Two. Does NOT change "
+            "energy.")
+        gen_btn.clicked.connect(self._apply_zp_calib_from_plugin)
+        el.addRow("Cal Files:", gen_btn)
+
+        p.setLayout(el); p.setGeometry(700 + GAP, 84 + GAP, 380, 340)
 
         # --- Camera ---
-        p, _ = self._make_panel("Camera", 360, 280, tab_name)
-        cl = QtWidgets.QFormLayout(); cl.setContentsMargins(6, 22, 6, 6); cl.setSpacing(3)
+        p, _ = self._make_panel("Camera", 340, 180, tab_name)
+        cl = QtWidgets.QFormLayout(); cl.setContentsMargins(6, 22, 6, 6); cl.setSpacing(4)
+        # Start + Stop as a two-button ValveField in highlight mode so the
+        # currently-active side is bright and the other dim.
+        cam_slot = self._pv_fields.setdefault(p.key, {})
+        cam_run = ValveField(
+            status_pv="32idbSP1:cam1:Acquire",
+            on_pv="32idbSP1:cam1:Acquire",
+            off_pv="32idbSP1:cam1:Acquire",
+            field_id="cam_run",
+            label_text="",
+            on_text="Start", off_text="Stop",
+            on_value=1, off_value=0,
+            pulse=False, btn_width=80,
+            highlight_buttons=True, parent=p,
+        )
+        cam_run.name_lbl.hide()
+        cl.addRow("Acquire:", cam_run)
+        cam_slot["cam_run"] = cam_run
         self._register_pv_fields(p, [
-            ('btn', "Acquire:",     "cam_acquire",    "32idbSP1:cam1:Acquire",             dict(button_text="Start", button_value=1)),
-            ('led', "Busy:",        "cam_acq_led",    "32idbSP1:cam1:Acquire",             {}),
-            ('sp',  "Exp (s):",     "cam_exp_sp",     "32idbSP1:cam1:AcquireTime",         dict(placeholder="sec")),
-            ('rb',  "Exp RBV:",     "cam_exp_rb",     "32idbSP1:cam1:AcquireTime_RBV",     dict(fmt=".3f")),
-            ('rb',  "Size X:",      "cam_sizex",      "32idbSP1:cam1:SizeX_RBV",           {}),
-            ('rb',  "Size Y:",      "cam_sizey",      "32idbSP1:cam1:SizeY_RBV",           {}),
-            ('sp',  "Num Filter:",  "cam_numfilt",    "32idbSP1:Proc1:NumFilter",          dict(placeholder="N")),
-            ('rb',  "Filtered:",    "cam_filtered",   "32idbSP1:Proc1:NumFiltered_RBV",    {}),
-            ('rb',  "Flat Valid:",  "cam_flat_valid", "32idbSP1:Proc1:ValidFlatField_RBV", {}),
-            ('btn', "Reset filt:",  "cam_reset",      "32idbSP1:Proc1:ResetFilter",        dict(button_text="Reset", button_value=1)),
-            ('btn', "Save flat:",   "cam_save_flat",  "32idbSP1:Proc1:SaveFlatField",      dict(button_text="Save",  button_value=1)),
+            ('sp',  "Exp (s):",  "cam_exp_sp",   "32idbSP1:cam1:AcquireTime",     dict(placeholder="sec")),
+            ('rb',  "Size X:",   "cam_sizex",    "32idbSP1:cam1:SizeX_RBV",       {}),
+            ('rb',  "Size Y:",   "cam_sizey",    "32idbSP1:cam1:SizeY_RBV",       {}),
+            ('sp',  "Bin X:",    "cam_binx",     "32idbSP1:cam1:BinX",            dict(placeholder="1")),
+            ('sp',  "Bin Y:",    "cam_biny",     "32idbSP1:cam1:BinY",            dict(placeholder="1")),
         ], cl)
-        p.setLayout(cl); p.setGeometry(700 + GAP + 344, 84 + GAP, 360, 280)
+        # Make the exposure-time field noticeably bigger (main user control).
+        exp_edit = cam_slot['cam_exp_sp']._inner
+        exp_edit.setMinimumHeight(32)
+        exp_edit.setStyleSheet(
+            "QLineEdit{background:#2c3e50;color:#ecf0f1;"
+            "border:1px solid #3498db;border-radius:3px;"
+            "padding:4px 8px;font:bold 14pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+            "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}")
+        # AreaDetector binning needs SizeX/SizeY to be recomputed from the
+        # sensor's max size when BinX/BinY change (same logic as pystream's
+        # "Apply Binning" button). Hook Enter on both bin fields to run the
+        # full apply sequence automatically.
+        cam_slot['cam_binx']._inner.returnPressed.connect(self._apply_cam_binning)
+        cam_slot['cam_biny']._inner.returnPressed.connect(self._apply_cam_binning)
+        p.setLayout(cl); p.setGeometry(700 + GAP + 344, 84 + GAP, 340, 180)
 
         # --- Crop ---
         p, _ = self._make_panel("Crop", 360, 100, tab_name)
@@ -525,10 +893,7 @@ class Win(QtWidgets.QMainWindow):
             ('sp',  "Num Points:",     "shaker_npts",    "32idbShaker:shaker:numPoints.VAL",    {}),
             # Function type — mbbo (Circle / Lissajous). Extra live states arrive
             # from the PV itself get added dynamically by the combo.
-            ('cmb', "Function:",       "shaker_menu",    "32idbShaker:shakerMenu",              dict(choices=["Circle", "Lissajous"])),
-            # Run/Stop as explicit action buttons (shared PV, different values)
-            ('btn', "Run:",            "shaker_run",     "32idbShaker:shaker:run",              dict(button_text="Run",  button_value=1)),
-            ('btn', "Stop:",           "shaker_stop",    "32idbShaker:shaker:run",              dict(button_text="Stop", button_value=0)),
+            ('cmb', "Function:",       "shaker_menu",    "32idbShaker:shakerMenu",              dict(choices=["Lissajous", "Circle"])),
             # Channel A
             ('sp',  "A: Amp Mult:",    "shaker_A_amp",   "32idbShaker:shaker:A:ampMult.VAL",    {}),
             ('sp',  "A: Amp Offset:",  "shaker_A_off",   "32idbShaker:shaker:A:ampOffset.VAL",  {}),
@@ -539,11 +904,37 @@ class Win(QtWidgets.QMainWindow):
             ('sp',  "B: Freq Mult:",   "shaker_B_fmult", "32idbShaker:shaker:B:freqMult.VAL",   {}),
         ]
         self._register_pv_fields(p, shaker_fields, skl)
+        # Run / Stop as a two-button pair. highlight_buttons=True makes
+        # the active side bright and the inactive one dim so you can see
+        # the current state at a glance.
+        shaker_run = ValveField(
+            status_pv="32idbShaker:shaker:run",
+            on_pv="32idbShaker:shaker:run",
+            off_pv="32idbShaker:shaker:run",
+            field_id="shaker_run",
+            label_text="",
+            on_text="Run", off_text="Stop",
+            on_value=1, off_value=0,
+            pulse=False, btn_width=80,
+            highlight_buttons=True, parent=p,
+        )
+        shaker_run.name_lbl.hide()
+        skl.addRow("Shaker:", shaker_run)
+        self._pv_fields[p.key]["shaker_run"] = shaker_run
         p.setLayout(skl); p.setGeometry(1104 + GAP, iy + 168, 360, 400)
 
         # --- Launchers ---
-        p, _ = self._make_panel("Launchers", 500, 110, tab_name)
-        ll2 = QtWidgets.QGridLayout(); ll2.setContentsMargins(6, 22, 6, 4); ll2.setSpacing(3)
+        p, _ = self._make_panel("Launchers", 560, 150, tab_name)
+        ll2 = QtWidgets.QGridLayout(); ll2.setContentsMargins(6, 22, 6, 6); ll2.setSpacing(5)
+        p._grid_cols = 4  # used by _load_layout to restore positions
+        # Panel-wide CfgButton defaults (bg, fg, font_size). _load_layout
+        # re-applies these after loading saved buttons so stale saved colors
+        # can't override the current visual scheme.
+        p._cfg_btn_defaults = ("#2980b9", "#ffffff", 10)
+        p._default_btn_specs = []  # populated below — used on load to auto-fill
+                                    # any default buttons missing from the user's
+                                    # saved list (so new defaults appear for users
+                                    # with existing saves).
         launchers = [
             ("ImageJ","/home/beams/USERTXM/Software/ImageJ/ImageJ.sh"),
             ("Detector","/home/beams/USERTXM/epics/synApps/support/32idbSP1/iocBoot/ioc32idbSP1/softioc/32idbSP1.sh medm"),
@@ -553,31 +944,41 @@ class Win(QtWidgets.QMainWindow):
             ("Web IOCs","/home/beams/USERTXM/scripts/ioc_page.sh"),
             ("Web Cams","firefox 10.54.102.97 &"),
             ("Shaker","/net/s32dserv/xorApps/epics/synApps_6_3/ioc/32idbShaker/start_MEDM_32idbShaker")]
+        bg_l, fg_l, fs_l = p._cfg_btn_defaults
+        p._default_btn_specs = list(launchers)
         for i, (lbl, cmd) in enumerate(launchers):
-            b = QtWidgets.QPushButton(lbl)
-            b.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;padding:3px 6px;border:1px solid #404040;border-radius:3px;")
-            b.clicked.connect(partial(lambda c: subprocess.Popen(c, shell=True, start_new_session=True), cmd))
+            b = CfgButton(lbl, action_type="shell", action=cmd,
+                          bg=bg_l, fg=fg_l, font_size=fs_l, parent=p)
+            b.setMinimumHeight(34)
             ll2.addWidget(b, i // 4, i % 4)
-        p.setLayout(ll2); p.setGeometry(0, iy + 64, 500, 110)
+            p.custom_buttons.append(b)
+        p.setLayout(ll2); p.setGeometry(0, iy + 64, 560, 150)
 
         # --- Displays ---
-        p, _ = self._make_panel("Displays", 500, 80, tab_name)
-        dl = QtWidgets.QGridLayout(); dl.setContentsMargins(6, 22, 6, 4); dl.setSpacing(3)
+        p, _ = self._make_panel("Displays", 560, 150, tab_name)
+        dl = QtWidgets.QGridLayout(); dl.setContentsMargins(6, 22, 6, 6); dl.setSpacing(5)
+        p._grid_cols = 3  # used by _load_layout to restore positions
+        p._cfg_btn_defaults = ("#27ae60", "#ffffff", 10)
+        p._default_btn_specs = []  # filled right below
         displays = [
             ("XANES","medm -x -macro 'P=32id:,R=TXMOptics:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/xanes.adl &"),
             ("Furnace","medm -x /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/Furnace.adl &"),
-            ("DCM Motors","medm -x -macro 'P=32ida:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/dcm_motors9.adl &"),
+            ("DCM Motors","medm -x -macro 'P=32ida:,P1=32idb:,M1=m1,M2=m2,M3=m3,M4=m4,M5=m5,M6=m6,M7=m7,M8=m8,M9=m5' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/dcm_motors9.adl &"),
             ("IOC Setup","medm -x -macro 'P=32id:,R=TXMOptics:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/txmOptics_extended.adl &"),
             ("TomoScan","medm -x -macro 'P=32id:,R=TomoScan:,BEAMLINE=tomoScan_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &"),
             ("TomoStep","medm -x -macro 'P=32id:,R=TomoScanStep:,BEAMLINE=tomoScanStep_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &"),
             ("TomoStream","medm -x -macro 'P=32id:,R=TomoScanStream:,BEAMLINE=tomoScanStream_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &"),
-            ("CSS/BPM","/net/s32dserv/xorApps/epics/synApps_6_0/ioc/32idcBPM/iocBoot/iocbpm/32idcBPM.sh css")]
+            ("CSS/BPM","/net/s32dserv/xorApps/epics/synApps_6_0/ioc/32idcBPM/iocBoot/iocbpm/32idcBPM.sh css"),
+            ("Softglue","medm -x -macro 'P=32idSoftGlueZynq:' /home/beams19/USERTXM/epics/synApps/support/softGlueZynq/softGlueZynqApp/op/adl/softGlueZynq_top.adl &")]
+        bg_d, fg_d, fs_d = p._cfg_btn_defaults
+        p._default_btn_specs = list(displays)
         for i, (lbl, cmd) in enumerate(displays):
-            b = QtWidgets.QPushButton(lbl)
-            b.setStyleSheet("background:#1e5a8e;color:#fff;font:9pt;padding:3px 6px;border:1px solid #2980b9;border-radius:3px;")
-            b.clicked.connect(partial(lambda c: subprocess.Popen(c, shell=True, start_new_session=True), cmd))
+            b = CfgButton(lbl, action_type="shell", action=cmd,
+                          bg=bg_d, fg=fg_d, font_size=fs_d, parent=p)
+            b.setMinimumHeight(34)
+            p.custom_buttons.append(b)
             dl.addWidget(b, i // 3, i % 3)
-        p.setLayout(dl); p.setGeometry(0, iy + 178, 500, 80)
+        p.setLayout(dl); p.setGeometry(0, iy + 220, 560, 150)
 
         # --- Schematic ---
         if os.path.isfile(_IMG):
@@ -594,7 +995,7 @@ class Win(QtWidgets.QMainWindow):
         astop = QtWidgets.QPushButton("ALL STOP")
         astop.setStyleSheet("background:#c0392b;color:#fff;font:bold 14pt;border:2px solid #e74c3c;border-radius:4px;padding:4px;")
         astop.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        astop.clicked.connect(lambda: caput_bg("32id:TXMOptics:AllStop", 1))
+        astop.clicked.connect(self._on_all_stop)
         asl.addWidget(astop); p.setLayout(asl)
         p.setGeometry(938, 0, 160, 60)
 
@@ -737,6 +1138,7 @@ class Win(QtWidgets.QMainWindow):
             self._font_label_widget.setVisible(not is_user)
             self.add_panel_btn.setVisible(not is_user)
             self.add_tab_btn.setVisible(not is_user)
+            self.add_widget_btn.setVisible(not is_user)
 
     def _tab_context_menu(self, pos):
         if not self._allow_edit or not self._edit_mode: return
@@ -868,6 +1270,162 @@ class Win(QtWidgets.QMainWindow):
         p.setGeometry(50, 50, 200, 100); p.set_edit(True)
         lay = QtWidgets.QVBoxLayout(); lay.setContentsMargins(6, 22, 6, 6); lay.addStretch(); p.setLayout(lay)
 
+    def _widget_registry(self):
+        """Registry of plugin widgets available under the + Widget menu.
+        Each entry: menu_label → (default_panel_name, default_w,
+        default_h, factory(parent) → QWidget). Factories receive the
+        containing Panel; they can read `parent.key` if they need
+        per-instance persistence keyed by panel. Add a new entry by
+        appending one line here; nothing else in main_window needs to
+        change. Post-creation, _add_widget_from_registry inspects the
+        widget's type and hooks it into the correct subscription list
+        (self.mcs for MCs, self._pv_fields for PVField/ValveField)."""
+        def _webview_factory(parent):
+            from .beamlines.bl32id.camera_view import CameraView
+            return CameraView(panel_key=getattr(parent, "key", None),
+                              parent=parent)
+
+        def _motor_factory(parent):
+            return MC("New Motor", "")
+
+        def _valve_factory(parent):
+            from .pv_field import ValveField
+            fid = self._new_field_id("valve")
+            return ValveField(status_pv="", on_pv="", off_pv="",
+                              field_id=fid,
+                              label_text="New Valve",
+                              on_text="On", off_text="Off",
+                              parent=parent)
+
+        def _toggle_factory(parent):
+            from .pv_field import ToggleField
+            fid = self._new_field_id("toggle")
+            return ToggleField(status_pv="", open_pv="", close_pv="",
+                               field_id=fid,
+                               label_text="Toggle",
+                               parent=parent)
+
+        def _sp_factory(parent):
+            from .pv_field import PVField
+            return PVField('sp', "", field_id=self._new_field_id("sp"),
+                           placeholder="setpoint", parent=parent)
+
+        def _rb_factory(parent):
+            from .pv_field import PVField
+            return PVField('rb', "", field_id=self._new_field_id("rb"),
+                           parent=parent)
+
+        def _led_factory(parent):
+            from .pv_field import PVField
+            return PVField('led', "", field_id=self._new_field_id("led"),
+                           parent=parent)
+
+        def _btn_factory(parent):
+            from .pv_field import PVField
+            return PVField('btn', "", field_id=self._new_field_id("btn"),
+                           button_text="Action", button_value=1,
+                           parent=parent)
+
+        return {
+            "Motor card":         ("Motor", 130, 200, _motor_factory),
+            "Valve / Shutter":    ("Valve", 260, 90,  _valve_factory),
+            "Toggle button":      ("Toggle", 180, 90, _toggle_factory),
+            "Setpoint field (SP)": ("Setpoint", 240, 60, _sp_factory),
+            "Readback field (RB)": ("Readback", 240, 60, _rb_factory),
+            "LED indicator":      ("LED",   140, 60,  _led_factory),
+            "Action button":      ("Action", 180, 60, _btn_factory),
+            "Web view / Camera":  ("Web view", 480, 360, _webview_factory),
+        }
+
+    def _new_field_id(self, prefix: str) -> str:
+        """Generate a unique field_id for a dynamically-added PV field.
+        Increments a per-session counter so multiple widgets of the
+        same kind don't collide."""
+        counter = getattr(self, "_field_id_counter", 0) + 1
+        self._field_id_counter = counter
+        return f"{prefix}_{counter}"
+
+    def _add_widget_from_registry(self, key, panel_name=None):
+        """Create a new panel on the current tab and drop the widget
+        produced by the registry entry `key` inside it. Panel geometry
+        starts at (50, 50) at the widget's default size; user can move
+        and resize in edit mode from there. When called from
+        _load_layout, `panel_name` is the saved panel base name so the
+        recreated panel key matches the saved geometry entry."""
+        entry = self._widget_registry().get(key)
+        if entry is None:
+            return
+        default_name, w, h, factory = entry
+        if panel_name is not None:
+            default_name = panel_name
+        # Give each new panel a unique name so a saved layout can carry
+        # multiple instances (Camera 1, Camera 2, …).
+        base = default_name
+        existing = {k.split("::", 1)[0] for k in self._panels}
+        name = base
+        n = 2
+        while name in existing:
+            name = f"{base} {n}"; n += 1
+        current_tab = self.tab_widget.tabText(self.tab_widget.currentIndex())
+        p, _ = self._make_panel(name, w, h, current_tab)
+        p.setGeometry(50, 50, w, h)
+        # Force a minimum panel size so a saved layout can't crush the
+        # widget to invisibility on the next restart. User can still
+        # drag-resize the panel in edit mode to make it bigger.
+        p.setMinimumSize(240, 140)
+        # Match whatever edit-mode state the window is currently in.
+        # Hardcoding True made the panel draggable in normal mode when
+        # _load_layout invoked us on startup.
+        p.set_edit(getattr(self, "_edit_mode", False))
+        lay = QtWidgets.QVBoxLayout()
+        lay.setContentsMargins(6, 22, 6, 6)
+        widget = factory(p)
+        lay.addWidget(widget)
+        p.setLayout(lay)
+        # Type-specific registration so the PV engine / save-load
+        # infrastructure treats the widget the same as one built by
+        # _build_all_panels.
+        from .pv_field import PVField, ValveField, ToggleField
+        pv_names_new = []
+        if isinstance(widget, MC):
+            self.mcs.append(widget)
+            pv_names_new.extend(widget.get_pvs())
+        elif isinstance(widget, (PVField, ValveField, ToggleField)):
+            slot = self._pv_fields.setdefault(p.key, {})
+            slot[widget.field_id] = widget
+            pv_names_new.extend(getattr(widget, "monitored_pvs",
+                                        lambda: [])() or [])
+        # If the engine is already running, subscribe to the new PVs
+        # so the widget starts receiving updates immediately (rather
+        # than waiting for the next full restart).
+        pve = getattr(self, "_pve", None)
+        if pve is not None and pv_names_new:
+            import threading
+            threading.Thread(target=pve.monitor_many,
+                             args=([p for p in pv_names_new if p],),
+                             daemon=True,
+                             name=f"pv-monitor-new-{p.key}").start()
+
+        # Explicitly show the widget in case something in the panel's
+        # edit-mode toggle above suppressed it.
+        widget.show()
+        p.show()
+        # Track so _save_layout can persist the widget-kind, and
+        # _load_layout can rebuild it via _add_widget_from_registry.
+        if not hasattr(self, "_plugin_widgets"):
+            self._plugin_widgets = {}
+        self._plugin_widgets[p.key] = key
+        # If this panel key was previously marked deleted, un-delete it —
+        # the user re-added it, so on next load it must NOT be skipped.
+        # Fixes the "widget vanishes on restart even though it saved
+        # fine" bug where a stale _deleted_panels entry silently
+        # suppressed the re-added widget.
+        if p.key in self._deleted_panels:
+            self._deleted_panels.remove(p.key)
+            print(f"[WIDGET] '{p.key}' removed from _deleted_panels")
+        print(f"[WIDGET] added '{name}' ({w}x{h}) on tab {current_tab!r}; "
+              f"panel geometry now {p.geometry().width()}x{p.geometry().height()}")
+
     # ── font scale ───────────────────────────────────────────────────
 
     def _change_font_scale(self, pct):
@@ -883,13 +1441,20 @@ class Win(QtWidgets.QMainWindow):
             p.set_edit(on)
             for w in p.findChildren(QtWidgets.QPushButton):
                 if not isinstance(w, CfgButton): w.setEnabled(not on)
-            for w in p.findChildren(QtWidgets.QLineEdit): w.setEnabled(not on)
+            for w in p.findChildren(QtWidgets.QLineEdit):
+                # Plugin widgets (e.g. web view URL bar) can mark
+                # themselves as always-enabled so their config field
+                # stays editable while the panel is being repositioned.
+                if w.property("_bl_gui_always_enabled"):
+                    continue
+                w.setEnabled(not on)
             for w in p.findChildren(QtWidgets.QComboBox): w.setEnabled(not on)
         # Enable "Edit PV..." right-click on each PVField while in edit mode
         for slot in self._pv_fields.values():
             for f in slot.values():
                 f.set_edit_mode(on)
         self.add_panel_btn.setVisible(on); self.add_tab_btn.setVisible(on)
+        self.add_widget_btn.setVisible(on)
         if on:
             self.statusBar().showMessage(
                 "EDIT MODE — drag/resize panels, right-click panels/motors/PV fields to edit. "
@@ -914,7 +1479,11 @@ class Win(QtWidgets.QMainWindow):
                 "_deleted_panels": self._deleted_panels,
                 "_panels": {}, "_tab_map": {}, "_buttons": {}, "_styles": {},
                 "_title_fonts": {}, "_titles": {}, "_mcs": {}, "_pv_fields": {},
-                "_custom_rows": self._custom_rows}
+                "_custom_rows": self._custom_rows,
+                "_plugin_widgets": dict(getattr(self, "_plugin_widgets", {})),
+                "_io_labels": {fid: labels[0].text()
+                               for fid, labels in getattr(self, "_io_labels", {}).items()
+                               if labels}}
         # PV-field assignments — save PV per field_id per panel.
         # Widgets that hold >1 PV (ValveField, PVField 'btn_pair') return a dict
         # from get_pvs_dict(); plain single-PV fields save as a bare string.
@@ -951,19 +1520,43 @@ class Win(QtWidgets.QMainWindow):
                     btn_id = f"{k}|||{btn.text()}"
                     data["_styles"][btn_id] = {"bg": bg, "fg": btn.property("_custom_fg"),
                         "fs": btn.property("_custom_fs"), "w": btn.width(), "h": btn.height()}
-        lay_path = _lay_path()
+        # Always save to the per-user path — never overwrite the shared
+        # bundled template. Create ~/.bl_gui/ on demand.
+        lay_path = _user_lay_path()
         try:
-            with open(lay_path, "w") as f: json.dump(data, f, indent=2)
+            os.makedirs(os.path.dirname(lay_path), exist_ok=True)
+            # Write via temp + rename + fsync so a crash mid-write can't
+            # leave a truncated layout file on disk.
+            tmp_path = lay_path + ".tmp"
+            with open(tmp_path, "w") as f:
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, lay_path)
             mc_total = sum(len(v) for v in data["_mcs"].values())
+            btn_total = sum(len(v) for v in data["_buttons"].values())
             print(f"[SAVE] wrote {lay_path}  panels={len(data['_panels'])}  mcs={mc_total}  "
-                  f"titles={len(data['_titles'])}  deleted={len(data['_deleted_panels'])}")
+                  f"titles={len(data['_titles'])}  deleted={len(data['_deleted_panels'])}  "
+                  f"buttons={btn_total}  io_labels={len(data.get('_io_labels', {}))}")
+            # Print a sample of what we just wrote so the user can verify
+            # their edits actually landed in the file.
+            tsample = {k: v for i, (k, v) in enumerate(data["_titles"].items()) if i < 6}
+            print(f"[SAVE]   sample titles: {tsample}")
+            iolabels = data.get("_io_labels", {})
+            if iolabels:
+                print(f"[SAVE]   io_labels: {iolabels}")
         except Exception as e:
             print(f"[SAVE] FAILED: {e}")
             import traceback
             traceback.print_exc()
 
     def _load_layout(self):
+        user_path = _user_lay_path()
+        bundled_path = _bundled_lay_path()
         lay_path = _lay_path()
+        print(f"[LOAD] user_path={user_path} exists={os.path.isfile(user_path)}")
+        print(f"[LOAD] bundled_path={bundled_path} exists={os.path.isfile(bundled_path)}")
+        print(f"[LOAD] using={lay_path}")
         if not os.path.isfile(lay_path):
             print(f"[LOAD] no file at {lay_path}, using defaults")
             return
@@ -971,6 +1564,10 @@ class Win(QtWidgets.QMainWindow):
             with open(lay_path) as f: data = json.load(f)
             fs = data.get("_font_scale")
             if fs is not None: self.font_slider.setValue(int(fs))
+            # Deliberately DO NOT read _nano_mode from the layout JSON.
+            # The regime file (~/.bl_gui/regime.txt) is the single source
+            # of truth; reading a stale layout value here would overwrite
+            # what __init__ just loaded from the file.
             # Restore tab label font size
             tlfs = data.get("_tab_label_fs")
             if tlfs is not None:
@@ -1011,7 +1608,48 @@ class Win(QtWidgets.QMainWindow):
                     except ValueError:
                         pass
             self._next_panel_id = max_id
+            # First rebuild plugin widget panels (Web view etc.) from
+            # _plugin_widgets so their panel keys exist before the
+            # generic recreate-as-MC loop below claims them.
+            plug = data.get("_plugin_widgets") or {}
+            self._plugin_widgets = {}
+            print(f"[LOAD] _plugin_widgets in JSON: {plug}")
+            for pk, kind in plug.items():
+                if pk in self._panels:
+                    print(f"[LOAD] plugin {pk!r}: panel key already exists, skipping")
+                    continue
+                if pk in data.get("_deleted_panels", []):
+                    print(f"[LOAD] plugin {pk!r}: in _deleted_panels, skipping")
+                    continue
+                tab_name = tab_map.get(pk) or _DEFAULT_TABS[-1]
+                canvas = self._tab_canvases.get(tab_name)
+                if canvas is None:
+                    print(f"[LOAD] SKIP plugin (no canvas): {pk!r}  tab={tab_name!r} "
+                          f"available_tabs={list(self._tab_canvases.keys())}")
+                    continue
+                # Point the current tab at the saved one so
+                # _add_widget_from_registry (which reads current tab)
+                # places the widget on the right canvas.
+                for i in range(self.tab_widget.count()):
+                    if self.tab_widget.tabText(i) == tab_name:
+                        self.tab_widget.setCurrentIndex(i)
+                        break
+                base = pk.split("::")[0].split("#")[0]
+                print(f"[LOAD] plugin: recreating {pk!r} kind={kind!r} "
+                      f"on tab={tab_name!r} base={base!r}")
+                self._add_widget_from_registry(kind, panel_name=base)
+                print(f"[LOAD] plugin: after recreate, _panels has "
+                      f"key {pk!r}: {pk in self._panels}")
             recreated = 0
+            # Build a name-based fallback so panels created BEFORE the
+            # _plugin_widgets tracking was added still come back as
+            # plugin widgets instead of empty MC frames. Match on the
+            # panel's default_name field in the registry.
+            registry = self._widget_registry()
+            plugin_default_names = {
+                default_name: reg_key
+                for reg_key, (default_name, _w, _h, _f) in registry.items()
+            }
             for k, rect in panels_saved.items():
                 if k in self._panels:
                     continue    # default panel, already exists
@@ -1025,6 +1663,20 @@ class Win(QtWidgets.QMainWindow):
                     continue
                 # Reconstruct a base title from the key: "Base#N::Tab" -> "Base"
                 base = k.split("::")[0].split("#")[0]
+                # Name-based auto-detection: any orphan panel whose base
+                # name matches a plugin registry entry gets rebuilt as
+                # that plugin. Covers layouts saved before we started
+                # writing _plugin_widgets explicitly.
+                matched_kind = plugin_default_names.get(base)
+                if matched_kind is not None:
+                    print(f"[LOAD] plugin (name-match): rebuilding {k!r} "
+                          f"as {matched_kind!r}")
+                    for i in range(self.tab_widget.count()):
+                        if self.tab_widget.tabText(i) == tab_name:
+                            self.tab_widget.setCurrentIndex(i); break
+                    self._add_widget_from_registry(matched_kind, panel_name=base)
+                    recreated += 1
+                    continue
                 new_p = Panel(base + " (copy)", k, canvas)
                 # Use the saved MC list to decide layout orientation + contents
                 mc_list = mcs_saved.get(k, [])
@@ -1069,16 +1721,68 @@ class Win(QtWidgets.QMainWindow):
                         f"color: #73dfff; font: bold {fs}pt; background: transparent; padding: 2px 6px;"
                     )
                     p._title.adjustSize()
-            # Custom buttons
+            # Custom buttons — if the saved layout has buttons for a panel,
+            # they REPLACE the default buttons built by _build_all_panels
+            # (Launchers / Displays panels seed defaults into
+            # p.custom_buttons so the user can edit them; without this
+            # replacement we'd end up with duplicates after a save).
             buttons = data.get("_buttons", {})
             for panel_key, btn_list in buttons.items():
                 p = self._panels.get(panel_key)
                 if not p: continue
-                for bd in btn_list:
-                    btn = CfgButton.from_dict(bd, p)
+                for existing in list(p.custom_buttons):
                     lay = p.layout()
-                    if lay: lay.addWidget(btn)
-                    else: btn.move(10, 30)
+                    if lay is not None:
+                        lay.removeWidget(existing)
+                    existing.setParent(None); existing.deleteLater()
+                p.custom_buttons.clear()
+                cols = getattr(p, "_grid_cols", None)
+                defaults = getattr(p, "_cfg_btn_defaults", None)
+                default_specs = getattr(p, "_default_btn_specs", [])
+                # Merge: if the saved list is missing any default button,
+                # append it. Each spec is (label, cmd) = shell default,
+                # or (label, action_type, action) for e.g. caput presets.
+                # Match by label OR action so renames don't duplicate.
+                saved_labels = {bd.get("label") for bd in btn_list}
+                saved_actions = {bd.get("action") for bd in btn_list}
+                merged = list(btn_list)
+                for spec in default_specs:
+                    if len(spec) == 3:
+                        lbl, atype, cmd = spec
+                    else:
+                        lbl, cmd = spec; atype = "shell"
+                    if lbl in saved_labels or cmd in saved_actions:
+                        continue
+                    merged.append({"label": lbl, "type": atype, "action": cmd,
+                                   "bg": defaults[0] if defaults else "#2d2d2d",
+                                   "fg": defaults[1] if defaults else "#e0e0e0",
+                                   "font_size": defaults[2] if defaults else 9})
+                for idx, bd in enumerate(merged):
+                    btn = CfgButton.from_dict(bd, p)
+                    btn.setMinimumHeight(34)
+                    # Only override style when the saved colour is the
+                    # stale default "#2d2d2d" from a pre-refresh save —
+                    # otherwise respect whatever the user set.
+                    if defaults and bd.get("bg") in ("#2d2d2d", None):
+                        btn._bg, btn._fg, btn._font_size = defaults
+                        btn._apply_style()
+                    # Re-wire the Nano/Micro preset handler that _build_
+                    # all_panels attached at initial construction — the
+                    # button was destroyed above and recreated fresh via
+                    # CfgButton.from_dict, so any prior connection is
+                    # gone. Without this, clicking Nano/Micro fires only
+                    # the caput and never writes ~/.bl_gui/regime.txt.
+                    action = getattr(btn, "action", "") or ""
+                    if "MoveAllIn" in action or "MoveAllOut" in action:
+                        btn.clicked.connect(
+                            lambda _=False, b=btn: self._on_preset_clicked(b))
+                    lay = p.layout()
+                    if isinstance(lay, QtWidgets.QGridLayout) and cols:
+                        lay.addWidget(btn, idx // cols, idx % cols)
+                    elif lay:
+                        lay.addWidget(btn)
+                    else:
+                        btn.move(10, 30)
                     btn.show(); p.custom_buttons.append(btn)
             # Per-button styles
             styles = data.get("_styles", {})
@@ -1156,10 +1860,25 @@ class Win(QtWidgets.QMainWindow):
                         f.pv = saved.strip()
                     elif isinstance(saved, dict) and hasattr(f, "set_pvs_dict"):
                         f.set_pvs_dict(saved)
+            # Restore renamed In/Out panel header labels (all tabs at once).
+            io_labels_saved = data.get("_io_labels", {})
+            for fid, text in io_labels_saved.items():
+                labels = getattr(self, "_io_labels", {}).get(fid) or []
+                if isinstance(text, str) and text:
+                    for l in labels:
+                        l.setText(text)
             mc_total = sum(len(v) for v in mcs_saved.values())
+            btn_total = sum(len(v) for v in data.get("_buttons", {}).values())
+            iolabels = data.get("_io_labels", {})
             print(f"[LOAD] read {lay_path}  panels={len(data.get('_panels', {}))}  "
                   f"mcs={mc_total}  titles={len(data.get('_titles', {}))}  "
-                  f"deleted={len(data.get('_deleted_panels', []))}")
+                  f"deleted={len(data.get('_deleted_panels', []))}  "
+                  f"buttons={btn_total}  io_labels={len(iolabels)}")
+            tsample = {k: v for i, (k, v) in enumerate(
+                data.get("_titles", {}).items()) if i < 6}
+            print(f"[LOAD]   sample titles: {tsample}")
+            if iolabels:
+                print(f"[LOAD]   io_labels: {iolabels}")
         except Exception as e:
             print(f"[LOAD] FAILED: {e}")
             import traceback
@@ -1184,6 +1903,49 @@ class Win(QtWidgets.QMainWindow):
         import threading
         threading.Thread(target=self._pve.monitor_many, args=(pv_list,),
                          daemon=True, name="pv-monitor-setup").start()
+        # Kick off the hourly snapshot autosaver as soon as the PV
+        # engine exists. First tick fires after the interval so the
+        # very first snapshot has real PV data (not the pre-monitor
+        # empty-cache) to compare against.
+        self._start_snapshot_autosaver()
+
+    # ── Snapshot autosaver ────────────────────────────────────────
+    _SNAPSHOT_INTERVAL_MS = 60 * 60 * 1000   # 1 hour
+
+    def _start_snapshot_autosaver(self):
+        if getattr(self, "_snap_timer", None) is not None:
+            return
+        self._snap_timer = QtCore.QTimer(self)
+        self._snap_timer.setInterval(self._SNAPSHOT_INTERVAL_MS)
+        self._snap_timer.timeout.connect(self._snapshot_tick)
+        self._snap_timer.start()
+        print(f"[SNAPSHOT] autosaver armed — {self._SNAPSHOT_INTERVAL_MS/1000/60:g} min interval")
+
+    def _snapshot_tick(self):
+        """One-hour tick. Take a fresh sample, compare against the
+        most recent saved snapshot, write only if anything changed."""
+        from . import snapshot as _snap
+        if not hasattr(self, "_pve"):
+            return
+        pv_names = list(self._pve._channels.keys())
+        if not pv_names:
+            print("[SNAPSHOT] tick skipped: no PVs monitored yet")
+            return
+        curr = _snap.take_snapshot(pv_names, self._pve.get)
+        prev = _snap.newest_snapshot()
+        changed = _snap.diff_pv_values(prev or {}, curr)
+        # First-ever tick has prev=None → always saves. Subsequent
+        # ticks with zero change do nothing.
+        if prev is not None and not changed:
+            print("[SNAPSHOT] tick: no PV changes, skipping save")
+            return
+        path, offset = _snap.save_snapshot(curr)
+        print(f"[SNAPSHOT] saved {path}@{offset}  "
+              f"({len(curr.get('pvs') or {})} PVs, {len(changed)} changed)")
+
+    def _open_snapshot_window(self):
+        from .snapshot_window import launch as _snap_launch
+        _snap_launch(parent=self)
 
     @QtCore.pyqtSlot(str, str)
     def _on_pv(self, pv_name, value):
@@ -1205,9 +1967,484 @@ class Win(QtWidgets.QMainWindow):
                     f.update_value(value)
 
     def closeEvent(self, event):
-        self._save_layout()
+        # If we are closing from inside edit mode, save — otherwise every
+        # edit done in-session would silently vanish on window-close.
+        # In view mode we still do NOT save so a closed-without-Ctrl+S
+        # cannot stomp on an externally hand-edited layout.json.
+        if getattr(self, "_edit_mode", False):
+            try: self._save_layout()
+            except Exception as e: print(f"[SAVE] close-event save failed: {e}")
         if hasattr(self, '_pve'): self._pve.stop_all()
         event.accept()
+
+    def _explicit_save_layout(self):
+        """User-triggered save — the ONLY way the layout file gets written
+        outside of the edit-mode exit. Shows a confirmation in the status
+        bar so the user sees it happened."""
+        self._save_layout()
+        try:
+            self.statusBar().showMessage(f"Saved layout to {_user_lay_path()}", 4000)
+        except Exception:
+            pass
+
+    def _rename_io_label_by_fid(self, fid):
+        """Rename every In/Out label that shares this fid across tabs.
+        Triggered by right-click on any In/Out header label."""
+        labels = getattr(self, "_io_labels", {}).get(fid) or []
+        if not labels:
+            return
+        current = labels[0].text()
+        text, ok = QtWidgets.QInputDialog.getText(
+            self, "Rename", f"New label for {fid}:",
+            QtWidgets.QLineEdit.Normal, current)
+        if ok and text.strip():
+            for l in labels:
+                l.setText(text.strip())
+
+    def _on_all_stop(self):
+        """ALL STOP: stops motors (via TXMOptics:AllStop), the condenser
+        shaker, the camera acquisition, and drops the He PLC analog
+        output to 0. Each is a fire-and-forget caput; the shaker/camera
+        status widgets pick up the state change via their own PV
+        monitors."""
+        actions = [
+            ("32id:TXMOptics:AllStop",     1, "motors"),
+            ("32idbShaker:shaker:run",     0, "condenser shaker"),
+            ("32idbSP1:cam1:Acquire",      0, "camera"),
+            ("32idbSoft:PLC1:ao1",         0, "He PLC AO1"),
+            ("32idbTXM:uniblitz:control",  0, "uniblitz shutter"),
+            # Fire the .PROC of the B-shutter Close record — same
+            # action the "Close" button on the shutter card issues.
+            ("32idb:rshtrB:Close.PROC",    1, "B-station shutter"),
+        ]
+        for pv, val, label in actions:
+            print(f"[ALLSTOP] {label}: caput {pv} {val}")
+            caput_bg(pv, val)
+
+    def _on_preset_clicked(self, btn):
+        """Track Nano/Micro regime from the preset actions and persist
+        it to ~/.bl_gui/regime.txt so it survives restarts and can be
+        read by other tools. Detected by matching the well-known
+        TXMOptics all-in / all-out PVs — a user-edited preset that no
+        longer contains either leaves the state alone."""
+        action = (getattr(btn, 'action', '') or '')
+        if 'MoveAllIn' in action:
+            new = "nano"
+        elif 'MoveAllOut' in action:
+            new = "micro"
+        else:
+            return
+        was_nano = self._nano_mode
+        self._nano_mode = (new == "nano")
+        if was_nano != self._nano_mode:
+            print(f"[PRESET] regime -> {new.upper()}")
+        try:
+            self._regime.write(new)
+        except Exception as e:
+            print(f"[PRESET] regime.write failed: {e}")
+
+    def _refresh_regime(self):
+        """Re-read regime from the persistent file before any decision
+        that depends on it. Cheap (one fs read) and catches any change
+        made by another tool since the last time we looked."""
+        new = self._regime.is_nano()
+        if new != self._nano_mode:
+            self._nano_mode = new
+            print(f"[REGIME] refreshed from file -> "
+                  f"{'NANO' if new else 'MICRO'}")
+
+    def _on_set_energy(self):
+        """Go button in the Energy panel. If the EPICS calibration-file PVs
+        (EnergyCalibrationFileOne / Two) are both blank, use the local ZP
+        calibration table (~/.bl_gui/bl32id_zp_calibration.json) to drive
+        the ZP X/Y/Z motors; otherwise let the IOC handle it normally via
+        EnergySet. The mono move is triggered in both cases."""
+        self._refresh_regime()
+        # Simple rule: Use Calib YES → bl_gui's table is the authority for
+        # motor positions; direct-move the motors. Use Calib NO → leave
+        # motors alone. EPICS cal-file PVs are IGNORED here (only the
+        # Generate Cal Files button touches them).
+        use_cal_on = False
+        for slot in self._pv_fields.values():
+            f = slot.get("energy_usecalib")
+            if f is not None and hasattr(f, "_is_open"):
+                use_cal_on = bool(f._is_open); break
+        print(f"[ENERGY] use_cal_on={use_cal_on}")
+        if use_cal_on:
+            self._move_motors_from_plugin()
+            # Also refresh the EPICS cal files from the SAME JSON. Without
+            # this, EnergySet=1 (below) makes the IOC re-apply whatever
+            # was in EnergyCalibrationFileOne/Two from an earlier click,
+            # overwriting the QG/X/Y/Z values we just direct-caput.
+            self._apply_zp_calib_from_plugin()
+        caput_bg("32id:TXMOptics:EnergySet", 1)
+
+    _CAL_FILE_DIR = "/home/beams/USERTXM/epics/synApps/support/txmoptics/iocBoot/iocTXMOptics"
+
+    def _on_harmonic_toggled(self, on):
+        # Lazy-instantiate the background worker on first toggle so we
+        # don't spin up a timer for users who never use this feature.
+        if not hasattr(self, "_harmonic"):
+            from .beamlines.bl32id.harmonic_correction import HarmonicCorrection
+            self._harmonic = HarmonicCorrection(
+                # Read the persistent file each tick — matches whatever
+                # tool last set the regime, not just bl_gui's in-memory
+                # copy.
+                is_nano=self._regime.is_nano,
+                parent=self,
+            )
+        self._harmonic.set_enabled(on)
+        # Keep every mirror button (both tabs) in sync visually.
+        for b in getattr(self, "_harmonic_buttons", []):
+            if b.isChecked() != on:
+                b.blockSignals(True); b.setChecked(on); b.blockSignals(False)
+            self._style_harmonic_button(b, on=on)
+
+    def _style_harmonic_button(self, btn, on):
+        if on:
+            btn.setText("Harmonic Corr… ON")
+            btn.setStyleSheet(
+                "background:#27ae60;color:#fff;font:bold 10pt;"
+                "border:1px solid #2ecc71;border-radius:3px;")
+            btn.setToolTip("Every 5 s (Nano only): if the frame is bright and "
+                           "shows a central hot spot, nudge QG V (32idQG:m1).")
+        else:
+            btn.setText("Harmonic Correction")
+            btn.setStyleSheet(
+                "background:#2d2d2d;color:#e0e0e0;font:10pt;"
+                "border:1px solid #404040;border-radius:3px;")
+            btn.setToolTip("Enable a 5-s background loop that nudges QG V away "
+                           "from central bright spots in Nano mode.")
+
+    def _trigger_qgmax(self):
+        """Fire a one-shot QGMax optimization by writing pystream's request
+        file. The pystream QGMax background watcher polls that file twice
+        a second and runs one optimization cycle."""
+        if getattr(self, "_qgmax_running", False):
+            print("[QGMAX] cycle already running — ignoring trigger")
+            return
+        try:
+            from .beamlines.bl32id import qgmax_trigger
+            ts = qgmax_trigger.trigger()
+            # Reflect state immediately — don't wait for the next poll tick.
+            self._qgmax_running = True
+            for b in getattr(self, "_qgmax_buttons", []):
+                self._style_qgmax_button(b, running=True)
+            self.statusBar().showMessage(
+                f"QGMax trigger sent (ts={ts:.1f}) — optimization running…", 4000)
+            print(f"[QGMAX] trigger ts={ts}")
+        except Exception as e:
+            print(f"[QGMAX] trigger failed: {e}")
+            QtWidgets.QMessageBox.warning(self, "QGMax",
+                f"Could not write the trigger file:\n{e}")
+
+    def _style_qgmax_button(self, btn, running):
+        if running:
+            btn.setText("QGMax… running")
+            btn.setStyleSheet(
+                "background:#f39c12;color:#000;font:bold 10pt;"
+                "border:1px solid #f1c40f;border-radius:3px;")
+            btn.setToolTip("QGMax is running — wait until it finishes.")
+            btn.setEnabled(False)
+        else:
+            btn.setText("QGMax")
+            btn.setStyleSheet(
+                "background:#8e44ad;color:#fff;font:bold 10pt;"
+                "border:1px solid #9b59b6;border-radius:3px;")
+            btn.setToolTip(
+                "Trigger a single QGMax image-mean optimization cycle "
+                "(pystream must be running).")
+            btn.setEnabled(True)
+
+    def _poll_qgmax_status(self):
+        from .beamlines.bl32id import qgmax_trigger
+        st = qgmax_trigger.read_status()
+        running = bool(st and st.get("running"))
+        if running != getattr(self, "_qgmax_running", False):
+            self._qgmax_running = running
+            for b in getattr(self, "_qgmax_buttons", []):
+                self._style_qgmax_button(b, running=running)
+            if not running:
+                self.statusBar().showMessage("QGMax: done.", 3000)
+
+    # Energy range guard (keV) enforced by the GUI on the Energy SP field.
+    _ENERGY_MIN_KEV = 6.5
+    _ENERGY_MAX_KEV = 12.0
+
+    def _on_energy_sp_return(self, sp_field):
+        """Validate Energy SP against [6.5, 12] keV before caput. On
+        out-of-range, clamp the text back to the last valid value and
+        pop a warning — no caput happens."""
+        txt = sp_field._inner.text().strip()
+        try:
+            val = float(txt)
+        except ValueError:
+            QtWidgets.QMessageBox.warning(
+                self, "Energy invalid", f"{txt!r} is not a number.")
+            return
+        if val < self._ENERGY_MIN_KEV or val > self._ENERGY_MAX_KEV:
+            QtWidgets.QMessageBox.warning(
+                self, "Energy out of range",
+                f"Energy must be between {self._ENERGY_MIN_KEV} and "
+                f"{self._ENERGY_MAX_KEV} keV (you entered {val}).")
+            return
+        # Normal PVField caput path (same as _on_sp_return does).
+        print(f"[SP] {sp_field.field_id}: caput {sp_field.pv} {txt!r}")
+        caput_bg(sp_field.pv, txt)
+
+    def _move_motors_from_plugin(self):
+        """Linear-interpolate X/Y/Z/QG-V/QG-H at the current Energy SP
+        from the ZP calibration table and caput the positions to each
+        motor. Used when the EPICS cal-file PVs are empty: bl_gui acts
+        as the calibration authority instead of the IOC."""
+        self._refresh_regime()
+        sp = None
+        for slot in self._pv_fields.values():
+            f = slot.get("energy_sp")
+            if f is not None:
+                sp = f; break
+        if sp is None:
+            print("[ENERGY] no energy_sp widget found")
+            return
+        try:
+            e_keV = float(sp._inner.text())
+        except (ValueError, AttributeError):
+            print("[ENERGY] energy setpoint not numeric; aborting")
+            return
+        e_eV = e_keV * 1000.0
+
+        from .beamlines.bl32id import xanes_calib
+        cfg = xanes_calib.load_config()
+        pts = [p for p in (cfg.get("points") or []) if p and p[0] is not None]
+        motors = cfg.get("motors") or []
+        print(f"[ENERGY] plugin config: {len(pts)} cal rows; "
+              f"{len(motors)} motors, "
+              f"{sum(1 for m in motors if m.get('include', True))} included")
+        if len(pts) < 2:
+            print(f"[ENERGY] only {len(pts)} cal point(s) — need >= 2")
+            return
+
+        def _interp(col_idx):
+            return _polyfit_interp(pts, col_idx, e_eV)
+
+        # Iterate the motors list from the config. Column index is
+        # motors index + 1 (column 0 is Energy).
+        for i, m in enumerate(motors):
+            name    = m.get("label") or f"m{i+1}"
+            col     = i + 1
+            target_pv = (m.get("pv") or "").strip()
+            include = bool(m.get("include", True))
+            # Include=false → user opted this motor out entirely.
+            if not include:
+                print(f"[ENERGY] {name}: skipping (Include=off)")
+                continue
+            # Micro-regime auto-skip: motors labelled ZP X / ZP Y are
+            # frozen when the ZP is parked out. Label-based (case-
+            # insensitive substring) so renames or adding new ZP motors
+            # still work.
+            lbl = name.lower()
+            is_zp_xy = ("zp x" in lbl) or ("zp y" in lbl)
+            if is_zp_xy and not self._nano_mode:
+                print(f"[ENERGY] {name}: skipping (MICRO regime — ZP X/Y frozen)")
+                continue
+            if not target_pv:
+                print(f"[ENERGY] {name}: no PV configured, skipping")
+                continue
+            v = _interp(col)
+            if v is None:
+                print(f"[ENERGY] {name}: no cal data for column {col}, skipping")
+                continue
+            try:
+                r = subprocess.run(["caput", target_pv, f"{float(v):.6f}"],
+                                   capture_output=True, timeout=5.0, text=True)
+                if r.returncode == 0:
+                    print(f"[ENERGY] {name} @ {e_keV:g} keV -> {v:.6f}  "
+                          f"caput {target_pv} OK  stdout={r.stdout.strip()!r}")
+                else:
+                    print(f"[ENERGY] {name} caput {target_pv} rc={r.returncode} "
+                          f"stderr={r.stderr.strip()!r}")
+            except Exception as ex:
+                print(f"[ENERGY] {name} caput {target_pv} EXC: {ex}")
+
+    def _on_cal_range_changed(self, value):
+        """Persist the ± energy range into the calibration config JSON as
+        soon as it changes, so Go / Generate Cal Files always see the
+        current value."""
+        from .beamlines.bl32id import xanes_calib
+        try:
+            cfg = xanes_calib.load_config()
+            cfg["range_keV"] = float(value)
+            xanes_calib.save_config(cfg)
+        except Exception as e:
+            print(f"[ENERGY] failed to persist range_keV: {e}")
+
+    def _apply_zp_calib_from_plugin(self):
+        """Auto-generate two EPICS cal files at E_target ± range (range
+        comes from the ZP calibration tab). Each file holds X/Y/Z motor
+        positions INTERPOLATED from the local calibration table at that
+        energy."""
+        self._refresh_regime()
+        sp_widget = None
+        for slot in self._pv_fields.values():
+            f = slot.get("energy_sp")
+            if f is not None:
+                sp_widget = f; break
+        if sp_widget is None:
+            print("[ENERGY] could not locate energy_sp field")
+            return
+        try:
+            e_keV = float(sp_widget._inner.text())
+        except (ValueError, AttributeError):
+            print("[ENERGY] energy setpoint not numeric; aborting")
+            return
+
+        from .beamlines.bl32id import xanes_calib
+        cfg = xanes_calib.load_config()
+        pts = [p for p in (cfg.get("points") or []) if p and p[0] is not None]
+        motors = cfg.get("motors") or []
+        try:
+            range_keV = float(cfg.get("range_keV", xanes_calib.DEFAULT_RANGE_KEV))
+        except (TypeError, ValueError):
+            range_keV = xanes_calib.DEFAULT_RANGE_KEV
+        if len(pts) < 2:
+            print(f"[ENERGY] only {len(pts)} cal point(s) — need ≥2; aborting")
+            return
+
+        def _interp_at(col_idx, e_eV_target):
+            return _polyfit_interp(pts, col_idx, e_eV_target)
+
+        e_lo_keV = e_keV - range_keV
+        e_hi_keV = e_keV + range_keV
+        # Build (pv, col, label) triplets for every motor the user has
+        # flagged Include=true in the calibration tab. Column is
+        # motors index + 1 (column 0 is Energy).
+        axis_pvs = []
+        for i, m in enumerate(motors):
+            if not m.get("include", True):
+                continue
+            pv = (m.get("pv") or "").strip()
+            if not pv:
+                continue
+            axis_pvs.append((pv, i + 1, m.get("label", f"m{i+1}")))
+        # Micro-regime auto-skip: drop motors whose label looks like
+        # "ZP X" or "ZP Y" so the parked transverse position stays
+        # put. Applies to both the cal-file rows and the direct-caput
+        # block below.
+        if not self._nano_mode:
+            before = len(axis_pvs)
+            axis_pvs = [(pv, col, lbl) for pv, col, lbl in axis_pvs
+                        if not (("zp x" in lbl.lower())
+                                or ("zp y" in lbl.lower()))]
+            skipped = before - len(axis_pvs)
+            print(f"[ENERGY] MICRO regime — cal files & direct move: "
+                  f"skipping {skipped} ZP X/Y motor(s), "
+                  f"{len(axis_pvs)} motors remain")
+
+        try:
+            os.makedirs(self._CAL_FILE_DIR, exist_ok=True)
+        except Exception as ex:
+            print(f"[ENERGY] cal dir not writable: {ex} — aborting")
+            return
+
+        def _name(e_keV_val):
+            s = f"{e_keV_val:g}".replace(".", "p")
+            return f"Energy_{s}keV.txt"
+
+        filenames = []
+        for e_target_keV in (e_lo_keV, e_hi_keV):
+            e_target_eV = e_target_keV * 1000.0
+            fname = _name(e_target_keV)
+            fpath = os.path.join(self._CAL_FILE_DIR, fname)
+            try:
+                with open(fpath, "w") as f:
+                    f.write(f"energy {e_target_keV:g}\n")
+                    for pv_name, col, _lbl in axis_pvs:
+                        if not pv_name: continue
+                        v = _interp_at(col, e_target_eV)
+                        if v is None: continue
+                        f.write(f"{pv_name} {v:.6f}\n")
+                print(f"[ENERGY] wrote {fpath} (E={e_target_keV:g} keV)")
+                filenames.append(fname)
+            except Exception as ex:
+                print(f"[ENERGY] failed to write {fpath}: {ex}")
+                return
+
+        # EnergyCalibrationFile* are 40-char stringout records — a full
+        # path gets silently truncated. Store ONLY the filename in the PV
+        # and rely on the IOC (CWD = iocBoot/iocTXMOptics, or patched to
+        # prepend the cal dir) to open it. Sync-caput to avoid the race
+        # where EnergySet fires before the PV update lands.
+        for pv_name, fname in (
+                ("32id:TXMOptics:EnergyCalibrationFileOne", filenames[0]),
+                ("32id:TXMOptics:EnergyCalibrationFileTwo", filenames[1])):
+            try:
+                r = subprocess.run(["caput", pv_name, fname],
+                                   capture_output=True, timeout=3.0, text=True)
+                if r.returncode != 0:
+                    print(f"[ENERGY] caput {pv_name} rc={r.returncode} "
+                          f"stderr={r.stderr.strip()!r}")
+            except Exception as ex:
+                print(f"[ENERGY] caput {pv_name} EXC: {ex}")
+        for slot in self._pv_fields.values():
+            for fid, fname in (("energy_calfile1", filenames[0]),
+                               ("energy_calfile2", filenames[1])):
+                f = slot.get(fid)
+                if f is not None and hasattr(f, "_inner"):
+                    try: f._inner.setText(fname)
+                    except Exception: pass
+
+        # Also move the motors directly from bl_gui, using our own
+        # interpolation at the TARGET energy. This makes bl_gui
+        # self-sufficient: even if the IOC's cal-file interpolation fails
+        # or runs late, the motors still land at the right positions. The
+        # IOC's later re-application (via EnergySet) will write the same
+        # values — idempotent.
+        e_target_eV = e_keV * 1000.0
+        for pv_name, col, lbl in axis_pvs:
+            if not pv_name: continue
+            v = _interp_at(col, e_target_eV)
+            if v is None: continue
+            print(f"[ENERGY] direct move {lbl} ({pv_name}) -> {v:.6f}")
+            caput_bg(pv_name, float(v))
+
+    def _apply_cam_binning(self):
+        """On Enter in Bin X or Bin Y: caput BinX / BinY / SizeX / SizeY.
+
+        Mirrors pystream detectorcontrol's 'Apply Binning' button. SizeX/Y
+        are computed from MaxSizeX_RBV / MaxSizeY_RBV (read live via caget)
+        divided by the current BinX / BinY. Without this the driver leaves
+        the ROI untouched and binning effectively doesn't take effect."""
+        cam_prefix = "32idbSP1:cam1"
+        for key, slot in self._pv_fields.items():
+            if "cam_binx" in slot and "cam_biny" in slot:
+                try:
+                    binx = int(slot["cam_binx"]._inner.text() or "1")
+                    biny = int(slot["cam_biny"]._inner.text() or "1")
+                except ValueError:
+                    print("[BIN] non-integer in Bin X / Bin Y — aborting")
+                    return
+                # Read sensor max — short timeout, must succeed to compute sizes.
+                try:
+                    max_x = int(float(subprocess.run(
+                        ["caget", "-t", f"{cam_prefix}:MaxSizeX_RBV"],
+                        capture_output=True, text=True, timeout=2.0,
+                    ).stdout.strip()))
+                    max_y = int(float(subprocess.run(
+                        ["caget", "-t", f"{cam_prefix}:MaxSizeY_RBV"],
+                        capture_output=True, text=True, timeout=2.0,
+                    ).stdout.strip()))
+                except Exception as e:
+                    print(f"[BIN] could not read MaxSizeX/Y: {e}")
+                    return
+                size_x = max_x // max(1, binx)
+                size_y = max_y // max(1, biny)
+                print(f"[BIN] apply: BinX={binx} BinY={biny} "
+                      f"SizeX={size_x} SizeY={size_y} (max={max_x}x{max_y})")
+                caput_bg(f"{cam_prefix}:BinX",  binx)
+                caput_bg(f"{cam_prefix}:BinY",  biny)
+                caput_bg(f"{cam_prefix}:SizeX", size_x)
+                caput_bg(f"{cam_prefix}:SizeY", size_y)
+                return
 
 
 class _PressFlash(QtCore.QObject):
@@ -1248,30 +2485,109 @@ def main():
     of a file that ships with the package (e.g. 'bl32id.json' resolves to
     the one bundled next to layout.json).
     """
+    # Wrap stdout so every [TAG] prefix in log lines is coloured. Must
+    # run before any other print in this session (including the CONFIG
+    # / REGIME / LOAD lines below) so nothing escapes plain.
+    from .log_color import install as _install_log_color
+    _install_log_color()
+
     args = sys.argv[1:]
     allow_edit = "edit" in args
     args = [a for a in args if a != "edit"]
 
     layout_arg = args[0] if args else None
     if layout_arg:
-        # Resolve in this order: absolute, cwd-relative, bundled-with-package.
+        # Normalise: ensure a .json extension so "MyGui" and "MyGui.json"
+        # both resolve to the same file.
+        if not layout_arg.endswith(".json"):
+            layout_arg_ext = layout_arg + ".json"
+        else:
+            layout_arg_ext = layout_arg
+        # Resolve in this order: absolute, cwd-relative, bundled-with-package,
+        # bundled layouts dir, per-user config dir.
         pkg_dir = os.path.dirname(os.path.abspath(_theme_mod.__file__))
+        user_dir = os.path.expanduser("~/.bl_gui")
         candidates = [
-            layout_arg,
-            os.path.join(os.getcwd(), layout_arg),
-            os.path.join(pkg_dir, layout_arg),
-            os.path.join(pkg_dir, "layouts", layout_arg),
+            layout_arg_ext,
+            os.path.join(os.getcwd(), layout_arg_ext),
+            os.path.join(pkg_dir, layout_arg_ext),
+            os.path.join(pkg_dir, "layouts", layout_arg_ext),
+            os.path.join(user_dir, layout_arg_ext),
         ]
         chosen = next((c for c in candidates if os.path.isfile(c)), None)
         if chosen is None:
-            print(f"[ERROR] layout file not found: {layout_arg}")
-            print("Tried:\n  " + "\n  ".join(candidates))
-            sys.exit(2)
+            # Layout doesn't exist yet — treat it as a NEW layout the
+            # user wants to build from scratch. Point the save path at
+            # ~/.bl_gui/<name>.json so the first save creates it, and
+            # start bl_gui with the bundled defaults so there's a
+            # canvas to work on (user can delete panels for a truly
+            # blank slate).
+            try:
+                os.makedirs(user_dir, exist_ok=True)
+            except Exception:
+                pass
+            chosen = os.path.join(user_dir, layout_arg_ext)
+            print(f"[CONFIG] new layout '{layout_arg_ext}' — will be "
+                  f"created on first save at {chosen}")
+            _blank_layout = True
+        else:
+            _blank_layout = False
         _theme_mod._LAY = os.path.abspath(chosen)
-        print(f"[CONFIG] using layout: {_theme_mod._LAY}")
+        print(f"[CONFIG] using layout: {_theme_mod._LAY}"
+              + ("  (BLANK — no default panels)" if _blank_layout else ""))
+    else:
+        _blank_layout = False
+
+    # HiDPI scaling — makes the GUI adapt to the display DPI so text stays
+    # readable when viewing across monitors of very different sizes.
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
+    # AA_ShareOpenGLContexts is REQUIRED for QtWebEngine (Web-view /
+    # Camera plugin) to import after QApplication is created. But
+    # setting it triggers immediate GLX initialisation, which
+    # ABORT-crashes on machines without a working OpenGL stack (older
+    # beamline hosts, headless setups). Enable it only when both:
+    #   - PyQtWebEngine is actually installed (user asked for it), and
+    #   - the user hasn't set BL_GUI_NO_WEBENGINE=1 to opt out (escape
+    #     hatch for a machine that has PyQtWebEngine but broken GLX).
+    _skip_webengine = os.environ.get("BL_GUI_NO_WEBENGINE", "").strip().lower() in (
+        "1", "true", "yes")
+    # Auto-skip when running over SSH X-forwarding: GLX indirect
+    # rendering isn't compatible with QtWebEngine's OpenGL contexts
+    # and produces exactly the "Could not initialize GLX / Aborted"
+    # crash we're trying to prevent. SSH_CONNECTION is set by sshd on
+    # login shells; DISPLAY starting with "localhost:" is the classic
+    # X-forwarding sign.
+    _display = os.environ.get("DISPLAY", "")
+    _looks_like_ssh = bool(os.environ.get("SSH_CONNECTION")) or \
+                      _display.startswith("localhost:")
+    if _looks_like_ssh and not _skip_webengine:
+        _skip_webengine = True
+        print("[GUI] SSH X-forwarding detected — auto-skipping "
+              "QtWebEngine to avoid GLX init crash. "
+              "Set BL_GUI_NO_WEBENGINE=0 to override.")
+    _webengine_ok = False
+    if not _skip_webengine:
+        try:
+            import PyQt5.QtWebEngineWidgets  # noqa: F401
+            _webengine_ok = True
+        except Exception:
+            _webengine_ok = False
+    if _webengine_ok:
+        QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_ShareOpenGLContexts, True)
+        print("[GUI] QtWebEngine enabled (AA_ShareOpenGLContexts set)")
+    else:
+        print("[GUI] QtWebEngine disabled — Web-view plugin will show an "
+              "install/opt-in hint. Set BL_GUI_NO_WEBENGINE=1 to force off.")
 
     app = QtWidgets.QApplication(sys.argv); app.setApplicationName("Beamline GUI")
+    # App-wide UI font — DejaVu Sans is the crispest readable sans on APS
+    # workstations. Liberation Sans / Noto Sans as fallbacks.
+    _ui_font = QtGui.QFont("DejaVu Sans", 9)
+    _ui_font.setStyleStrategy(QtGui.QFont.PreferAntialias)
+    _ui_font.setStyleHint(QtGui.QFont.SansSerif)
+    app.setFont(_ui_font)
     _press_flash = _PressFlash(app); app.installEventFilter(_press_flash)
-    w = Win(allow_edit=allow_edit); w.show()
+    w = Win(allow_edit=allow_edit, blank=_blank_layout); w.show()
     app.aboutToQuit.connect(w.close)
     sys.exit(app.exec_())
