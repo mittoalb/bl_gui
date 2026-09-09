@@ -1350,10 +1350,12 @@ class Win(QtWidgets.QMainWindow):
         current_tab = self.tab_widget.tabText(self.tab_widget.currentIndex())
         p, _ = self._make_panel(name, w, h, current_tab)
         p.setGeometry(50, 50, w, h)
-        # Force a minimum panel size so a saved layout can't crush the
-        # widget to invisibility on the next restart. User can still
-        # drag-resize the panel in edit mode to make it bigger.
-        p.setMinimumSize(240, 140)
+        # Small safety floor only — the widget inside has its own
+        # minimum (MC = 100x140, PV fields ~ their content), so the
+        # panel's layout keeps it visible without us hard-coding 240x140
+        # here. This lets the user shrink the panel down to the widget's
+        # own natural minimum in edit mode.
+        p.setMinimumSize(80, 40)
         # Match whatever edit-mode state the window is currently in.
         # Hardcoding True made the panel draggable in normal mode when
         # _load_layout invoked us on startup.
