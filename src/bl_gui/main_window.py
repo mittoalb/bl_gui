@@ -1,6 +1,7 @@
 """Main application window (beamline optics GUI) and entry point."""
 import json
 import os
+import re
 import subprocess
 import sys
 from typing import Dict, List
@@ -13,6 +14,61 @@ from .pv import PVEngine, caput_bg
 from .pv_field import PVField, ValveField, ToggleField
 from . import theme as _theme_mod
 from .theme import _IMG, _PANEL_SS, _PANEL_SS_EDIT, _SS
+
+
+# ── Category-based font scaling ─────────────────────────────────────────
+# The top-bar Font: slider rescales motor cards only. The Fonts... dialog
+# adds four independent scales (Titles / Labels / Values / Buttons) that
+# walk every non-MC widget and rewrite stylesheet pt values in place.
+
+FONT_CATEGORIES = ("titles", "labels", "values", "buttons")
+_PT_TOKEN_RE = re.compile(r'(\d+)(\s*pt\b)')
+
+
+def _rescale_stylesheet(ss: str, factor: float) -> str:
+    """Multiply every 'Npt' occurrence in a Qt stylesheet by factor.
+    Clamps the minimum to 6pt so a small scale never yields unreadable
+    text; the regex only touches numeric literals immediately followed
+    by 'pt', so unrelated tokens (border widths, radii) are untouched."""
+    if not ss or factor == 1.0:
+        return ss
+
+    def _sub(m):
+        n = int(m.group(1))
+        return f"{max(6, int(round(n * factor)))}{m.group(2)}"
+    return _PT_TOKEN_RE.sub(_sub, ss)
+
+
+def _inside_mc(w: QtWidgets.QWidget) -> bool:
+    """Motor cards handle their own scaling; the category walk skips
+    them entirely to avoid double-scaling their internals."""
+    p = w.parent()
+    while p is not None:
+        if isinstance(p, MC):
+            return True
+        p = p.parent()
+    return False
+
+
+def _widget_category(w: QtWidgets.QWidget):
+    """Return the font-scale category slug for a widget, or None to skip.
+    Uses widget type + stylesheet fingerprint (readback labels use
+    monospace and a green colour, so treat them as 'values' along with
+    QLineEdits and QComboBoxes)."""
+    from .widgets import Panel
+    if isinstance(w, QtWidgets.QPushButton):
+        return "buttons"
+    if isinstance(w, (QtWidgets.QLineEdit, QtWidgets.QComboBox)):
+        return "values"
+    if isinstance(w, QtWidgets.QLabel):
+        parent = w.parent()
+        if isinstance(parent, Panel) and getattr(parent, "_title", None) is w:
+            return "titles"
+        ss = w.styleSheet() or ""
+        if "monospace" in ss or "#2ecc71" in ss:
+            return "values"
+        return "labels"
+    return None
 
 
 def _bundled_lay_path():
@@ -88,6 +144,14 @@ class Win(QtWidgets.QMainWindow):
         print(f"[REGIME] startup -> {'NANO' if self._nano_mode else 'MICRO'} "
               f"(from {_regime.STATE_FILE})")
 
+        # Per-category font scales (1.0 = 100%). The Fonts... dialog
+        # and the load path both flow through _apply_font_scale, which
+        # rewrites stylesheet pt values using a running factor from
+        # the previous scale — so successive changes compound
+        # correctly and per-panel title-font tweaks made in edit mode
+        # aren't clobbered on reapply.
+        self._font_scales = {c: 1.0 for c in FONT_CATEGORIES}
+
         cw = QtWidgets.QWidget(); self.setCentralWidget(cw)
         root = QtWidgets.QVBoxLayout(cw); root.setContentsMargins(4, 4, 4, 4); root.setSpacing(4)
 
@@ -108,6 +172,17 @@ class Win(QtWidgets.QMainWindow):
             "QSlider::handle:horizontal:hover{background:#3a95d8;}")
         self.font_slider.valueChanged.connect(self._change_font_scale); top.addWidget(self.font_slider)
         self.font_lbl = QtWidgets.QLabel("100%"); self.font_lbl.setFixedWidth(36); self.font_lbl.setStyleSheet("font:8pt;"); top.addWidget(self.font_lbl)
+        # Per-category font scales (labels / values / buttons / titles) —
+        # affects every non-MC widget across the GUI at once. Motor
+        # cards keep using the slider above so power users don't lose
+        # the fast one-knob adjustment.
+        self.fonts_btn = QtWidgets.QPushButton("Fonts…")
+        self.fonts_btn.setFixedSize(60, 28)
+        self.fonts_btn.setStyleSheet(
+            "background:#2d2d2d;color:#e0e0e0;font:9pt;"
+            "border:1px solid #404040;border-radius:3px;")
+        self.fonts_btn.clicked.connect(self._open_fonts_dialog)
+        top.addWidget(self.fonts_btn)
         top.addSpacing(6)
 
         # Edit-mode is now chosen at launch (`bl_gui edit`) — no in-GUI toggle.
@@ -1437,6 +1512,108 @@ class Win(QtWidgets.QMainWindow):
         self.font_lbl.setText(f"{pct}%")
         for mc in self.mcs: mc.scale_fonts()
 
+    def _apply_font_scale(self, category: str, new_val: float,
+                           skip_apply: bool = False):
+        """Update one category's font scale and rewrite every matching
+        widget's stylesheet by the delta from the previous value. Using
+        a delta (new / prev) instead of an absolute factor lets us play
+        nicely with per-panel title-font tweaks (Panel right-click →
+        Panel Title Font) — those changes stick because we scale from
+        the current stylesheet each time rather than from a stale
+        snapshot. ``skip_apply=True`` just stores the value without
+        walking the tree (used during load to batch changes)."""
+        if category not in FONT_CATEGORIES:
+            return
+        prev = self._font_scales.get(category, 1.0)
+        if prev <= 0:
+            prev = 1.0
+        self._font_scales[category] = new_val
+        if skip_apply or abs(new_val - prev) < 1e-6:
+            return
+        factor = new_val / prev
+        for w in self.findChildren(QtWidgets.QWidget):
+            if _inside_mc(w):
+                continue
+            if _widget_category(w) != category:
+                continue
+            ss = w.styleSheet()
+            if not ss:
+                continue
+            w.setStyleSheet(_rescale_stylesheet(ss, factor))
+
+    def _apply_all_font_scales_from_current(self):
+        """After load, walk once with the accumulated saved scales
+        applied as one factor per category. Assumes widgets start at
+        their base (1.0) pt sizes."""
+        for cat, val in self._font_scales.items():
+            if abs(val - 1.0) < 1e-6:
+                continue
+            factor = val
+            for w in self.findChildren(QtWidgets.QWidget):
+                if _inside_mc(w):
+                    continue
+                if _widget_category(w) != cat:
+                    continue
+                ss = w.styleSheet()
+                if not ss:
+                    continue
+                w.setStyleSheet(_rescale_stylesheet(ss, factor))
+
+    def _open_fonts_dialog(self):
+        """Modeless dialog with one slider per font category. Each
+        slider fires _apply_font_scale live as you drag so the effect
+        is visible immediately."""
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle("Font Sizes")
+        dlg.setStyleSheet(
+            "QDialog{background:#1c1c1c;color:#e0e0e0;}"
+            "QLabel{color:#e0e0e0;font:9pt;}"
+            "QPushButton{background:#2d2d2d;color:#e0e0e0;font:9pt;"
+            "border:1px solid #404040;border-radius:3px;padding:4px 10px;}"
+            "QPushButton:hover{background:#3a3a3a;}")
+        grid = QtWidgets.QGridLayout(dlg)
+        grid.setContentsMargins(12, 12, 12, 12); grid.setHorizontalSpacing(8)
+
+        titles = {"titles": "Panel titles", "labels": "Row labels",
+                  "values": "Readbacks / setpoints", "buttons": "Buttons"}
+        for row, cat in enumerate(FONT_CATEGORIES):
+            grid.addWidget(QtWidgets.QLabel(titles[cat]), row, 0)
+            sl = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            sl.setRange(50, 250)
+            sl.setValue(int(round(self._font_scales.get(cat, 1.0) * 100)))
+            sl.setFixedWidth(200)
+            sl.setStyleSheet(
+                "QSlider::groove:horizontal{border:1px solid #404040;"
+                "height:6px;background:#2d2d2d;border-radius:3px;}"
+                "QSlider::handle:horizontal{background:#2980b9;"
+                "border:1px solid #3a95d8;width:14px;margin:-5px 0;"
+                "border-radius:7px;}"
+                "QSlider::handle:horizontal:hover{background:#3a95d8;}")
+            val_lbl = QtWidgets.QLabel(f"{sl.value()}%")
+            val_lbl.setFixedWidth(45)
+            grid.addWidget(sl, row, 1)
+            grid.addWidget(val_lbl, row, 2)
+
+            def _on_change(v, c=cat, lbl=val_lbl):
+                lbl.setText(f"{v}%")
+                self._apply_font_scale(c, v / 100.0)
+            sl.valueChanged.connect(_on_change)
+
+        # Reset row
+        reset_btn = QtWidgets.QPushButton("Reset all to 100%")
+        def _reset_all():
+            for r, cat in enumerate(FONT_CATEGORIES):
+                sl_w = grid.itemAtPosition(r, 1).widget()
+                sl_w.setValue(100)
+        reset_btn.clicked.connect(_reset_all)
+        close_btn = QtWidgets.QPushButton("Close")
+        close_btn.clicked.connect(dlg.close)
+        btns = QtWidgets.QHBoxLayout()
+        btns.addWidget(reset_btn); btns.addStretch(1); btns.addWidget(close_btn)
+        grid.addLayout(btns, len(FONT_CATEGORIES), 0, 1, 3)
+        dlg.setModal(False)
+        dlg.show()
+
     # ── edit mode ────────────────────────────────────────────────────
 
     def _toggle_edit(self, on):
@@ -1481,6 +1658,8 @@ class Win(QtWidgets.QMainWindow):
                 "_tab_sizes": {k: list(v) for k, v in self._tab_sizes.items()},
                 "_tab_label_fs": self._tab_label_font_size,
                 "_deleted_panels": self._deleted_panels,
+                "_deleted_buttons": dict(getattr(self, "_deleted_buttons", {})),
+                "_font_scales": dict(self._font_scales),
                 "_panels": {}, "_tab_map": {}, "_buttons": {}, "_styles": {},
                 "_title_fonts": {}, "_titles": {}, "_mcs": {}, "_pv_fields": {},
                 "_custom_rows": self._custom_rows,
@@ -1507,7 +1686,13 @@ class Win(QtWidgets.QMainWindow):
             tm = re.search(r'(\d+)\s*pt', p._title.styleSheet())
             if tm:
                 data["_title_fonts"][k] = int(tm.group(1))
-            if p.custom_buttons:
+            # Always write an entry when this panel has any deletion
+            # recorded — even an empty list, so the loader's merge loop
+            # runs and honors _deleted_buttons. Without this, a panel
+            # emptied by successive deletes would silently reset to its
+            # defaults on next load.
+            _del_here = getattr(self, "_deleted_buttons", {}).get(k)
+            if p.custom_buttons or _del_here:
                 data["_buttons"][k] = [b.to_dict() for b in p.custom_buttons]
             # Save motor cards (pv + label + custom-label flag) by positional index
             panel_mcs = p.findChildren(MC)
@@ -1585,9 +1770,36 @@ class Win(QtWidgets.QMainWindow):
             # Restore extra tabs
             saved_tabs = data.get("_tabs")
             if saved_tabs:
+                saved_set = set(saved_tabs)
                 current_tabs = set(self._tab_names())
+                # For every NEW tab the layout introduces, both create
+                # the canvas AND populate it with the default panel set
+                # (Shutters / Beam / Launchers / …). Without the
+                # _build_all_panels call, the saved layout can reference
+                # e.g. "Beam::MicroCT" but that key never existed, and
+                # the loader would treat it as a stray plugin panel and
+                # render it as an empty gray frame.
                 for tab_name in saved_tabs:
-                    if tab_name not in current_tabs: self._create_tab(tab_name)
+                    if tab_name not in current_tabs:
+                        self._create_tab(tab_name)
+                        if not getattr(self, "_blank_layout", False):
+                            self._build_all_panels(tab_name)
+                # Remove default tabs that the layout omits — lets a
+                # bundled JSON declare "single tab only" instead of
+                # being forced to inherit User Mode / Expert Mode.
+                # Iterate from the right so index shifts don't skip
+                # neighbors.
+                for j in range(self.tab_widget.count() - 1, -1, -1):
+                    tname = self.tab_widget.tabText(j)
+                    if tname not in saved_set:
+                        # Drop every panel that lived on this tab, then
+                        # the tab canvas itself.
+                        for k in [k for k, t in self._panel_tab_map.items()
+                                  if t == tname]:
+                            self._remove_panel(k, record=False)
+                        self._tab_canvases.pop(tname, None)
+                        self._tab_sizes.pop(tname, None)
+                        self.tab_widget.removeTab(j)
                 for i, tab_name in enumerate(saved_tabs):
                     for j in range(self.tab_widget.count()):
                         if self.tab_widget.tabText(j) == tab_name:
@@ -1731,6 +1943,12 @@ class Win(QtWidgets.QMainWindow):
             # p.custom_buttons so the user can edit them; without this
             # replacement we'd end up with duplicates after a save).
             buttons = data.get("_buttons", {})
+            # Load user-deleted-button records so we can suppress them
+            # during the default-merge below. Format:
+            # {panel_key: [{"label": ..., "action": ...}, ...]}
+            self._deleted_buttons = {
+                k: list(v) for k, v in (data.get("_deleted_buttons") or {}).items()
+            }
             for panel_key, btn_list in buttons.items():
                 p = self._panels.get(panel_key)
                 if not p: continue
@@ -1747,8 +1965,14 @@ class Win(QtWidgets.QMainWindow):
                 # append it. Each spec is (label, cmd) = shell default,
                 # or (label, action_type, action) for e.g. caput presets.
                 # Match by label OR action so renames don't duplicate.
+                # Skip any default whose (label, action) matches a
+                # record in _deleted_buttons — otherwise buttons the
+                # user removed in edit mode would come back on reload.
                 saved_labels = {bd.get("label") for bd in btn_list}
                 saved_actions = {bd.get("action") for bd in btn_list}
+                deleted_here = self._deleted_buttons.get(panel_key, [])
+                deleted_pairs = {(d.get("label"), d.get("action"))
+                                 for d in deleted_here}
                 merged = list(btn_list)
                 for spec in default_specs:
                     if len(spec) == 3:
@@ -1756,6 +1980,8 @@ class Win(QtWidgets.QMainWindow):
                     else:
                         lbl, cmd = spec; atype = "shell"
                     if lbl in saved_labels or cmd in saved_actions:
+                        continue
+                    if (lbl, cmd) in deleted_pairs:
                         continue
                     merged.append({"label": lbl, "type": atype, "action": cmd,
                                    "bg": defaults[0] if defaults else "#2d2d2d",
@@ -1871,6 +2097,15 @@ class Win(QtWidgets.QMainWindow):
                 if isinstance(text, str) and text:
                     for l in labels:
                         l.setText(text)
+            # Restore per-category font scales (titles / labels / values
+            # / buttons). Widgets have just been built at their base pt
+            # sizes, so apply each saved scale as one factor pass.
+            saved_scales = data.get("_font_scales") or {}
+            for cat in FONT_CATEGORIES:
+                v = saved_scales.get(cat)
+                if isinstance(v, (int, float)) and v > 0:
+                    self._font_scales[cat] = float(v)
+            self._apply_all_font_scales_from_current()
             mc_total = sum(len(v) for v in mcs_saved.values())
             btn_total = sum(len(v) for v in data.get("_buttons", {}).values())
             iolabels = data.get("_io_labels", {})

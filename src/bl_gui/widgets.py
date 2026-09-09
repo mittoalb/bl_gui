@@ -329,6 +329,20 @@ class CfgButton(QtWidgets.QPushButton):
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
         if reply == QtWidgets.QMessageBox.Yes:
             parent = self.parent()
+            # Record the deletion so the loader's default-merge does
+            # not resurrect this button next time. Match key is
+            # (label, action) — same tuple the merge uses to decide
+            # whether a default spec is already present.
+            panel_key = getattr(parent, "key", None)
+            if panel_key:
+                win = self.window()
+                if win is not None:
+                    store = getattr(win, "_deleted_buttons", None)
+                    if store is None:
+                        store = {}
+                        win._deleted_buttons = store
+                    store.setdefault(panel_key, []).append(
+                        {"label": self.text(), "action": self.action})
             if hasattr(parent, 'custom_buttons'):
                 parent.custom_buttons = [b for b in parent.custom_buttons if b is not self]
             self.deleteLater()
