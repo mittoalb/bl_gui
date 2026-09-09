@@ -5,34 +5,13 @@
     "MicroCT": [1200, 720]
   },
   "_tab_label_fs": 10,
-  "_deleted_panels": [
-    "Presets::MicroCT",
-    "Condenser::MicroCT",
-    "Zone Plate::MicroCT",
-    "Phase Ring::MicroCT",
-    "Detector::MicroCT",
-    "Sample::MicroCT",
-    "Pinhole::MicroCT",
-    "Beamstop::MicroCT",
-    "Diffuser::MicroCT",
-    "Bertrand Lens::MicroCT",
-    "Furnace::MicroCT",
-    "Nano Focus::MicroCT",
-    "Queensgate::MicroCT",
-    "Ensemble::MicroCT",
-    "Other::MicroCT",
-    "In / Out::MicroCT",
-    "Energy::MicroCT",
-    "Camera::MicroCT",
-    "Crop::MicroCT",
-    "Valves::MicroCT",
-    "PLC Outputs::MicroCT",
-    "BPM/EPID::MicroCT",
-    "PV Save/Load::MicroCT",
-    "Shaker::MicroCT",
-    "Displays::MicroCT",
-    "Schematic::MicroCT"
-  ],
+  "_deleted_buttons": {
+    "Launchers::MicroCT": [
+      {"label": "Shaker",   "action": "/net/s32dserv/xorApps/epics/synApps_6_3/ioc/32idbShaker/start_MEDM_32idbShaker"},
+      {"label": "Web IOCs", "action": "/home/beams/USERTXM/scripts/ioc_page.sh"},
+      {"label": "Web Cams", "action": "firefox 10.54.102.97 &"}
+    ]
+  },
   "_panels": {
     "Beam::MicroCT":         [8,   8,   420, 120],
     "Beam Status::MicroCT":  [436, 8,   420, 120],
@@ -41,42 +20,21 @@
     "Launchers::MicroCT":    [8,   334, 720, 220],
     "ALL STOP::MicroCT":     [736, 334, 180, 100]
   },
-  "_tab_map": {
-    "Beam::MicroCT":         "MicroCT",
-    "Beam Status::MicroCT":  "MicroCT",
-    "Shutters::MicroCT":     "MicroCT",
-    "OPS Messages::MicroCT": "MicroCT",
-    "Launchers::MicroCT":    "MicroCT",
-    "ALL STOP::MicroCT":     "MicroCT"
-  },
   "_titles": {
-    "Beam::MicroCT":         "Machine",
-    "Beam Status::MicroCT":  "Beam Status",
-    "Shutters::MicroCT":     "Shutters",
-    "OPS Messages::MicroCT": "OPS Messages",
-    "Launchers::MicroCT":    "Launchers",
-    "ALL STOP::MicroCT":     "ALL STOP"
-  },
-  "_title_fonts": {
-    "Beam::MicroCT":         10,
-    "Beam Status::MicroCT":  10,
-    "Shutters::MicroCT":     10,
-    "OPS Messages::MicroCT": 10,
-    "Launchers::MicroCT":    10,
-    "ALL STOP::MicroCT":     10
+    "Beam::MicroCT": "Machine"
   },
   "_buttons": {
     "Launchers::MicroCT": [
-      {"label": "PyStream",    "type": "shell", "action": "/home/beams/USERTXM/scripts/start_pystream.sh",                                                                                                                                                                                                          "bg": "#ae6600", "fg": "#ffffff", "font_size": 11},
-      {"label": "TomoScan",    "type": "shell", "action": "medm -x -macro 'P=32id:,R=TomoScan:,BEAMLINE=tomoScan_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &",                                                                                            "bg": "#2980b9", "fg": "#ffffff", "font_size": 11},
-      {"label": "TomoStep",    "type": "shell", "action": "medm -x -macro 'P=32id:,R=TomoScanStep:,BEAMLINE=tomoScanStep_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &",                                                                                    "bg": "#2980b9", "fg": "#ffffff", "font_size": 11},
-      {"label": "TomoStream",  "type": "shell", "action": "medm -x -macro 'P=32id:,R=TomoScanStream:,BEAMLINE=tomoScanStream_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &",                                                                                "bg": "#2980b9", "fg": "#ffffff", "font_size": 11},
-      {"label": "IOCs",        "type": "shell", "action": "medm -x /home/beams/USERTXM/scripts/iocs_start.adl &",                                                                                                                                                                                                    "bg": "#27ae60", "fg": "#ffffff", "font_size": 11},
-      {"label": "MCTOptics",   "type": "shell", "action": "cd /home/beams/USERTXM/epics/synApps/support/mctoptics/iocBoot/ioc32IDMCTOptics && ./start_medm &",                                                                                                                                                       "bg": "#27ae60", "fg": "#ffffff", "font_size": 11},
-      {"label": "Detector",    "type": "shell", "action": "/home/beams/USERTXM/epics/synApps/support/32idbSP1/iocBoot/ioc32idbSP1/softioc/32idbSP1.sh medm",                                                                                                                                                          "bg": "#7f8c8d", "fg": "#ffffff", "font_size": 11},
-      {"label": "Blackfly",    "type": "shell", "action": "/home/beams/USERTXM/epics/synApps/support/32idbSP2/iocBoot/ioc32idbSP2/softioc/32idbSP2.sh medm",                                                                                                                                                          "bg": "#7f8c8d", "fg": "#ffffff", "font_size": 11},
-      {"label": "ImageJ",      "type": "shell", "action": "/home/beams/USERTXM/Software/ImageJ/ImageJ.sh",                                                                                                                                                                                                            "bg": "#7f8c8d", "fg": "#ffffff", "font_size": 11},
-      {"label": "32ID Main",   "type": "shell", "action": "/home/beams/USERTXM/start_caQtDM_32id",                                                                                                                                                                                                                    "bg": "#7f8c8d", "fg": "#ffffff", "font_size": 11}
+      {"label": "PyStream",    "type": "shell", "action": "/home/beams/USERTXM/scripts/start_pystream.sh",                                                                                                                                                                                                            "bg": "#ae6600", "fg": "#ffffff", "font_size": 11},
+      {"label": "TomoScan",    "type": "shell", "action": "medm -x -macro 'P=32id:,R=TomoScan:,BEAMLINE=tomoScan_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &",                                                                                              "bg": "#2980b9", "fg": "#ffffff", "font_size": 11},
+      {"label": "TomoStep",    "type": "shell", "action": "medm -x -macro 'P=32id:,R=TomoScanStep:,BEAMLINE=tomoScanStep_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &",                                                                                      "bg": "#2980b9", "fg": "#ffffff", "font_size": 11},
+      {"label": "TomoStream",  "type": "shell", "action": "medm -x -macro 'P=32id:,R=TomoScanStream:,BEAMLINE=tomoScanStream_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &",                                                                                  "bg": "#2980b9", "fg": "#ffffff", "font_size": 11},
+      {"label": "IOCs",        "type": "shell", "action": "medm -x /home/beams/USERTXM/scripts/iocs_start.adl &",                                                                                                                                                                                                      "bg": "#27ae60", "fg": "#ffffff", "font_size": 11},
+      {"label": "MCTOptics",   "type": "shell", "action": "cd /home/beams/USERTXM/epics/synApps/support/mctoptics/iocBoot/ioc32IDMCTOptics && ./start_medm &",                                                                                                                                                         "bg": "#27ae60", "fg": "#ffffff", "font_size": 11},
+      {"label": "Detector",    "type": "shell", "action": "/home/beams/USERTXM/epics/synApps/support/32idbSP1/iocBoot/ioc32idbSP1/softioc/32idbSP1.sh medm",                                                                                                                                                            "bg": "#7f8c8d", "fg": "#ffffff", "font_size": 11},
+      {"label": "Blackfly",    "type": "shell", "action": "/home/beams/USERTXM/epics/synApps/support/32idbSP2/iocBoot/ioc32idbSP2/softioc/32idbSP2.sh medm",                                                                                                                                                            "bg": "#7f8c8d", "fg": "#ffffff", "font_size": 11},
+      {"label": "ImageJ",      "type": "shell", "action": "/home/beams/USERTXM/Software/ImageJ/ImageJ.sh",                                                                                                                                                                                                              "bg": "#7f8c8d", "fg": "#ffffff", "font_size": 11},
+      {"label": "32ID Main",   "type": "shell", "action": "/home/beams/USERTXM/start_caQtDM_32id",                                                                                                                                                                                                                      "bg": "#7f8c8d", "fg": "#ffffff", "font_size": 11}
     ]
   },
   "_styles": {
@@ -88,7 +46,6 @@
       "h": 60
     }
   },
-  "_mcs": {},
   "_pv_fields": {
     "Shutters::MicroCT": {
       "shtr_A": {
@@ -138,6 +95,5 @@
       "ops_msg5": "OPS:message5",
       "ops_msg6": "OPS:message6"
     }
-  },
-  "_custom_rows": {}
+  }
 }

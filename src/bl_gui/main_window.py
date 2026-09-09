@@ -152,6 +152,7 @@ class Win(QtWidgets.QMainWindow):
         # aren't clobbered on reapply.
         self._font_scales = {c: 1.0 for c in FONT_CATEGORIES}
 
+
         cw = QtWidgets.QWidget(); self.setCentralWidget(cw)
         root = QtWidgets.QVBoxLayout(cw); root.setContentsMargins(4, 4, 4, 4); root.setSpacing(4)
 
@@ -1657,7 +1658,11 @@ class Win(QtWidgets.QMainWindow):
         data = {"_font_scale": self.font_slider.value(), "_tabs": self._tab_names(),
                 "_tab_sizes": {k: list(v) for k, v in self._tab_sizes.items()},
                 "_tab_label_fs": self._tab_label_font_size,
-                "_deleted_panels": self._deleted_panels,
+                # _deleted_panels is intentionally omitted from the save
+                # format — absence from _panels is what marks a panel
+                # as deleted (opt-in model). The loader still reads
+                # _deleted_panels when present for backward compat with
+                # legacy layouts, but new saves don't emit it.
                 "_deleted_buttons": dict(getattr(self, "_deleted_buttons", {})),
                 "_font_scales": dict(self._font_scales),
                 "_panels": {}, "_tab_map": {}, "_buttons": {}, "_styles": {},
@@ -1679,8 +1684,21 @@ class Win(QtWidgets.QMainWindow):
         for k, p in self._panels.items():
             g = p.geometry()
             data["_panels"][k] = [g.x(), g.y(), g.width(), g.height()]
-            data["_tab_map"][k] = self._panel_tab_map.get(k, "")
-            data["_titles"][k] = p.title_text()
+            # Skip _tab_map entries that just repeat the key's own
+            # ::TabName suffix (the load path derives it from the key
+            # when the entry is missing). Saves ~1 line per panel.
+            key_tab = k.rsplit("::", 1)[-1] if "::" in k else None
+            actual_tab = self._panel_tab_map.get(k, "")
+            if actual_tab and actual_tab != key_tab:
+                data["_tab_map"][k] = actual_tab
+            # Skip _titles entries that equal the panel's base name
+            # from its key (e.g. "Shutters::MicroCT" → default title
+            # "Shutters"). Only genuine renames like "Machine" or
+            # "Rotary Aerotech" survive.
+            base_from_key = k.split("::")[0].split("#")[0]
+            title = p.title_text()
+            if title and title != base_from_key:
+                data["_titles"][k] = title
             # Save panel title font
             import re
             tm = re.search(r'(\d+)\s*pt', p._title.styleSheet())
@@ -1709,6 +1727,18 @@ class Win(QtWidgets.QMainWindow):
                     btn_id = f"{k}|||{btn.text()}"
                     data["_styles"][btn_id] = {"bg": bg, "fg": btn.property("_custom_fg"),
                         "fs": btn.property("_custom_fs"), "w": btn.width(), "h": btn.height()}
+        # Drop empty containers so a fresh save doesn't carry dozens
+        # of `"key": {}` / `"key": []` lines. The load path already
+        # uses `.get(key, {})` / `.get(key, [])` defaults, so absence
+        # is equivalent to empty — pure noise reduction.
+        _EMPTY_SKIP = ("_styles", "_custom_rows", "_io_labels",
+                       "_buttons", "_mcs", "_tab_map", "_titles",
+                       "_title_fonts", "_deleted_buttons",
+                       "_plugin_widgets", "_pv_fields")
+        for k in _EMPTY_SKIP:
+            v = data.get(k)
+            if isinstance(v, (dict, list)) and not v:
+                data.pop(k, None)
         # Always save to the per-user path — never overwrite the shared
         # bundled template. Create ~/.bl_gui/ on demand.
         lay_path = _user_lay_path()
@@ -1722,14 +1752,17 @@ class Win(QtWidgets.QMainWindow):
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(tmp_path, lay_path)
-            mc_total = sum(len(v) for v in data["_mcs"].values())
-            btn_total = sum(len(v) for v in data["_buttons"].values())
+            mc_total = sum(len(v) for v in data.get("_mcs", {}).values())
+            btn_total = sum(len(v) for v in data.get("_buttons", {}).values())
             print(f"[SAVE] wrote {lay_path}  panels={len(data['_panels'])}  mcs={mc_total}  "
-                  f"titles={len(data['_titles'])}  deleted={len(data['_deleted_panels'])}  "
-                  f"buttons={btn_total}  io_labels={len(data.get('_io_labels', {}))}")
+                  f"titles={len(data.get('_titles', {}))}  "
+                  f"deleted={len(data.get('_deleted_panels', []))}  "
+                  f"buttons={btn_total}  "
+                  f"io_labels={len(data.get('_io_labels', {}))}")
             # Print a sample of what we just wrote so the user can verify
             # their edits actually landed in the file.
-            tsample = {k: v for i, (k, v) in enumerate(data["_titles"].items()) if i < 6}
+            tsample = {k: v for i, (k, v) in enumerate(
+                data.get("_titles", {}).items()) if i < 6}
             print(f"[SAVE]   sample titles: {tsample}")
             iolabels = data.get("_io_labels", {})
             if iolabels:
@@ -1837,7 +1870,12 @@ class Win(QtWidgets.QMainWindow):
                 if pk in data.get("_deleted_panels", []):
                     print(f"[LOAD] plugin {pk!r}: in _deleted_panels, skipping")
                     continue
-                tab_name = tab_map.get(pk) or _DEFAULT_TABS[-1]
+                # Fall back to the key's own ::TabName suffix when
+                # _tab_map has no entry — save layer skips trivial
+                # mappings to keep the JSON compact.
+                tab_name = (tab_map.get(pk)
+                            or (pk.rsplit("::", 1)[-1] if "::" in pk else None)
+                            or _DEFAULT_TABS[-1])
                 canvas = self._tab_canvases.get(tab_name)
                 if canvas is None:
                     print(f"[LOAD] SKIP plugin (no canvas): {pk!r}  tab={tab_name!r} "
@@ -1871,7 +1909,10 @@ class Win(QtWidgets.QMainWindow):
                     continue    # default panel, already exists
                 if k in data.get("_deleted_panels", []):
                     continue    # user had deleted it
-                tab_name = tab_map.get(k) or _DEFAULT_TABS[0]
+                # Same fallback: derive from key when tab_map omitted.
+                tab_name = (tab_map.get(k)
+                            or (k.rsplit("::", 1)[-1] if "::" in k else None)
+                            or _DEFAULT_TABS[0])
                 canvas = self._tab_canvases.get(tab_name)
                 if canvas is None:
                     print(f"[LOAD] SKIP (no canvas): panel={k!r}  tab={tab_name!r}  "
@@ -1915,11 +1956,27 @@ class Win(QtWidgets.QMainWindow):
             for k, rect in panels_saved.items():
                 p = self._panels.get(k)
                 if p and isinstance(rect, list) and len(rect) == 4: p.setGeometry(*rect)
-            # Remove panels that were explicitly deleted by the user
+            # Opt-in panel model: if the layout listed ANY panels in
+            # _panels, treat that set as authoritative — every built
+            # default whose key is NOT listed is dropped. That means
+            # the JSON only has to say what's THERE, not what's hidden;
+            # a MicroCT layout doesn't carry a 26-entry "TXM panels
+            # that should not appear" list.
+            #
+            # _deleted_panels is still honored for backward compat with
+            # older saves and for the in-session tracking of edit-mode
+            # removals (self._deleted_panels), but on modern saves it
+            # will typically be empty because everything is derivable
+            # from _panels absence.
             deleted = data.get("_deleted_panels", [])
             self._deleted_panels = list(deleted)
+            keep_keys = set(panels_saved.keys()) if panels_saved else None
             for k in list(self._panels.keys()):
                 if k in deleted:
+                    self._remove_panel(k, record=False)
+                elif keep_keys is not None and k not in keep_keys:
+                    # Built by _build_all_panels but not requested by
+                    # the saved layout — silently drop it.
                     self._remove_panel(k, record=False)
             # Restore panel titles (renames)
             titles_saved = data.get("_titles", {})
