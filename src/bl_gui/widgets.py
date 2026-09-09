@@ -175,17 +175,31 @@ class Panel(QtWidgets.QFrame):
             )
             self._title.adjustSize()
 
-    def _in_handle(self, pos):
-        return pos.x() > self.width() - self.HANDLE and pos.y() > self.height() - self.HANDLE
+    def _edge_at(self, pos):
+        """Return (right, bottom) hit-test for resize edges. Both True → BR corner."""
+        r = pos.x() > self.width() - self.HANDLE
+        b = pos.y() > self.height() - self.HANDLE
+        return r, b
+
+    def _cursor_for_edge(self, right, bottom):
+        if right and bottom:
+            return QtCore.Qt.SizeFDiagCursor
+        if right:
+            return QtCore.Qt.SizeHorCursor
+        if bottom:
+            return QtCore.Qt.SizeVerCursor
+        return QtCore.Qt.OpenHandCursor
 
     def mousePressEvent(self, e):
         if not self._edit or e.button() != QtCore.Qt.LeftButton:
             return super().mousePressEvent(e)
         self._geo0 = self.geometry()
         self._mstart = e.globalPos()
-        if self._in_handle(e.pos()):
+        r, b = self._edge_at(e.pos())
+        if r or b:
             self._resize = True
-            self.setCursor(QtCore.Qt.SizeFDiagCursor)
+            self._resize_dir = (r, b)
+            self.setCursor(self._cursor_for_edge(r, b))
         else:
             self._drag = True
             self.setCursor(QtCore.Qt.ClosedHandCursor)
@@ -199,20 +213,22 @@ class Panel(QtWidgets.QFrame):
             self.move(self._geo0.topLeft() + d)
         elif self._resize and self._mstart:
             d = e.globalPos() - self._mstart
-            self.resize(max(80, self._geo0.width() + d.x()),
-                        max(40, self._geo0.height() + d.y()))
-        elif self._in_handle(e.pos()):
-            self.setCursor(QtCore.Qt.SizeFDiagCursor)
+            r, b = getattr(self, "_resize_dir", (True, True))
+            new_w = max(80, self._geo0.width() + d.x()) if r else self._geo0.width()
+            new_h = max(40, self._geo0.height() + d.y()) if b else self._geo0.height()
+            self.resize(new_w, new_h)
         else:
-            self.setCursor(QtCore.Qt.OpenHandCursor)
+            r, b = self._edge_at(e.pos())
+            self.setCursor(self._cursor_for_edge(r, b))
 
     def mouseReleaseEvent(self, e):
         if not self._edit:
             return super().mouseReleaseEvent(e)
         self._drag = self._resize = False
         self._mstart = None
-        self.setCursor(QtCore.Qt.OpenHandCursor if not self._in_handle(e.pos())
-                       else QtCore.Qt.SizeFDiagCursor)
+        self._resize_dir = (False, False)
+        r, b = self._edge_at(e.pos())
+        self.setCursor(self._cursor_for_edge(r, b))
 
     def paintEvent(self, e):
         super().paintEvent(e)
