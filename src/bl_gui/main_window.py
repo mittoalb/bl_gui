@@ -1079,6 +1079,19 @@ class Win(QtWidgets.QMainWindow):
             self.mcs = [m for m in self.mcs if m not in panel_mcs]
             # Remove PVField / ValveField registrations for this panel
             self._pv_fields.pop(panel_key, None)
+            # Drop any In/Out row-label references that live inside this panel;
+            # otherwise the C++ QLabels get destroyed with the panel while
+            # self._io_labels keeps dangling PyQt wrappers, and the next
+            # _save_layout crashes reading .text() on them.
+            io_labels = getattr(self, "_io_labels", None)
+            if io_labels:
+                panel_labels = set(panel.findChildren(QtWidgets.QLabel))
+                for fid in list(io_labels.keys()):
+                    kept = [w for w in io_labels[fid] if w not in panel_labels]
+                    if kept:
+                        io_labels[fid] = kept
+                    else:
+                        del io_labels[fid]
             panel.deleteLater()
 
     # ── tab operations ───────────────────────────────────────────────

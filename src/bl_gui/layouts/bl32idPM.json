@@ -1,0 +1,245 @@
+{
+  "_font_scale": 100,
+  "_tabs": [
+    "User Mode",
+    "Expert Mode"
+  ],
+  "_tab_sizes": {
+    "User Mode": [1200, 700],
+    "Expert Mode": [1400, 800]
+  },
+  "_tab_label_fs": 9,
+  "_deleted_panels": [
+    "Presets::User Mode",
+    "Condenser::User Mode",
+    "Zone Plate::User Mode",
+    "Phase Ring::User Mode",
+    "Detector::User Mode",
+    "Sample::User Mode",
+    "Pinhole::User Mode",
+    "Beamstop::User Mode",
+    "Diffuser::User Mode",
+    "Bertrand Lens::User Mode",
+    "Furnace::User Mode",
+    "Nano Focus::User Mode",
+    "Queensgate::User Mode",
+    "Ensemble::User Mode",
+    "Other::User Mode",
+    "In / Out::User Mode",
+    "Energy::User Mode",
+    "Camera::User Mode",
+    "Crop::User Mode",
+    "Valves::User Mode",
+    "PLC Outputs::User Mode",
+    "BPM/EPID::User Mode",
+    "Shaker::User Mode",
+    "Launchers::User Mode",
+    "Displays::User Mode",
+    "Schematic::User Mode",
+    "Presets::Expert Mode",
+    "Condenser::Expert Mode",
+    "Zone Plate::Expert Mode",
+    "Phase Ring::Expert Mode",
+    "Detector::Expert Mode",
+    "Sample::Expert Mode",
+    "Pinhole::Expert Mode",
+    "Beamstop::Expert Mode",
+    "Diffuser::Expert Mode",
+    "Bertrand Lens::Expert Mode",
+    "Furnace::Expert Mode",
+    "Nano Focus::Expert Mode",
+    "Queensgate::Expert Mode",
+    "Ensemble::Expert Mode",
+    "Other::Expert Mode",
+    "In / Out::Expert Mode",
+    "Energy::Expert Mode",
+    "Camera::Expert Mode",
+    "Crop::Expert Mode",
+    "Valves::Expert Mode",
+    "PLC Outputs::Expert Mode",
+    "BPM/EPID::Expert Mode",
+    "Shaker::Expert Mode",
+    "Launchers::Expert Mode",
+    "Displays::Expert Mode",
+    "Schematic::Expert Mode"
+  ],
+  "_panels": {
+    "Beam::User Mode": [8, 8, 360, 110],
+    "Beam Status::User Mode": [376, 8, 410, 110],
+    "Shutters::User Mode": [8, 126, 570, 180],
+    "OPS Messages::User Mode": [586, 126, 410, 180],
+    "PV Save/Load::User Mode": [8, 314, 370, 100],
+    "ALL STOP::User Mode": [386, 314, 170, 100],
+    "Beam::Expert Mode": [8, 8, 360, 110],
+    "Beam Status::Expert Mode": [376, 8, 410, 110],
+    "Shutters::Expert Mode": [8, 126, 570, 180],
+    "OPS Messages::Expert Mode": [586, 126, 410, 180],
+    "PV Save/Load::Expert Mode": [8, 314, 370, 100],
+    "ALL STOP::Expert Mode": [386, 314, 170, 100]
+  },
+  "_tab_map": {
+    "Beam::User Mode": "User Mode",
+    "Beam Status::User Mode": "User Mode",
+    "Shutters::User Mode": "User Mode",
+    "OPS Messages::User Mode": "User Mode",
+    "PV Save/Load::User Mode": "User Mode",
+    "ALL STOP::User Mode": "User Mode",
+    "Beam::Expert Mode": "Expert Mode",
+    "Beam Status::Expert Mode": "Expert Mode",
+    "Shutters::Expert Mode": "Expert Mode",
+    "OPS Messages::Expert Mode": "Expert Mode",
+    "PV Save/Load::Expert Mode": "Expert Mode",
+    "ALL STOP::Expert Mode": "Expert Mode"
+  },
+  "_titles": {
+    "Beam::User Mode": "Machine",
+    "Beam Status::User Mode": "Beam Status",
+    "Shutters::User Mode": "Shutters",
+    "OPS Messages::User Mode": "OPS Messages",
+    "PV Save/Load::User Mode": "PV Save/Load",
+    "ALL STOP::User Mode": "ALL STOP",
+    "Beam::Expert Mode": "Machine",
+    "Beam Status::Expert Mode": "Beam Status",
+    "Shutters::Expert Mode": "Shutters",
+    "OPS Messages::Expert Mode": "OPS Messages",
+    "PV Save/Load::Expert Mode": "PV Save/Load",
+    "ALL STOP::Expert Mode": "ALL STOP"
+  },
+  "_title_fonts": {
+    "Beam::User Mode": 10,
+    "Beam Status::User Mode": 10,
+    "Shutters::User Mode": 10,
+    "OPS Messages::User Mode": 10,
+    "PV Save/Load::User Mode": 10,
+    "ALL STOP::User Mode": 10,
+    "Beam::Expert Mode": 10,
+    "Beam Status::Expert Mode": 10,
+    "Shutters::Expert Mode": 10,
+    "OPS Messages::Expert Mode": 10,
+    "PV Save/Load::Expert Mode": 10,
+    "ALL STOP::Expert Mode": 10
+  },
+  "_buttons": {},
+  "_styles": {
+    "ALL STOP::User Mode|||ALL STOP": {
+      "bg": "#c0392b",
+      "fg": "#ffffff",
+      "fs": 12,
+      "w": 150,
+      "h": 60
+    },
+    "ALL STOP::Expert Mode|||ALL STOP": {
+      "bg": "#c0392b",
+      "fg": "#ffffff",
+      "fs": 12,
+      "w": 150,
+      "h": 60
+    }
+  },
+  "_mcs": {},
+  "_pv_fields": {
+    "Shutters::User Mode": {
+      "shtr_A": {
+        "kind": "valve",
+        "status": "PB:32ID:STA_A_FES_CLSD_PL",
+        "on": "32idb:rshtrA:Open",
+        "off": "32idb:rshtrA:Close",
+        "label": "A-Hutch",
+        "on_text": "Open",
+        "off_text": "Close"
+      },
+      "shtr_B": {
+        "kind": "valve",
+        "status": "PB:32ID:STA_B_SBS_CLSD_PL",
+        "on": "32idb:rshtrB:Open",
+        "off": "32idb:rshtrB:Close",
+        "label": "B-Hutch",
+        "on_text": "Open",
+        "off_text": "Close"
+      },
+      "shtr_U": {
+        "kind": "valve",
+        "status": "32idbTXM:uniblitz:control",
+        "on": "32idbTXM:uniblitz:control",
+        "off": "32idbTXM:uniblitz:control",
+        "label": "FastShutter",
+        "on_text": "Open",
+        "off_text": "Close"
+      }
+    },
+    "Beam::User Mode": {
+      "beam_curr": "S-DCCT:CurrentM",
+      "beam_life": "S-DCCT:LifetimeM",
+      "beam_mode": "S:ActualMode",
+      "beam_und_e": "S32ID:USID:EnergyM.VAL"
+    },
+    "Beam Status::User Mode": {
+      "bs_desired_mode": "S:DesiredMode",
+      "bs_actual_mode": "S:ActualMode",
+      "bs_inj_period": "S-INJ:InjectionPeriodCounterM"
+    },
+    "OPS Messages::User Mode": {
+      "ops_msg1": "OPS:message1",
+      "ops_msg2": "OPS:message2",
+      "ops_msg3": "OPS:message3",
+      "ops_msg4": "OPS:message4",
+      "ops_msg5": "OPS:message5",
+      "ops_msg6": "OPS:message6"
+    },
+    "PV Save/Load::User Mode": {
+      "pvsr_file": "32id:TXMOptics:FileAllPVs"
+    },
+    "Shutters::Expert Mode": {
+      "shtr_A": {
+        "kind": "valve",
+        "status": "PB:32ID:STA_A_FES_CLSD_PL",
+        "on": "32idb:rshtrA:Open",
+        "off": "32idb:rshtrA:Close",
+        "label": "A-Hutch",
+        "on_text": "Open",
+        "off_text": "Close"
+      },
+      "shtr_B": {
+        "kind": "valve",
+        "status": "PB:32ID:STA_B_SBS_CLSD_PL",
+        "on": "32idb:rshtrB:Open",
+        "off": "32idb:rshtrB:Close",
+        "label": "B-Hutch",
+        "on_text": "Open",
+        "off_text": "Close"
+      },
+      "shtr_U": {
+        "kind": "valve",
+        "status": "32idbTXM:uniblitz:control",
+        "on": "32idbTXM:uniblitz:control",
+        "off": "32idbTXM:uniblitz:control",
+        "label": "FastShutter",
+        "on_text": "Open",
+        "off_text": "Close"
+      }
+    },
+    "Beam::Expert Mode": {
+      "beam_curr": "S-DCCT:CurrentM",
+      "beam_life": "S-DCCT:LifetimeM",
+      "beam_mode": "S:ActualMode",
+      "beam_und_e": "S32ID:USID:EnergyM.VAL"
+    },
+    "Beam Status::Expert Mode": {
+      "bs_desired_mode": "S:DesiredMode",
+      "bs_actual_mode": "S:ActualMode",
+      "bs_inj_period": "S-INJ:InjectionPeriodCounterM"
+    },
+    "OPS Messages::Expert Mode": {
+      "ops_msg1": "OPS:message1",
+      "ops_msg2": "OPS:message2",
+      "ops_msg3": "OPS:message3",
+      "ops_msg4": "OPS:message4",
+      "ops_msg5": "OPS:message5",
+      "ops_msg6": "OPS:message6"
+    },
+    "PV Save/Load::Expert Mode": {
+      "pvsr_file": "32id:TXMOptics:FileAllPVs"
+    }
+  },
+  "_custom_rows": {}
+}
