@@ -1,9 +1,187 @@
 # bl_gui — agent documentation
 
-This file is the single point of reference for an AI agent working on
-this repository. It captures architecture, conventions, gotchas, the
-beamline-specific integration points, and the history of decisions
-already baked into the code.
+An AI agent looking at bl_gui usually wants to **do things**, not read
+architecture. The sections below start with the CLI + Python API you
+call to operate the beamline (Sections A–E), then a Layout JSON
+reference (Section F), and only after that the ~600 lines of
+implementation-note appendix (Sections 1–16) for when you're
+refactoring the codebase itself.
+
+---
+
+## A. What bl_gui is
+
+Generic PyQt5 + pvaccess motor / optics control panel for APS
+beamlines. A GUI you launch on the beamline's control host, plus a
+headless subpackage (`bl_gui.headless`) and a CLI (`bl-cli`) that
+let an agent query the layout and drive motors without a display.
+
+Repo: [/home/beams/AMITTONE/Software/bl_gui/](/home/beams/AMITTONE/Software/bl_gui/).
+Editable install: `pip install -e .` from the repo root. The
+`bl_gui` and `bl-cli` console scripts land in the current conda env.
+
+---
+
+## B. `bl-cli` — one-shot operations from the shell
+
+Every subcommand accepts `--json` for machine-readable output; nonzero
+exit on failure. Examples below target APS 32-ID; PV names are drawn
+from `src/bl_gui/layouts/bl32id.json`.
+
+```bash
+# — layout introspection (no PVs touched) —
+bl-cli layout list                       # summary of the current layout
+bl-cli layout motors --name bl32id       # every motor + PV
+bl-cli layout panels --name bl32id       # panel names + tab + counts
+bl-cli layout actions                    # every saved CfgButton
+
+# — one-off caget / caput —
+bl-cli motor get   32ida:BraggERdbkAO    # caget -t <pv>
+bl-cli motor rbv   32idbTXM:mcs2:c1:m13  # <motor>.RBV
+bl-cli motor set   32idbTXM:mcs2:c1:m13  1.234
+bl-cli motor wait  32idbTXM:mcs2:c1:m13  --timeout 30    # poll .DMOV
+
+# — coordinated energy move (uses the ZP cal file) —
+bl-cli energy interp 9.0                 # compute targets, no caput
+bl-cli energy set    9.0 --dry-run       # report what it would move
+bl-cli energy set    9.0                 # actually move every motor
+bl-cli energy set    9.0 --no-regime     # ignore nano/micro; move ZP X/Y
+
+# — pystream QGMax bridge —
+bl-cli qgmax trigger                     # ask pystream to run one cycle
+bl-cli qgmax status                      # is a cycle running?
+
+# — scintillator-screen autofocus —
+bl-cli autofocus --motor 32idbTXM:nf:m4 \
+                 --image-pv 32idbSP1:Pva1:Image \
+                 --half-range 0.5 --steps 15
+
+# — nano / micro regime (drives the energy-move ZP X/Y skip) —
+bl-cli regime get                        # 'nano' or 'micro'
+bl-cli regime set micro
+```
+
+`--json` on any command emits a structured payload — motor lists,
+per-row status for `energy set` (each row is
+`{label, pv, target, status, reason}`), etc. Prefer it whenever
+you're going to parse the output.
+
+---
+
+## C. Python API — `bl_gui.headless`
+
+Same operations, importable in-process. No display, no QApplication
+required.
+
+```python
+from bl_gui.headless import (
+    load_layout, list_motors, list_panels, list_actions,
+    caget, caget_float, caget_rbv, caput, wait_dmov,
+    interp_at_energy, move_motors_to_energy,
+)
+from bl_gui.headless import qgmax, regime, autofocus
+
+lay = load_layout("bl32id")              # dict; see Section F
+motors = list_motors(lay)                # flat list
+
+pos = caget_rbv("32idbTXM:mcs2:c1:m13")
+caput("32idbTXM:mcs2:c1:m13", pos + 0.001)
+wait_dmov("32idbTXM:mcs2:c1:m13", timeout=30)
+
+rows = move_motors_to_energy(9.0, dry_run=True)   # per-motor plan
+qgmax.trigger();  qgmax.read_status()
+regime.write("micro")
+best, samples = autofocus.run(motor_pv="32idbTXM:nf:m4",
+                              image_pv="32idbSP1:Pva1:Image",
+                              half_range_mm=0.5, steps=15)
+```
+
+Every helper returns `None` (reads) or `False` (writes) on failure —
+no exceptions on transient EPICS problems. Read the return value.
+
+Module map:
+
+| module                        | purpose |
+|-------------------------------|---------|
+| `bl_gui.headless.layout`      | Parse the layout JSON; enumerate motors/panels/actions |
+| `bl_gui.headless.motors`      | Bounded `subprocess` caget / caput / DMOV wait |
+| `bl_gui.headless.calib`       | `interp_at_energy`, `move_motors_to_energy`, `_polyfit_interp` |
+| `bl_gui.headless.qgmax`       | Trigger + status for pystream's QGMax bridge |
+| `bl_gui.headless.autofocus`   | Sharpness-sweep autofocus (`run(...)`) |
+| `bl_gui.headless.regime`      | `read()`, `write()`, `is_nano()`, `ensure_exists()` |
+
+---
+
+## D. When to prefer the CLI vs. the Python API
+
+- **CLI (`bash: bl-cli …`)** — one-shot operations from an agent
+  bash tool. Runs in a fresh subprocess, so a hung EPICS call
+  can't wedge the agent.
+- **Python API** — when you're looping over the layout data or
+  chaining reads/writes without re-paying the argparse cost, and
+  you're already inside pystream / another Python process.
+
+Both share the same underlying implementation — output shapes match
+byte-for-byte.
+
+---
+
+## E. What NOT to do
+
+- **Don't launch the full GUI headlessly.** `bl_gui bl32id.json`
+  needs a display — the whole point of `bl-cli` is that it doesn't.
+- **Don't use `pvaccess.Channel.put()`.** No timeout, wedges the
+  worker pool. Always go through `bl_gui.headless.motors.caput`
+  (or `bash: caput …`). This is a hard convention in the codebase.
+- **Don't edit `src/bl_gui/layouts/*.json` directly.** Those are
+  the shipped templates. Layouts are per-user at
+  `~/.bl_gui/<bl>.json`; the GUI's Ctrl+S writes there.
+- **Don't touch files under `/home/beams/USERTXM/…`.** IOC-side
+  patches live outside this repo and are read-only for the agent
+  (see Section 8 in the appendix for the txmoptics patch story).
+
+---
+
+## F. Layout JSON — what `load_layout(name)` returns
+
+```python
+{
+  "name":  "bl32id",
+  "path":  "/path/to/actual/file.json",
+  "tabs":  ["User Mode", "Expert Mode"],
+  "panels": {
+    "Zone Plate::User Mode": {
+      "tab":         "User Mode",
+      "title":       "Zone Plate",
+      "geometry":    [x, y, w, h] | None,
+      "motors":      [
+        {"label": "ZP X", "pv": "32idbTXM:mcs2:c1:m13",
+         "custom": False, "twv": ""}, ...
+      ],
+      "buttons":     [{"label", "type", "action", ...}, ...],
+      "pv_fields":   {field_id: str_pv | dict},
+      "custom_rows": [...],
+    },
+    ...
+  },
+  "deleted_panels": [...],
+}
+```
+
+Panel keys are `"BaseTitle::TabName"` (or `"BaseTitle#N::TabName"`
+for user-duplicated panels). `motors` is the same list saved to
+`_mcs` in the raw JSON. `buttons` reflects saved CfgButton state —
+often empty; defaults are constructed by the GUI at build time,
+not persisted.
+
+---
+
+# Deep reference (implementation notes)
+
+Everything below is for the engineer *refactoring* bl_gui — the
+architecture, the widget hierarchy, the layer separations, the
+gotcha list. Agents using bl_gui through the CLI or Python API
+above don't need any of it.
 
 ---
 
