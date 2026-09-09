@@ -1266,6 +1266,10 @@ class Win(QtWidgets.QMainWindow):
             return CameraView(panel_key=getattr(parent, "key", None),
                               parent=parent)
 
+        def _mctoptics_factory(parent):
+            from .beamlines.bl32id.mctoptics_view import MCTOpticsView
+            return MCTOpticsView(parent=parent)
+
         def _motor_factory(parent):
             return MC("New Motor", "")
 
@@ -1316,6 +1320,7 @@ class Win(QtWidgets.QMainWindow):
             "LED indicator":      ("LED",   140, 60,  _led_factory),
             "Action button":      ("Action", 180, 60, _btn_factory),
             "Web view / Camera":  ("Web view", 480, 360, _webview_factory),
+            "MCT Optics":         ("MCTOptics", 520, 420, _mctoptics_factory),
         }
 
     def _new_field_id(self, prefix: str) -> str:
@@ -1378,6 +1383,22 @@ class Win(QtWidgets.QMainWindow):
             slot[widget.field_id] = widget
             pv_names_new.extend(getattr(widget, "monitored_pvs",
                                         lambda: [])() or [])
+        else:
+            # Composite widget (e.g. MCTOpticsView): walk its descendants
+            # and register every PVField / ValveField / ToggleField / MC
+            # inside so PV updates and save/load work without each plugin
+            # having to re-wire the engine itself.
+            slot = self._pv_fields.setdefault(p.key, {})
+            for child in widget.findChildren((PVField, ValveField, ToggleField)):
+                fid = getattr(child, "field_id", None)
+                if not fid:
+                    continue
+                slot[fid] = child
+                pv_names_new.extend(
+                    getattr(child, "monitored_pvs", lambda: [])() or [])
+            for child in widget.findChildren(MC):
+                self.mcs.append(child)
+                pv_names_new.extend(child.get_pvs())
         # If the engine is already running, subscribe to the new PVs
         # so the widget starts receiving updates immediately (rather
         # than waiting for the next full restart).
