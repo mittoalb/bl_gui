@@ -13,6 +13,11 @@ license = { text = "MIT" }
 dependencies = [
     "PyQt5>=5.15",
     "pvapy",
+    # PVHub — write-with-verify (caput -c + monitor echo). Used by
+    # Win._apply_cam_binning and any future path that needs a silent
+    # IOC reject to surface instead of being reported as success.
+    # See CLAUDE.md.
+    "bmsg @ git+https://github.com/mittoalb/bmsg.git",
 ]
 
 [project.scripts]

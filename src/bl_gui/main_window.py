@@ -10,6 +10,8 @@ from functools import partial
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from .motor import MC, GROUPS, _DEFAULT_TABS, _fs, _rb, _act, set_font_scale
+from bmsg import PVHub
+
 from .pv import PVEngine, caput_bg
 from .pv_field import PVField, ValveField, ToggleField
 from . import theme as _theme_mod
@@ -136,6 +138,14 @@ class Win(QtWidgets.QMainWindow):
         self._bl_name = os.path.splitext(os.path.basename(_lay_path()))[0]
         self.setWindowTitle(self._bl_name)
         self.resize(1800, 1000)
+
+        # bmsg PVHub for write-with-verify (the layout-wide monitor set
+        # still runs through PVEngine). Any code path that needs to know
+        # a caput actually stuck — e.g. _apply_cam_binning — routes
+        # through self.hub.put(..., verify=True); silent IOC rejects
+        # (Acquire lock, autosave revert, competing writer) then surface
+        # as False + a log line instead of looking like success.
+        self.hub = PVHub(parent=self)
         # All motor cards and shutter/readback labels across ALL tabs
         self.mcs: List[MC] = []
         # PVField / ValveField rows: panel_key -> {field_id: widget}
@@ -2881,10 +2891,21 @@ class Win(QtWidgets.QMainWindow):
                 size_y = max_y // max(1, biny)
                 print(f"[BIN] apply: BinX={binx} BinY={biny} "
                       f"SizeX={size_x} SizeY={size_y} (max={max_x}x{max_y})")
-                caput_bg(f"{cam_prefix}:BinX",  binx)
-                caput_bg(f"{cam_prefix}:BinY",  biny)
-                caput_bg(f"{cam_prefix}:SizeX", size_x)
-                caput_bg(f"{cam_prefix}:SizeY", size_y)
+                # hub.put(...) does caput -c AND verifies via monitor
+                # echo. If AreaDetector silently rejects the write (most
+                # commonly because Acquire=1 locks size/binning), the
+                # returned False + log line makes it obvious instead of
+                # looking like a successful fire-and-forget caput.
+                for pv, v in [
+                    (f"{cam_prefix}:BinX",  binx),
+                    (f"{cam_prefix}:BinY",  biny),
+                    (f"{cam_prefix}:SizeX", size_x),
+                    (f"{cam_prefix}:SizeY", size_y),
+                ]:
+                    if not self.hub.put(pv, v, verify_timeout=2.0):
+                        actual = self.hub.value(pv)
+                        print(f"[BIN] WARN {pv}: wrote {v} but IOC now shows {actual} "
+                              f"(Acquire lock? autosave? competing writer?)")
                 return
 
 
