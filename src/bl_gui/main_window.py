@@ -16,6 +16,33 @@ from . import theme as _theme_mod
 from .theme import _IMG, _PANEL_SS, _PANEL_SS_EDIT, _SS
 
 
+# ── XANES element edges — Energy-panel quick-select ─────────────────────
+# K and L3 absorption edges in the mono's 6.5-12 keV window, values in
+# keV (Bearden & Burr / NIST). Keep sorted by energy so the combobox
+# reads naturally. The Energy panel wires each entry to a "Move" button
+# that sets the SP, triggers the standard energy move, then auto-runs
+# QGMax when the mono settles.
+
+XANES_EDGES = [
+    ("Mn K",  6.539),
+    ("Fe K",  7.112),
+    ("Co K",  7.709),
+    ("Ni K",  8.333),
+    ("Cu K",  8.979),
+    ("Zn K",  9.659),
+    ("Ta L3", 9.881),
+    ("W L3",  10.207),
+    ("Ga K",  10.367),
+    ("Re L3", 10.535),
+    ("Os L3", 10.871),
+    ("Ge K",  11.103),
+    ("Ir L3", 11.215),
+    ("Pt L3", 11.564),
+    ("As K",  11.867),
+    ("Au L3", 11.919),
+]
+
+
 # ── Category-based font scaling ─────────────────────────────────────────
 # The top-bar Font: slider rescales motor cards only. The Fonts... dialog
 # adds four independent scales (Titles / Labels / Values / Buttons) that
@@ -709,6 +736,39 @@ class Win(QtWidgets.QMainWindow):
         energy_sp._inner.returnPressed.connect(
             lambda e=energy_sp: self._on_energy_sp_return(e))
         energy_sp._inner.setToolTip("Allowed range: 6.5 – 12 keV")
+
+        # --- Element quick-select (K / L3 edges in the mono range) ---
+        # Combo of XANES edges + Move button. Move sets the SP to the
+        # selected edge energy, triggers the standard energy move (same
+        # handler the Go button uses, so Use Calibration is honored),
+        # then auto-fires QGMax once EnergyBusy clears.
+        elem_row = QtWidgets.QWidget()
+        elem_hl = QtWidgets.QHBoxLayout(elem_row)
+        elem_hl.setContentsMargins(0, 0, 0, 0); elem_hl.setSpacing(6)
+        elem_cmb = QtWidgets.QComboBox()
+        elem_cmb.setStyleSheet(
+            "QComboBox{background:#2c3e50;color:#ecf0f1;"
+            "border:1px solid #3498db;border-radius:3px;padding:4px 6px;"
+            "font:bold 11pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+            "QComboBox::drop-down{border:0;}"
+            "QComboBox QAbstractItemView{background:#2c3e50;color:#ecf0f1;"
+            "selection-background-color:#1e5a8e;}")
+        for lbl, kev in XANES_EDGES:
+            elem_cmb.addItem(f"{lbl}   {kev:.3f} keV", userData=kev)
+        elem_cmb.setToolTip("Pick an element edge; press Move to drive "
+                            "energy there and auto-run QGMax.")
+        elem_move_btn = QtWidgets.QPushButton("Move")
+        elem_move_btn.setMinimumHeight(32)
+        elem_move_btn.setStyleSheet(
+            "background:#ae5207;color:#fff;font:bold 11pt;"
+            "border:1px solid #d35400;border-radius:3px;padding:4px 14px;")
+        elem_move_btn.setToolTip("Set energy SP to the selected edge, "
+                                 "trigger the mono move, then run QGMax "
+                                 "when the mono settles.")
+        elem_move_btn.clicked.connect(
+            lambda _=False, c=elem_cmb: self._on_element_move(c))
+        elem_hl.addWidget(elem_cmb, 1); elem_hl.addWidget(elem_move_btn, 0)
+        el.addRow("Element:", elem_row)
 
         # Every remaining field is a PVField with a stable id → right-click
         # allows per-beamline PV reassignment, and the PV is persisted in
@@ -2374,6 +2434,108 @@ class Win(QtWidgets.QMainWindow):
             # overwriting the QG/X/Y/Z values we just direct-caput.
             self._apply_zp_calib_from_plugin()
         caput_bg("32id:TXMOptics:EnergySet", 1)
+
+    def _on_element_move(self, cmb):
+        """Element-combo → set energy SP to the selected edge, trigger
+        the same handler the Go button uses (so Use Calibration is
+        honored end-to-end), then poll EnergyBusy and fire QGMax once
+        the mono has finished moving. Nothing happens if the picked
+        energy falls outside the enforced 6.5-12 keV mono range."""
+        kev = cmb.currentData()
+        if kev is None:
+            return
+        try:
+            kev = float(kev)
+        except (TypeError, ValueError):
+            print(f"[ELEM] bad energy value: {cmb.currentData()!r}")
+            return
+        if not (6.5 <= kev <= 12.0):
+            print(f"[ELEM] {cmb.currentText()!r} = {kev} keV outside "
+                  f"6.5-12 keV mono range, aborting")
+            return
+        label = cmb.currentText().split()[0]
+        print(f"[ELEM] moving to {label} at {kev:.3f} keV")
+        # 1) Push the new SP. The Energy PV is monitored, so both the
+        #    User Mode and Expert Mode SP fields will echo the value on
+        #    the next callback — no need to touch either widget directly.
+        caput_bg("32id:TXMOptics:Energy", f"{kev:.3f}")
+        # 2) Give the SP caput a beat to reach the IOC so that when
+        #    _on_set_energy runs _move_motors_from_plugin (which uses
+        #    the current SP), it sees the value we just wrote.
+        QtCore.QTimer.singleShot(400, self._on_set_energy)
+        # 3) Kick off the wait-for-done poller. It also self-arms with
+        #    a "must first see busy=1" latch so a stale busy=0 reading
+        #    right after the caput doesn't fire QGMax prematurely.
+        self._start_qgmax_after_energy()
+
+    def _start_qgmax_after_energy(self):
+        """Poll 32id:TXMOptics:EnergyBusy at 500 ms; once we've observed
+        the busy=1 transition (meaning the move has actually started)
+        and it later returns to 0, trigger a QGMax cycle via
+        qgmax_trigger. Times out silently after 180 s to keep a stalled
+        move from leaving a zombie timer."""
+        pve = getattr(self, "_pve", None)
+        if pve is None:
+            print("[ELEM] PV engine not ready, cannot wait for energy move")
+            return
+        if not hasattr(self, "_energy_wait_timer"):
+            self._energy_wait_timer = QtCore.QTimer(self)
+            self._energy_wait_timer.setInterval(500)
+        # Reset per-run state before (re)starting.
+        try:
+            self._energy_wait_timer.timeout.disconnect()
+        except TypeError:
+            pass
+        self._energy_wait_timer.stop()
+        import time as _time
+        state = {"start": _time.time(), "saw_busy": False}
+
+        def _tick():
+            elapsed = _time.time() - state["start"]
+            if elapsed > 180.0:
+                print(f"[ELEM] timeout ({elapsed:.0f}s) waiting for "
+                      f"EnergyBusy → 0; skipping QGMax")
+                self._energy_wait_timer.stop()
+                return
+            raw = pve.get("32id:TXMOptics:EnergyBusy")
+            if raw is None:
+                return
+            # EnergyBusy is a busy record: 1/"Busy" while active, 0/"Done"
+            # otherwise. Accept either int-like or the enum-string form.
+            try:
+                v = float(raw)
+                busy = v != 0.0
+            except (ValueError, TypeError):
+                busy = str(raw).strip().lower() in (
+                    "busy", "yes", "true", "on", "1")
+            if busy:
+                state["saw_busy"] = True
+                return
+            if not state["saw_busy"]:
+                # Haven't observed a start yet — either the caput hasn't
+                # landed or the move was a no-op. Give the caput a bit
+                # more time before giving up on the "start" gate.
+                if elapsed > 8.0:
+                    print(f"[ELEM] no EnergyBusy=1 seen after {elapsed:.0f}s; "
+                          f"assuming a no-op move — firing QGMax anyway")
+                    self._energy_wait_timer.stop()
+                    _fire_qgmax()
+                return
+            # Done: busy went 0 after having been 1. Fire QGMax.
+            print(f"[ELEM] EnergyBusy=0 after {elapsed:.1f}s → triggering QGMax")
+            self._energy_wait_timer.stop()
+            _fire_qgmax()
+
+        def _fire_qgmax():
+            try:
+                from .beamlines.bl32id import qgmax_trigger
+                ts = qgmax_trigger.trigger()
+                print(f"[ELEM] qgmax request written (ts={ts:.1f})")
+            except Exception as e:
+                print(f"[ELEM] qgmax trigger failed: {e}")
+
+        self._energy_wait_timer.timeout.connect(_tick)
+        self._energy_wait_timer.start()
 
     _CAL_FILE_DIR = "/home/beams/USERTXM/epics/synApps/support/txmoptics/iocBoot/iocTXMOptics"
 
