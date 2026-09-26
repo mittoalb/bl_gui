@@ -2856,25 +2856,15 @@ class Win(QtWidgets.QMainWindow):
             caput_bg(pv_name, float(v))
 
     def _apply_cam_binning(self):
-        """On Enter in Bin X or Bin Y: apply binning at full frame.
+        """Direct copy of pystream's DetectorControlDialog._apply_binning.
+        Blocking, main-thread, subprocess caput -c. No pool, no thread,
+        no PVField races. Exact same order & timing as pystream."""
+        import time as _time
+        prefix = "32idbSP1:cam1"
 
-        Oryx / ADSpinnaker: binning is HARDWARE. Writing BinX makes the
-        sensor natively output fewer pixels; MaxSizeX_RBV then reflects
-        the NEW post-bin max (6464→3232→1616 for bin 1→2→4). Full frame
-        = SizeX = MaxSizeX_RBV (post-bin). No math on SizeX.
-
-        Order:
-          1. MinX=0, MinY=0.
-          2. BinX, BinY (driver internally recomputes MaxSize).
-          3. Sleep so the RBV updates on the CA side.
-          4. caget MaxSizeX/Y_RBV FRESH.
-          5. SizeX = new MaxSizeX_RBV, SizeY = new MaxSizeY_RBV.
-        All caput -c so each waits for its put-callback, all on one
-        background thread so the GUI stays responsive.
-        """
-        import threading, time as _time
-        cam_prefix = "32idbSP1:cam1"
-        for key, slot in self._pv_fields.items():
+        # Pull BinX / BinY from the bl_gui setpoint fields.
+        binx = biny = None
+        for slot in self._pv_fields.values():
             if "cam_binx" in slot and "cam_biny" in slot:
                 try:
                     binx = int(slot["cam_binx"]._inner.text() or "1")
@@ -2882,60 +2872,56 @@ class Win(QtWidgets.QMainWindow):
                 except ValueError:
                     print("[BIN] non-integer in Bin X / Bin Y — aborting")
                     return
+                break
+        if binx is None:
+            print("[BIN] cam_binx / cam_biny fields not found in _pv_fields")
+            return
 
-                def _do_bin_apply(cx=cam_prefix, bx=binx, by=biny):
-                    # 1-2. MinX/MinY = 0, then BinX/BinY.
-                    for pv, v in [
-                        (f"{cx}:MinX", 0),
-                        (f"{cx}:MinY", 0),
-                        (f"{cx}:BinX", bx),
-                        (f"{cx}:BinY", by),
-                    ]:
-                        r = subprocess.run(
-                            ["caput", "-c", pv, str(v)],
-                            capture_output=True, text=True, timeout=5.0,
-                        )
-                        if r.returncode != 0:
-                            print(f"[BIN] caput -c {pv} {v} FAILED: "
-                                  f"rc={r.returncode} stderr={r.stderr.strip()!r}")
+        def caput_c(pv, val):
+            r = subprocess.run(
+                ["caput", "-c", pv, str(val)],
+                capture_output=True, text=True, timeout=10,
+            )
+            if r.returncode != 0:
+                print(f"[BIN] caput -c {pv} {val} FAILED "
+                      f"rc={r.returncode} stderr={r.stderr.strip()!r}")
 
-                    # 3. Let the RBVs settle.
-                    _time.sleep(0.2)
+        # 1-2. MinX=0, MinY=0, then BinX, BinY. Blocking, in order.
+        for pv, val in [
+            (f"{prefix}:MinX", 0),
+            (f"{prefix}:MinY", 0),
+            (f"{prefix}:BinX", binx),
+            (f"{prefix}:BinY", biny),
+        ]:
+            caput_c(pv, val)
 
-                    # 4. Re-read fresh MaxSizeX/Y_RBV — driver has now
-                    # updated them to reflect the new binning.
-                    try:
-                        mx = int(float(subprocess.run(
-                            ["caget", "-t", f"{cx}:MaxSizeX_RBV"],
-                            capture_output=True, text=True, timeout=2.0,
-                        ).stdout.strip()))
-                        my = int(float(subprocess.run(
-                            ["caget", "-t", f"{cx}:MaxSizeY_RBV"],
-                            capture_output=True, text=True, timeout=2.0,
-                        ).stdout.strip()))
-                    except Exception as e:
-                        print(f"[BIN] failed to re-read MaxSize after bin: {e}")
-                        return
+        # 3. Let the driver update MaxSizeX/Y_RBV.
+        _time.sleep(0.2)
 
-                    print(f"[BIN] BinX={bx} BinY={by} → "
-                          f"new MaxSizeX/Y_RBV={mx}×{my}, "
-                          f"setting SizeX/Y to full frame")
+        # 4. Re-read fresh MaxSizeX/Y_RBV.
+        try:
+            max_x = int(float(subprocess.run(
+                ["caget", "-t", f"{prefix}:MaxSizeX_RBV"],
+                capture_output=True, text=True, timeout=2.0,
+            ).stdout.strip()))
+            max_y = int(float(subprocess.run(
+                ["caget", "-t", f"{prefix}:MaxSizeY_RBV"],
+                capture_output=True, text=True, timeout=2.0,
+            ).stdout.strip()))
+        except Exception as e:
+            print(f"[BIN] failed to re-read MaxSize after bin: {e}")
+            return
 
-                    # 5. Full frame at the new binning.
-                    for pv, v in [
-                        (f"{cx}:SizeX", mx),
-                        (f"{cx}:SizeY", my),
-                    ]:
-                        r = subprocess.run(
-                            ["caput", "-c", pv, str(v)],
-                            capture_output=True, text=True, timeout=5.0,
-                        )
-                        if r.returncode != 0:
-                            print(f"[BIN] caput -c {pv} {v} FAILED: "
-                                  f"rc={r.returncode} stderr={r.stderr.strip()!r}")
+        # 5. SizeX/SizeY = new MaxSize (full frame at this binning).
+        for pv, val in [
+            (f"{prefix}:SizeX", max_x),
+            (f"{prefix}:SizeY", max_y),
+        ]:
+            caput_c(pv, val)
 
-                threading.Thread(target=_do_bin_apply, daemon=True).start()
-                return
+        print(f"[BIN] applied full frame: BinX={binx} BinY={biny}  "
+              f"MaxSizeX/Y_RBV → {max_x}×{max_y}  "
+              f"SizeX/Y ← {max_x}×{max_y}")
 
 
 class _PressFlash(QtCore.QObject):
