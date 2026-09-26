@@ -2859,12 +2859,21 @@ class Win(QtWidgets.QMainWindow):
             caput_bg(pv_name, float(v))
 
     def _apply_cam_binning(self):
-        """On Enter in Bin X or Bin Y: caput BinX / BinY / SizeX / SizeY.
+        """On Enter in Bin X or Bin Y: apply binning targeting the FULL
+        detector frame.
 
-        Mirrors pystream detectorcontrol's 'Apply Binning' button. SizeX/Y
-        are computed from MaxSizeX_RBV / MaxSizeY_RBV (read live via caget)
-        divided by the current BinX / BinY. Without this the driver leaves
-        the ROI untouched and binning effectively doesn't take effect."""
+        Sequence (matters for AreaDetector — every step is verified):
+          1. Read MaxSizeX_RBV / MaxSizeY_RBV (unbinned sensor size,
+             constant per camera).
+          2. Stop Acquire — the driver silently rejects size/binning
+             writes while Acquire=1.
+          3. MinX=0, MinY=0 — clear any prior ROI so binning applies
+             to the whole sensor, not to a leftover slice.
+          4. BinX, BinY.
+          5. SizeX = MaxSize // BinX, SizeY = MaxSize // BinY
+             (SizeX/Y are in binned pixels per ADCore convention).
+          6. Restart Acquire if we stopped it.
+        """
         cam_prefix = "32idbSP1:cam1"
         for key, slot in self._pv_fields.items():
             if "cam_binx" in slot and "cam_biny" in slot:
@@ -2874,29 +2883,39 @@ class Win(QtWidgets.QMainWindow):
                 except ValueError:
                     print("[BIN] non-integer in Bin X / Bin Y — aborting")
                     return
-                # Read sensor max — short timeout, must succeed to compute sizes.
+
+                # 1. Sensor max via monitor cache (subscribe on first use).
+                max_x = self.hub.subscribe(f"{cam_prefix}:MaxSizeX_RBV").value
+                max_y = self.hub.subscribe(f"{cam_prefix}:MaxSizeY_RBV").value
                 try:
-                    max_x = int(float(subprocess.run(
-                        ["caget", "-t", f"{cam_prefix}:MaxSizeX_RBV"],
-                        capture_output=True, text=True, timeout=2.0,
-                    ).stdout.strip()))
-                    max_y = int(float(subprocess.run(
-                        ["caget", "-t", f"{cam_prefix}:MaxSizeY_RBV"],
-                        capture_output=True, text=True, timeout=2.0,
-                    ).stdout.strip()))
-                except Exception as e:
-                    print(f"[BIN] could not read MaxSizeX/Y: {e}")
+                    max_x = int(float(max_x))
+                    max_y = int(float(max_y))
+                except (TypeError, ValueError):
+                    print(f"[BIN] MaxSizeX/Y_RBV not available yet "
+                          f"(monitors haven't received first update)")
                     return
+
                 size_x = max_x // max(1, binx)
                 size_y = max_y // max(1, biny)
-                print(f"[BIN] apply: BinX={binx} BinY={biny} "
-                      f"SizeX={size_x} SizeY={size_y} (max={max_x}x{max_y})")
-                # hub.put(...) does caput -c AND verifies via monitor
-                # echo. If AreaDetector silently rejects the write (most
-                # commonly because Acquire=1 locks size/binning), the
-                # returned False + log line makes it obvious instead of
-                # looking like a successful fire-and-forget caput.
+                print(f"[BIN] apply full-frame: BinX={binx} BinY={biny} "
+                      f"MinX=0 MinY=0 SizeX={size_x} SizeY={size_y} "
+                      f"(sensor={max_x}x{max_y})")
+
+                # 2. Stop Acquire (snapshot state so we can restore)
+                acq_pv = f"{cam_prefix}:Acquire"
+                was_acquiring = 0
+                cur = self.hub.subscribe(acq_pv).value
+                try:
+                    was_acquiring = int(float(cur)) if cur is not None else 0
+                except (TypeError, ValueError):
+                    was_acquiring = 0
+                if was_acquiring:
+                    self.hub.put(acq_pv, 0, verify_timeout=2.0)
+
+                # 3-5. Reset ROI to full, apply bin, apply size
                 for pv, v in [
+                    (f"{cam_prefix}:MinX",  0),
+                    (f"{cam_prefix}:MinY",  0),
                     (f"{cam_prefix}:BinX",  binx),
                     (f"{cam_prefix}:BinY",  biny),
                     (f"{cam_prefix}:SizeX", size_x),
@@ -2906,6 +2925,10 @@ class Win(QtWidgets.QMainWindow):
                         actual = self.hub.value(pv)
                         print(f"[BIN] WARN {pv}: wrote {v} but IOC now shows {actual} "
                               f"(Acquire lock? autosave? competing writer?)")
+
+                # 6. Restart Acquire if we stopped it
+                if was_acquiring:
+                    self.hub.put(acq_pv, 1, verify_timeout=2.0)
                 return
 
 
