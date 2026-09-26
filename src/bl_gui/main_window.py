@@ -2849,19 +2849,25 @@ class Win(QtWidgets.QMainWindow):
             caput_bg(pv_name, float(v))
 
     def _apply_cam_binning(self):
-        """On Enter in Bin X or Bin Y: caput BinX / BinY / SizeX / SizeY
-        SERIALIZED with put-callback (caput -c), because AreaDetector
-        recomputes SizeX/SizeY whenever BinX/BinY changes and vice versa.
+        """On Enter in Bin X or Bin Y: apply binning targeting the FULL
+        detector frame.
 
-        Previously used four caput_bg fire-and-forget calls submitted to
-        a 16-worker pool, which raced: if SizeX landed before BinX, the
-        driver rewrote SizeX on the BinX change and the user's value was
-        silently clobbered → "image size didn't update." Order MUST be:
-        Bin first, Size after, each waiting for its callback.
+        Per ADKinetix (and standard ADCore), ADSizeX/Y are in *unbinned*
+        sensor pixels — the region on the sensor, NOT the output image
+        size. Full frame at any binning is:
+            MinX=0, MinY=0, SizeX=MaxSizeX_RBV, SizeY=MaxSizeY_RBV
+        The output image is then SizeX/BinX × SizeY/BinY, i.e. the
+        binning "applies to" the full sensor.
 
-        SizeX/Y are in binned pixels (per this driver's ADCore build), so
-        full frame at binning N is MaxSize // N. Verified with the
-        actual IOC (32idbSP1:cam1, MaxSizeX_RBV=3232).
+        Previous code did `size_x = max_x // binx`, which set a
+        HALF-sensor ROI at BinX=2 (matched pystream's equally-wrong
+        formula). Also submitted the four caput_bg calls to a 16-worker
+        pool that raced — SizeX often landed before BinX and got
+        clobbered.
+
+        Fix: correct math (no division) + serialize the six writes on
+        one background thread with caput -c so each waits for its
+        put-callback.
         """
         import threading
         cam_prefix = "32idbSP1:cam1"
@@ -2885,17 +2891,22 @@ class Win(QtWidgets.QMainWindow):
                 except Exception as e:
                     print(f"[BIN] could not read MaxSizeX/Y: {e}")
                     return
-                size_x = max_x // max(1, binx)
-                size_y = max_y // max(1, biny)
-                print(f"[BIN] apply: BinX={binx} BinY={biny} "
-                      f"SizeX={size_x} SizeY={size_y} (max={max_x}x{max_y})")
 
-                # Serialize on a background thread so the GUI doesn't
-                # block while the four caput -c calls wait for their
-                # put-callbacks (~50-200 ms total on a healthy IOC).
+                # Full frame: SizeX/Y are unbinned sensor size, constant.
+                size_x = max_x
+                size_y = max_y
+                out_w  = max_x // max(1, binx)
+                out_h  = max_y // max(1, biny)
+                print(f"[BIN] apply full frame: BinX={binx} BinY={biny} "
+                      f"SizeX={size_x} SizeY={size_y} "
+                      f"→ output image {out_w}×{out_h} "
+                      f"(sensor={max_x}x{max_y})")
+
                 def _do_bin_apply(cx=cam_prefix, bx=binx, by=biny,
                                   sx=size_x, sy=size_y):
                     for pv, v in [
+                        (f"{cx}:MinX",  0),
+                        (f"{cx}:MinY",  0),
                         (f"{cx}:BinX",  bx),
                         (f"{cx}:BinY",  by),
                         (f"{cx}:SizeX", sx),

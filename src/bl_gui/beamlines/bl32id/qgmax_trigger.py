@@ -1,18 +1,22 @@
 """QGMax trigger + status helpers.
 
 pystream's QGMax optimization (image-mean motor auto-alignment) uses a
-file-based request/response protocol:
-  ~/.pystream_qgmax_request.json   — written here to request a cycle.
-  ~/.pystream_qgmax_response.json  — pystream updates with started_ts /
+file-based request/response protocol under ~/.pystream/:
+  ~/.pystream/qgmax_request.json   — written here to request a cycle.
+  ~/.pystream/qgmax_response.json  — pystream updates with started_ts /
                                      last_completed_ts so callers can
                                      tell whether a cycle is in flight.
+
+Paths moved from the legacy ~/.pystream_qgmax_*.json dotfiles into the
+~/.pystream/ directory (matching pystream's PYSTREAM_HOME layout).
 """
 import json
 import os
 import time
 
-REQUEST_FILE = os.path.expanduser("~/.pystream_qgmax_request.json")
-RESPONSE_FILE = os.path.expanduser("~/.pystream_qgmax_response.json")
+_PYSTREAM_HOME = os.path.expanduser("~/.pystream")
+REQUEST_FILE = os.path.join(_PYSTREAM_HOME, "qgmax_request.json")
+RESPONSE_FILE = os.path.join(_PYSTREAM_HOME, "qgmax_response.json")
 
 
 def trigger():
