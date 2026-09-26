@@ -883,11 +883,18 @@ class Win(QtWidgets.QMainWindow):
             "padding:4px 8px;font:bold 14pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
             "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}")
         # AreaDetector binning needs SizeX/SizeY to be recomputed from the
-        # sensor's max size when BinX/BinY change (same logic as pystream's
-        # "Apply Binning" button). Hook Enter on both bin fields to run the
-        # full apply sequence automatically.
-        cam_slot['cam_binx']._inner.returnPressed.connect(self._apply_cam_binning)
-        cam_slot['cam_biny']._inner.returnPressed.connect(self._apply_cam_binning)
+        # sensor's max size when BinX/BinY change. PVField's default 'sp'
+        # returnPressed handler does its OWN caput_bg for BinX (into the
+        # 16-worker unordered pool) — that races with our ordered apply
+        # thread. Disconnect it here so ONLY our _apply_cam_binning runs,
+        # and _apply_cam_binning does the BinX caput itself in the right
+        # order (MinX=0 → BinX → wait → SizeX=new MaxSize).
+        for _name in ('cam_binx', 'cam_biny'):
+            try:
+                cam_slot[_name]._inner.returnPressed.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            cam_slot[_name]._inner.returnPressed.connect(self._apply_cam_binning)
         p.setLayout(cl); p.setGeometry(700 + GAP + 344, 84 + GAP, 340, 180)
 
         # --- Crop ---
