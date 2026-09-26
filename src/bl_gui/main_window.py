@@ -2849,27 +2849,23 @@ class Win(QtWidgets.QMainWindow):
             caput_bg(pv_name, float(v))
 
     def _apply_cam_binning(self):
-        """On Enter in Bin X or Bin Y: apply binning targeting the FULL
-        detector frame.
+        """On Enter in Bin X or Bin Y: apply binning at full frame.
 
-        Per ADKinetix (and standard ADCore), ADSizeX/Y are in *unbinned*
-        sensor pixels — the region on the sensor, NOT the output image
-        size. Full frame at any binning is:
-            MinX=0, MinY=0, SizeX=MaxSizeX_RBV, SizeY=MaxSizeY_RBV
-        The output image is then SizeX/BinX × SizeY/BinY, i.e. the
-        binning "applies to" the full sensor.
+        Oryx / ADSpinnaker: binning is HARDWARE. Writing BinX makes the
+        sensor natively output fewer pixels; MaxSizeX_RBV then reflects
+        the NEW post-bin max (6464→3232→1616 for bin 1→2→4). Full frame
+        = SizeX = MaxSizeX_RBV (post-bin). No math on SizeX.
 
-        Previous code did `size_x = max_x // binx`, which set a
-        HALF-sensor ROI at BinX=2 (matched pystream's equally-wrong
-        formula). Also submitted the four caput_bg calls to a 16-worker
-        pool that raced — SizeX often landed before BinX and got
-        clobbered.
-
-        Fix: correct math (no division) + serialize the six writes on
-        one background thread with caput -c so each waits for its
-        put-callback.
+        Order:
+          1. MinX=0, MinY=0.
+          2. BinX, BinY (driver internally recomputes MaxSize).
+          3. Sleep so the RBV updates on the CA side.
+          4. caget MaxSizeX/Y_RBV FRESH.
+          5. SizeX = new MaxSizeX_RBV, SizeY = new MaxSizeY_RBV.
+        All caput -c so each waits for its put-callback, all on one
+        background thread so the GUI stays responsive.
         """
-        import threading
+        import threading, time as _time
         cam_prefix = "32idbSP1:cam1"
         for key, slot in self._pv_fields.items():
             if "cam_binx" in slot and "cam_biny" in slot:
@@ -2879,38 +2875,49 @@ class Win(QtWidgets.QMainWindow):
                 except ValueError:
                     print("[BIN] non-integer in Bin X / Bin Y — aborting")
                     return
-                try:
-                    max_x = int(float(subprocess.run(
-                        ["caget", "-t", f"{cam_prefix}:MaxSizeX_RBV"],
-                        capture_output=True, text=True, timeout=2.0,
-                    ).stdout.strip()))
-                    max_y = int(float(subprocess.run(
-                        ["caget", "-t", f"{cam_prefix}:MaxSizeY_RBV"],
-                        capture_output=True, text=True, timeout=2.0,
-                    ).stdout.strip()))
-                except Exception as e:
-                    print(f"[BIN] could not read MaxSizeX/Y: {e}")
-                    return
 
-                # Full frame: SizeX/Y are unbinned sensor size, constant.
-                size_x = max_x
-                size_y = max_y
-                out_w  = max_x // max(1, binx)
-                out_h  = max_y // max(1, biny)
-                print(f"[BIN] apply full frame: BinX={binx} BinY={biny} "
-                      f"SizeX={size_x} SizeY={size_y} "
-                      f"→ output image {out_w}×{out_h} "
-                      f"(sensor={max_x}x{max_y})")
-
-                def _do_bin_apply(cx=cam_prefix, bx=binx, by=biny,
-                                  sx=size_x, sy=size_y):
+                def _do_bin_apply(cx=cam_prefix, bx=binx, by=biny):
+                    # 1-2. MinX/MinY = 0, then BinX/BinY.
                     for pv, v in [
-                        (f"{cx}:MinX",  0),
-                        (f"{cx}:MinY",  0),
-                        (f"{cx}:BinX",  bx),
-                        (f"{cx}:BinY",  by),
-                        (f"{cx}:SizeX", sx),
-                        (f"{cx}:SizeY", sy),
+                        (f"{cx}:MinX", 0),
+                        (f"{cx}:MinY", 0),
+                        (f"{cx}:BinX", bx),
+                        (f"{cx}:BinY", by),
+                    ]:
+                        r = subprocess.run(
+                            ["caput", "-c", pv, str(v)],
+                            capture_output=True, text=True, timeout=5.0,
+                        )
+                        if r.returncode != 0:
+                            print(f"[BIN] caput -c {pv} {v} FAILED: "
+                                  f"rc={r.returncode} stderr={r.stderr.strip()!r}")
+
+                    # 3. Let the RBVs settle.
+                    _time.sleep(0.2)
+
+                    # 4. Re-read fresh MaxSizeX/Y_RBV — driver has now
+                    # updated them to reflect the new binning.
+                    try:
+                        mx = int(float(subprocess.run(
+                            ["caget", "-t", f"{cx}:MaxSizeX_RBV"],
+                            capture_output=True, text=True, timeout=2.0,
+                        ).stdout.strip()))
+                        my = int(float(subprocess.run(
+                            ["caget", "-t", f"{cx}:MaxSizeY_RBV"],
+                            capture_output=True, text=True, timeout=2.0,
+                        ).stdout.strip()))
+                    except Exception as e:
+                        print(f"[BIN] failed to re-read MaxSize after bin: {e}")
+                        return
+
+                    print(f"[BIN] BinX={bx} BinY={by} → "
+                          f"new MaxSizeX/Y_RBV={mx}×{my}, "
+                          f"setting SizeX/Y to full frame")
+
+                    # 5. Full frame at the new binning.
+                    for pv, v in [
+                        (f"{cx}:SizeX", mx),
+                        (f"{cx}:SizeY", my),
                     ]:
                         r = subprocess.run(
                             ["caput", "-c", pv, str(v)],
