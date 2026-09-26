@@ -1707,13 +1707,41 @@ class Win(QtWidgets.QMainWindow):
         if on:
             self.statusBar().showMessage(
                 "EDIT MODE — drag/resize panels, right-click panels/motors/PV fields to edit. "
-                "Layout is saved automatically on window close."
+                "Layout autosaves every 5 seconds while edit mode is on."
             )
             self.statusBar().setStyleSheet("background:#f39c12;color:#000;font:bold 9pt;")
+            self._start_edit_autosave()
         else:
+            self._stop_edit_autosave()
             self._save_layout()
             self.statusBar().showMessage("Layout saved.", 3000)
             self.statusBar().setStyleSheet("")
+
+    # ── edit-mode autosave (5s periodic while in edit mode) ─────────────
+    _EDIT_AUTOSAVE_MS = 5000
+
+    def _start_edit_autosave(self):
+        t = getattr(self, "_edit_autosave_timer", None)
+        if t is None:
+            t = QtCore.QTimer(self)
+            t.setInterval(self._EDIT_AUTOSAVE_MS)
+            t.timeout.connect(self._edit_autosave_tick)
+            self._edit_autosave_timer = t
+        if not t.isActive():
+            t.start()
+
+    def _stop_edit_autosave(self):
+        t = getattr(self, "_edit_autosave_timer", None)
+        if t is not None and t.isActive():
+            t.stop()
+
+    def _edit_autosave_tick(self):
+        if not getattr(self, "_edit_mode", False):
+            return
+        try:
+            self._save_layout()
+        except Exception as e:
+            print(f"[AUTOSAVE] {e}")
 
     # ── save / load ──────────────────────────────────────────────────
 
@@ -2858,14 +2886,29 @@ class Win(QtWidgets.QMainWindow):
     def _apply_cam_binning(self):
         """Direct copy of pystream's DetectorControlDialog._apply_binning.
         Blocking, main-thread, subprocess caput -c. No pool, no thread,
-        no PVField races. Exact same order & timing as pystream."""
+        no PVField races. Exact same order & timing as pystream.
+
+        Every tab (User Mode, Expert Mode, …) builds its own Camera
+        panel with its own cam_binx/cam_biny fields, so we identify
+        the panel that actually fired the event via self.sender()
+        instead of blindly grabbing the first matching slot (which
+        would always be the User Mode panel).
+        """
         import time as _time
         prefix = "32idbSP1:cam1"
 
-        # Pull BinX / BinY from the bl_gui setpoint fields.
+        # Which panel fired? sender() is the QLineEdit whose Enter was pressed.
+        # Match it against each slot's cam_binx/cam_biny _inner to find the
+        # right slot; fall back to first match if called programmatically.
+        sender = self.sender()
         binx = biny = None
         for slot in self._pv_fields.values():
-            if "cam_binx" in slot and "cam_biny" in slot:
+            if "cam_binx" not in slot or "cam_biny" not in slot:
+                continue
+            if sender is None or (
+                slot["cam_binx"]._inner is sender or
+                slot["cam_biny"]._inner is sender
+            ):
                 try:
                     binx = int(slot["cam_binx"]._inner.text() or "1")
                     biny = int(slot["cam_biny"]._inner.text() or "1")
