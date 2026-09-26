@@ -2849,12 +2849,21 @@ class Win(QtWidgets.QMainWindow):
             caput_bg(pv_name, float(v))
 
     def _apply_cam_binning(self):
-        """On Enter in Bin X or Bin Y: caput BinX / BinY / SizeX / SizeY.
+        """On Enter in Bin X or Bin Y: caput BinX / BinY / SizeX / SizeY
+        SERIALIZED with put-callback (caput -c), because AreaDetector
+        recomputes SizeX/SizeY whenever BinX/BinY changes and vice versa.
 
-        Mirrors pystream detectorcontrol's 'Apply Binning' button. SizeX/Y
-        are computed from MaxSizeX_RBV / MaxSizeY_RBV (read live via caget)
-        divided by the current BinX / BinY. Without this the driver leaves
-        the ROI untouched and binning effectively doesn't take effect."""
+        Previously used four caput_bg fire-and-forget calls submitted to
+        a 16-worker pool, which raced: if SizeX landed before BinX, the
+        driver rewrote SizeX on the BinX change and the user's value was
+        silently clobbered → "image size didn't update." Order MUST be:
+        Bin first, Size after, each waiting for its callback.
+
+        SizeX/Y are in binned pixels (per this driver's ADCore build), so
+        full frame at binning N is MaxSize // N. Verified with the
+        actual IOC (32idbSP1:cam1, MaxSizeX_RBV=3232).
+        """
+        import threading
         cam_prefix = "32idbSP1:cam1"
         for key, slot in self._pv_fields.items():
             if "cam_binx" in slot and "cam_biny" in slot:
@@ -2864,7 +2873,6 @@ class Win(QtWidgets.QMainWindow):
                 except ValueError:
                     print("[BIN] non-integer in Bin X / Bin Y — aborting")
                     return
-                # Read sensor max — short timeout, must succeed to compute sizes.
                 try:
                     max_x = int(float(subprocess.run(
                         ["caget", "-t", f"{cam_prefix}:MaxSizeX_RBV"],
@@ -2881,10 +2889,27 @@ class Win(QtWidgets.QMainWindow):
                 size_y = max_y // max(1, biny)
                 print(f"[BIN] apply: BinX={binx} BinY={biny} "
                       f"SizeX={size_x} SizeY={size_y} (max={max_x}x{max_y})")
-                caput_bg(f"{cam_prefix}:BinX",  binx)
-                caput_bg(f"{cam_prefix}:BinY",  biny)
-                caput_bg(f"{cam_prefix}:SizeX", size_x)
-                caput_bg(f"{cam_prefix}:SizeY", size_y)
+
+                # Serialize on a background thread so the GUI doesn't
+                # block while the four caput -c calls wait for their
+                # put-callbacks (~50-200 ms total on a healthy IOC).
+                def _do_bin_apply(cx=cam_prefix, bx=binx, by=biny,
+                                  sx=size_x, sy=size_y):
+                    for pv, v in [
+                        (f"{cx}:BinX",  bx),
+                        (f"{cx}:BinY",  by),
+                        (f"{cx}:SizeX", sx),
+                        (f"{cx}:SizeY", sy),
+                    ]:
+                        r = subprocess.run(
+                            ["caput", "-c", pv, str(v)],
+                            capture_output=True, text=True, timeout=5.0,
+                        )
+                        if r.returncode != 0:
+                            print(f"[BIN] caput -c {pv} {v} FAILED: "
+                                  f"rc={r.returncode} stderr={r.stderr.strip()!r}")
+
+                threading.Thread(target=_do_bin_apply, daemon=True).start()
                 return
 
 
