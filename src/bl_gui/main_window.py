@@ -296,16 +296,25 @@ class Win(QtWidgets.QMainWindow):
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
         root.addWidget(self.tab_widget)
 
-        # Create tabs. Three ways to end up with an empty canvas:
+        # Create tabs. Skip _build_all_panels when:
         #   1) blank=True — CLI opened a name that doesn't exist yet.
-        #   2) The layout JSON has "_no_defaults": true — explicit
-        #      opt-out from the TXM-flavoured default panel set. Use
-        #      this when authoring a beamline-generic layout that
-        #      populates itself entirely from _panels / _plugin_widgets.
-        #   3) Neither — populate with the built-in default panels
-        #      (legacy behaviour; will go away once every default is
-        #      a widget-registry preset).
-        no_defaults = self._peek_layout_flag("_no_defaults", False)
+        #   2) The layout JSON has "_no_defaults": true — explicit opt-out.
+        #   3) The layout JSON has a non-empty "_panels" block — implicit
+        #      opt-out. Any saved layout is authoritative; we rebuild
+        #      each declared panel through the preset registry instead
+        #      of the "build all defaults then delete most" path. The
+        #      user can force the old behaviour by setting
+        #      "_no_defaults": false in their JSON.
+        # Fresh installs with no JSON at all still get the default
+        # panel set so first-run isn't an empty window.
+        _saved_panels = self._peek_layout_flag("_panels", None)
+        _no_defaults_flag = self._peek_layout_flag("_no_defaults", None)
+        if _no_defaults_flag is None:
+            # Not set explicitly → infer from whether the layout has
+            # panels defined (implicit opt-in).
+            no_defaults = bool(_saved_panels)
+        else:
+            no_defaults = bool(_no_defaults_flag)
         skip_build = bool(blank) or bool(no_defaults)
         for tab_name in _DEFAULT_TABS:
             self._create_tab(tab_name)
