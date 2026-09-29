@@ -273,15 +273,23 @@ class Win(QtWidgets.QMainWindow):
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
         root.addWidget(self.tab_widget)
 
-        # Create tabs. If `blank=True` (new user layout), leave them
-        # empty so the user gets a real from-scratch canvas — no
-        # pre-baked motor cards / shutters / etc. to delete first.
-        # Otherwise populate with the built-in default panels.
+        # Create tabs. Three ways to end up with an empty canvas:
+        #   1) blank=True — CLI opened a name that doesn't exist yet.
+        #   2) The layout JSON has "_no_defaults": true — explicit
+        #      opt-out from the TXM-flavoured default panel set. Use
+        #      this when authoring a beamline-generic layout that
+        #      populates itself entirely from _panels / _plugin_widgets.
+        #   3) Neither — populate with the built-in default panels
+        #      (legacy behaviour; will go away once every default is
+        #      a widget-registry preset).
+        no_defaults = self._peek_layout_flag("_no_defaults", False)
+        skip_build = bool(blank) or bool(no_defaults)
         for tab_name in _DEFAULT_TABS:
             self._create_tab(tab_name)
-            if not blank:
+            if not skip_build:
                 self._build_all_panels(tab_name)
-        self._blank_layout = bool(blank)
+        self._blank_layout = skip_build
+        self._layout_no_defaults = bool(no_defaults)
 
         self._current_tab = ""
         self._load_layout()
@@ -536,6 +544,21 @@ class Win(QtWidgets.QMainWindow):
 
     def _get_panel_tab(self, panel_key):
         return self._panel_tab_map.get(panel_key, _DEFAULT_TABS[0])
+
+    def _peek_layout_flag(self, key: str, default=None):
+        """Read one top-level key from the layout JSON without applying
+        anything else. Returns `default` on any failure. Used by
+        __init__ to decide layout-driven behaviour (e.g. _no_defaults)
+        before the main _load_layout pass runs."""
+        try:
+            path = _lay_path()
+            if not os.path.isfile(path):
+                return default
+            with open(path) as fh:
+                data = json.load(fh)
+            return data.get(key, default)
+        except Exception:
+            return default
 
     def _make_panel(self, title, w, h, tab_name):
         canvas = self._tab_canvases.get(tab_name)
