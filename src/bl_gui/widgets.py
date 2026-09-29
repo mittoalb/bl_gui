@@ -205,17 +205,89 @@ class Panel(QtWidgets.QFrame):
             self.setCursor(QtCore.Qt.ClosedHandCursor)
         self.raise_()
 
+    # Snap-to-grid step (px). Held-Shift disables snapping so a user
+    # can nudge by 1px. Value chosen to match the "close enough" feel
+    # of the default panel sizes without being coarse.
+    GRID = 10
+
+    # How close (px) an edge must be to another panel's edge before
+    # we snap and draw the alignment guide.
+    ALIGN_TOLERANCE = 6
+
+    @staticmethod
+    def _snap(v: int, step: int) -> int:
+        return round(v / step) * step
+
+    def _sibling_panels(self):
+        """Iterate every Panel that shares our parent (the tab canvas)."""
+        parent = self.parent()
+        if parent is None:
+            return []
+        return [c for c in parent.findChildren(Panel) if c is not self]
+
+    def _snap_position(self, x: int, y: int):
+        """Apply grid + edge-alignment snapping to a proposed top-left.
+        Returns (x, y, guides) where guides is a list of (orientation,
+        coord) tuples for painting during the drag."""
+        guides = []
+        # Grid snap first (cheap; sets baseline).
+        x = self._snap(x, self.GRID)
+        y = self._snap(y, self.GRID)
+        # Edge-alignment snap: check against every sibling's rect.
+        my_r = x + self.width()
+        my_b = y + self.height()
+        for s in self._sibling_panels():
+            g = s.geometry()
+            for candidate, target, orient in (
+                    (x,    g.x(),                 'v'),
+                    (x,    g.x() + g.width(),     'v'),
+                    (my_r, g.x(),                 'v'),
+                    (my_r, g.x() + g.width(),     'v'),
+                    (y,    g.y(),                 'h'),
+                    (y,    g.y() + g.height(),    'h'),
+                    (my_b, g.y(),                 'h'),
+                    (my_b, g.y() + g.height(),    'h')):
+                if abs(candidate - target) <= self.ALIGN_TOLERANCE:
+                    if orient == 'v':
+                        x += (target - candidate)
+                        my_r = x + self.width()
+                        guides.append(('v', target))
+                    else:
+                        y += (target - candidate)
+                        my_b = y + self.height()
+                        guides.append(('h', target))
+        return x, y, guides
+
+    def _snap_size(self, w: int, h: int):
+        """Grid-snap sizes when resizing."""
+        return self._snap(w, self.GRID), self._snap(h, self.GRID)
+
     def mouseMoveEvent(self, e):
         if not self._edit:
             return super().mouseMoveEvent(e)
+        # Shift disables snapping — 1px precision for fine tweaks.
+        no_snap = bool(e.modifiers() & QtCore.Qt.ShiftModifier)
         if self._drag and self._mstart:
             d = e.globalPos() - self._mstart
-            self.move(self._geo0.topLeft() + d)
+            new_tl = self._geo0.topLeft() + d
+            if no_snap:
+                self.move(new_tl)
+                self._drag_guides = []
+            else:
+                nx, ny, guides = self._snap_position(new_tl.x(), new_tl.y())
+                self.move(nx, ny)
+                self._drag_guides = guides
+            # Ask the tab canvas to repaint so guides show up.
+            parent = self.parent()
+            if parent is not None:
+                parent.update()
         elif self._resize and self._mstart:
             d = e.globalPos() - self._mstart
             r, b = getattr(self, "_resize_dir", (True, True))
             new_w = max(80, self._geo0.width() + d.x()) if r else self._geo0.width()
             new_h = max(40, self._geo0.height() + d.y()) if b else self._geo0.height()
+            if not no_snap:
+                new_w, new_h = self._snap_size(new_w, new_h)
             self.resize(new_w, new_h)
         else:
             r, b = self._edge_at(e.pos())
@@ -227,6 +299,11 @@ class Panel(QtWidgets.QFrame):
         self._drag = self._resize = False
         self._mstart = None
         self._resize_dir = (False, False)
+        # Clear alignment guides — repaint the canvas so they disappear.
+        self._drag_guides = []
+        parent = self.parent()
+        if parent is not None:
+            parent.update()
         r, b = self._edge_at(e.pos())
         self.setCursor(self._cursor_for_edge(r, b))
 
