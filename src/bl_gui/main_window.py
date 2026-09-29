@@ -394,6 +394,9 @@ class Win(QtWidgets.QMainWindow):
         save_action = file_menu.addAction("Save Layout")
         save_action.setShortcut(QtGui.QKeySequence("Ctrl+S"))
         save_action.triggered.connect(self._explicit_save_layout)
+        save_as_action = file_menu.addAction("Save Layout As…")
+        save_as_action.setShortcut(QtGui.QKeySequence("Ctrl+Shift+S"))
+        save_as_action.triggered.connect(self._save_layout_as)
 
         # Keyboard zoom: Ctrl+=, Ctrl+-, Ctrl+0 to boost/shrink/reset font
         # scale without needing to see the top-bar slider.
@@ -2799,6 +2802,93 @@ class Win(QtWidgets.QMainWindow):
             self.statusBar().showMessage(f"Saved layout to {_user_lay_path()}", 4000)
         except Exception:
             pass
+
+    def _save_layout_as(self):
+        """File → Save Layout As… — prompt for a new name/path, write
+        the current layout there, then rebind this session so all
+        subsequent saves go to the new file. The window title and
+        self._bl_name update to the new basename. Does not touch the
+        old file.
+
+        Under the hood we rebind ``theme._LAY`` because
+        ``_user_lay_path`` derives from its basename — that's the
+        single source of truth for the layout name across the module.
+        """
+        default_dir = os.path.expanduser("~/.bl_gui")
+        os.makedirs(default_dir, exist_ok=True)
+        default_path = os.path.join(default_dir, f"{self._bl_name}.json")
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Save Layout As", default_path,
+            "Layout JSON (*.json);;All files (*)")
+        if not path:
+            return
+        if not path.endswith(".json"):
+            path += ".json"
+        # Rebind the module-level layout path so _user_lay_path (used
+        # by _save_layout) targets the new file. We point _LAY at the
+        # new path directly — _user_lay_path takes its basename and
+        # rewrites the directory to ~/.bl_gui/, but if the user chose
+        # a path outside ~/.bl_gui/ we still want to save there, so we
+        # temporarily override _user_lay_path via monkey-patch for
+        # this one save, then reset _LAY so future saves reuse the
+        # new basename correctly.
+        target = os.path.abspath(path)
+        target_dir = os.path.dirname(target)
+        target_base = os.path.basename(target)
+        # If the user chose a path outside ~/.bl_gui/, warn — the
+        # normal load flow only searches ~/.bl_gui/ + bundled dirs, so
+        # a file elsewhere won't be found on next launch unless they
+        # symlink or use an absolute path CLI arg.
+        if os.path.abspath(target_dir) != os.path.abspath(default_dir):
+            reply = QtWidgets.QMessageBox.question(
+                self, "Non-standard location",
+                f"You chose {target_dir}, which is not the "
+                f"~/.bl_gui/ directory bl_gui searches by default.\n\n"
+                f"The file will be written, but relaunching with "
+                f"just its basename won't find it — you'll need to "
+                f"pass the absolute path to `bl_gui`.\n\nContinue?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.Yes)
+            if reply != QtWidgets.QMessageBox.Yes:
+                return
+        # Write the current layout directly to `target` (bypasses the
+        # ~/.bl_gui/ rewrite in _user_lay_path). Reuse _save_layout by
+        # temporarily overriding _theme_mod._LAY so its internal calls
+        # to _user_lay_path point at `target`.
+        old_lay = _theme_mod._LAY
+        try:
+            # Point _LAY at a synthetic bundled-style path whose
+            # basename is the new file's basename AND whose directory
+            # is the target directory. This makes _user_lay_path
+            # return exactly `target` (it derives dir from ~/.bl_gui
+            # by default, but we override with a fake bundled path so
+            # basename matching gives us the right file).
+            _theme_mod._LAY = os.path.join(target_dir, target_base)
+            # Monkey-patch _user_lay_path just for this save so it
+            # honours the exact target directory instead of forcing
+            # ~/.bl_gui/. Restored in the finally block.
+            import bl_gui.main_window as _mod
+            _orig_user_lay = _mod._user_lay_path
+            _mod._user_lay_path = lambda: target
+            try:
+                self._save_layout()
+            finally:
+                _mod._user_lay_path = _orig_user_lay
+        except Exception as e:  # noqa: BLE001
+            _theme_mod._LAY = old_lay
+            QtWidgets.QMessageBox.critical(
+                self, "Save Failed", f"Could not save to {target}:\n{e}")
+            return
+        # Success — commit the rebind so future Ctrl+S goes to the
+        # new file, and refresh the title.
+        new_bl_name = os.path.splitext(target_base)[0]
+        self._bl_name = new_bl_name
+        self.setWindowTitle(new_bl_name)
+        if getattr(self, "_title_lbl", None) is not None:
+            self._title_lbl.setText(new_bl_name)
+        self.statusBar().showMessage(
+            f"Saved as {target} — future saves go here", 5000)
+        print(f"[SAVE-AS] rebound to {target}")
 
     def _rename_io_label_by_fid(self, fid):
         """Rename every In/Out label that shares this fid across tabs.
