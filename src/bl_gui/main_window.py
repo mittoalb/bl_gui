@@ -214,7 +214,26 @@ class Win(QtWidgets.QMainWindow):
         top.addWidget(self.fonts_btn)
         top.addSpacing(6)
 
-        # Edit-mode is now chosen at launch (`bl_gui edit`) — no in-GUI toggle.
+        # Edit ↔ View toggle — always visible so a user in view mode can
+        # switch to editing without relaunching. Checked = edit mode.
+        # Clicking always allows edit (sets self._allow_edit=True), so
+        # the mode is a runtime state, not a startup permission gate.
+        self.edit_toggle_btn = QtWidgets.QPushButton("Edit")
+        self.edit_toggle_btn.setCheckable(True)
+        self.edit_toggle_btn.setFixedSize(70, 28)
+        self.edit_toggle_btn.setStyleSheet(
+            "QPushButton{background:#2d2d2d;color:#e0e0e0;font-size:9pt;"
+            "border:1px solid #404040;border-radius:3px;}"
+            "QPushButton:checked{background:#f39c12;color:#000;"
+            "font-weight:bold;border:1px solid #e67e22;}")
+        self.edit_toggle_btn.setToolTip(
+            "Toggle between edit and view mode without relaunching. "
+            "Edit mode: drag/resize panels, right-click to configure. "
+            "View mode: normal beamline operation.")
+        self.edit_toggle_btn.toggled.connect(self._on_edit_toggle_clicked)
+        top.addWidget(self.edit_toggle_btn)
+        top.addSpacing(6)
+
         self.add_panel_btn = QtWidgets.QPushButton("+ Panel"); self.add_panel_btn.setFixedSize(70, 28)
         self.add_panel_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font-size:9pt;border:1px solid #404040;border-radius:3px;")
         self.add_panel_btn.clicked.connect(self._add_new_panel)
@@ -294,7 +313,10 @@ class Win(QtWidgets.QMainWindow):
         self.new_layout_btn.clicked.connect(self._open_new_layout_dialog)
         top.addWidget(self.new_layout_btn)
 
-        # Hide all edit controls unless edit mode was requested at launch
+        # Hide edit-only controls unless launched in edit mode.
+        # The Edit toggle button itself stays visible so a view-mode
+        # session can enter edit mode via the top bar without needing
+        # to relaunch.
         if not self._allow_edit:
             self._font_label_widget.setVisible(False)
             self.font_slider.setVisible(False)
@@ -303,6 +325,13 @@ class Win(QtWidgets.QMainWindow):
             self.add_tab_btn.setVisible(False)
             self.add_widget_btn.setVisible(False)
             self.new_layout_btn.setVisible(False)
+        # Sync the toggle button's initial checked state with the
+        # runtime mode. Signals blocked so this doesn't re-fire
+        # _on_edit_toggle_clicked before the widget tree is fully
+        # constructed.
+        self.edit_toggle_btn.blockSignals(True)
+        self.edit_toggle_btn.setChecked(bool(self._allow_edit))
+        self.edit_toggle_btn.blockSignals(False)
 
         root.addLayout(top)
 
@@ -1982,8 +2011,18 @@ class Win(QtWidgets.QMainWindow):
         for slot in self._pv_fields.values():
             for f in slot.values():
                 f.set_edit_mode(on)
-        self.add_panel_btn.setVisible(on); self.add_tab_btn.setVisible(on)
-        self.add_widget_btn.setVisible(on)
+        # Keep every editor-only control's visibility in sync with mode.
+        # Font slider / label are grouped separately below so a plain
+        # font-scale change while in view mode still works via keyboard.
+        for w in (self.add_panel_btn, self.add_tab_btn, self.add_widget_btn,
+                  getattr(self, "new_layout_btn", None),
+                  self._font_label_widget, self.font_slider, self.font_lbl):
+            if w is not None:
+                w.setVisible(on)
+        # Reflect current state on the toggle button without re-firing.
+        btn = getattr(self, "edit_toggle_btn", None)
+        if btn is not None and btn.isChecked() != on:
+            btn.blockSignals(True); btn.setChecked(on); btn.blockSignals(False)
         if on:
             self.statusBar().showMessage(
                 "EDIT MODE — drag/resize panels, right-click panels/motors/PV fields to edit. "
@@ -1996,6 +2035,16 @@ class Win(QtWidgets.QMainWindow):
             self._save_layout()
             self.statusBar().showMessage("Layout saved.", 3000)
             self.statusBar().setStyleSheet("")
+
+    def _on_edit_toggle_clicked(self, checked: bool):
+        """Top-bar Edit toggle handler. Allows switching modes at any
+        time without relaunching. First time it's checked in a session
+        launched without `edit`, we flip _allow_edit=True so the
+        underlying gates in _toggle_edit's callers (autosave, etc.)
+        recognise this session as an editor session."""
+        if checked and not getattr(self, "_allow_edit", False):
+            self._allow_edit = True
+        self._toggle_edit(bool(checked))
 
     # ── edit-mode autosave (5s periodic while in edit mode) ─────────────
     _EDIT_AUTOSAVE_MS = 5000
