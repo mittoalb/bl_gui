@@ -413,6 +413,10 @@ class Win(QtWidgets.QMainWindow):
         redo_action = edit_menu.addAction("Redo")
         redo_action.setShortcut(QtGui.QKeySequence.Redo)
         redo_action.triggered.connect(self._redo)
+        edit_menu.addSeparator()
+        paste_action = edit_menu.addAction("Paste Panel from Clipboard")
+        paste_action.setShortcut(QtGui.QKeySequence("Ctrl+V"))
+        paste_action.triggered.connect(self._paste_panel_from_clipboard)
 
         # Keyboard zoom: Ctrl+=, Ctrl+-, Ctrl+0 to boost/shrink/reset font
         # scale without needing to see the top-bar slider.
@@ -1440,8 +1444,248 @@ class Win(QtWidgets.QMainWindow):
         self._panels[new_key] = new_panel
         self._panel_tab_map[new_key] = tab_name
 
+    # ── cross-layout clipboard (E7) ──────────────────────────────────
+    _CLIPBOARD_PATH = os.path.expanduser("~/.bl_gui/clipboard.json")
+
+    def _copy_panel_to_clipboard(self, panel_key: str):
+        """Snapshot a panel to ~/.bl_gui/clipboard.json — a single-slot
+        clipboard shared across bl_gui sessions and layouts. Paste
+        rebuilds the panel via preset/plugin registry on any layout
+        that recognises the base name."""
+        snap = self._snapshot_panel(panel_key)
+        if snap is None:
+            self.statusBar().showMessage(
+                f"Cannot copy {panel_key!r} — no such panel.", 3000)
+            return
+        try:
+            os.makedirs(os.path.dirname(self._CLIPBOARD_PATH), exist_ok=True)
+            tmp = self._CLIPBOARD_PATH + ".tmp"
+            with open(tmp, "w") as fh:
+                json.dump(snap, fh, indent=2)
+                fh.flush(); os.fsync(fh.fileno())
+            os.replace(tmp, self._CLIPBOARD_PATH)
+        except Exception as e:  # noqa: BLE001
+            self.statusBar().showMessage(
+                f"Copy to clipboard failed: {e}", 5000)
+            return
+        self.statusBar().showMessage(
+            f"Copied {snap.get('title') or panel_key!r} to clipboard.", 3000)
+        print(f"[CLIPBOARD] wrote {self._CLIPBOARD_PATH}: {snap.get('base')!r}")
+
+    def _paste_panel_from_clipboard(self):
+        """Rebuild whatever's in ~/.bl_gui/clipboard.json onto the
+        current tab. The clipboard survives relaunches so this works
+        across layouts too — copy from bl32id, quit, launch MyGui,
+        paste. New panel gets a fresh key if the original is taken."""
+        try:
+            with open(self._CLIPBOARD_PATH) as fh:
+                snap = json.load(fh)
+        except FileNotFoundError:
+            self.statusBar().showMessage(
+                "Clipboard is empty. Right-click a panel → Copy Panel first.",
+                4000)
+            return
+        except Exception as e:  # noqa: BLE001
+            self.statusBar().showMessage(
+                f"Clipboard read failed: {e}", 5000)
+            return
+        # Retarget to current tab so paste always lands where the
+        # user is looking.
+        current_tab = self.tab_widget.tabText(self.tab_widget.currentIndex())
+        if current_tab:
+            snap["tab"] = current_tab
+        # Offset the geometry a bit so the pasted panel doesn't stack
+        # exactly on top of any existing one at the source coords.
+        g = snap.get("geometry")
+        if isinstance(g, list) and len(g) == 4:
+            snap["geometry"] = [g[0] + 30, g[1] + 30, g[2], g[3]]
+        new_key = self._restore_panel(snap)
+        if new_key is None:
+            self.statusBar().showMessage(
+                f"Paste failed — base {snap.get('base')!r} has no "
+                f"preset or plugin here.", 5000)
+            return
+        # Record undo — remove the pasted panel on undo, re-run the
+        # restore on redo (from a fresh copy of snap so the second
+        # paste isn't offset again).
+        snap_for_redo = json.loads(json.dumps(snap))
+        def _undo(k=new_key):
+            if k in self._panels:
+                self._remove_panel(k, record=False)
+        def _redo(s=snap_for_redo):
+            self._restore_panel(s)
+        self._record_op(f"Paste panel {snap.get('title') or new_key!r}",
+                        _undo, _redo)
+        self.statusBar().showMessage(
+            f"Pasted {snap.get('title') or new_key!r} onto {current_tab!r}.",
+            3000)
+
+    def _snapshot_panel(self, panel_key: str):
+        """Capture the full state of a panel so it can be recreated
+        later by _restore_panel. Returns None if the panel doesn't
+        exist. Shape mirrors what _save_layout writes so a snapshot
+        is self-contained and JSON-serializable (used by E7 clipboard
+        and E3 delete-undo)."""
+        p = self._panels.get(panel_key)
+        if p is None:
+            return None
+        tab = self._panel_tab_map.get(panel_key, "")
+        base = panel_key.split("::")[0].split("#")[0]
+        g = p.geometry()
+        snap = {
+            "key": panel_key,
+            "tab": tab,
+            "base": base,
+            "geometry": [g.x(), g.y(), g.width(), g.height()],
+            "title": p.title_text(),
+        }
+        import re as _re
+        tm = _re.search(r'(\d+)\s*pt', p._title.styleSheet())
+        if tm:
+            snap["title_font"] = int(tm.group(1))
+        pw = getattr(self, "_plugin_widgets", {})
+        if panel_key in pw:
+            snap["plugin_kind"] = pw[panel_key]
+        if p.custom_buttons:
+            snap["buttons"] = [b.to_dict() for b in p.custom_buttons]
+        panel_mcs = p.findChildren(MC)
+        if panel_mcs:
+            snap["mcs"] = [
+                {"label": mc._label, "pv": mc.pv,
+                 "custom": bool(mc._custom_label), "twv": mc.twv.text()}
+                for mc in panel_mcs
+            ]
+        slot = self._pv_fields.get(panel_key, {})
+        if slot:
+            out = {}
+            for fid, f in slot.items():
+                d = f.get_pvs_dict() if hasattr(f, "get_pvs_dict") else None
+                out[fid] = d if d is not None else getattr(f, "pv", "")
+            snap["pv_fields"] = out
+        return snap
+
+    def _restore_panel(self, snapshot: dict):
+        """Recreate a panel from a snapshot. Returns the resulting
+        panel key (may differ from snapshot['key'] if the target key
+        was reused since delete). Rebuilds via the preset registry
+        or the plugin registry, then re-applies geometry, title,
+        title font, custom buttons, motor cards, and PV field
+        overrides. Shared by E3 (delete undo) and E7 (paste)."""
+        tab = snapshot.get("tab") or ""
+        base = snapshot.get("base") or ""
+        if not tab or not base:
+            return None
+        for i in range(self.tab_widget.count()):
+            if self.tab_widget.tabText(i) == tab:
+                self.tab_widget.setCurrentIndex(i); break
+        plugin_kind = snapshot.get("plugin_kind")
+        before_keys = set(self._panels.keys())
+        if plugin_kind:
+            self._add_widget_from_registry(plugin_kind, panel_name=base)
+        else:
+            preset_entry = _wreg.preset_for_base(base)
+            if preset_entry is None:
+                canvas = self._tab_canvases.get(tab)
+                if canvas is None:
+                    return None
+                new_p = Panel(base, self._unique_key(base, tab), canvas)
+                new_p.show()
+                self._panels[new_p.key] = new_p
+                self._panel_tab_map[new_p.key] = tab
+            else:
+                self._build_state = {'x': 50, 'y': 50, 'GAP': 4,
+                                     'iy': 50, 'ci': 0}
+                _def, _w, _h, builder = preset_entry
+                try:
+                    builder(self, tab)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[RESTORE] preset build failed for {base!r}: {e}")
+                    return None
+        new_keys = [k for k in self._panels if k not in before_keys]
+        if not new_keys:
+            return None
+        new_key = new_keys[0]
+        p = self._panels[new_key]
+        g = snapshot.get("geometry")
+        if isinstance(g, list) and len(g) == 4:
+            p.setGeometry(*g)
+        title = snapshot.get("title")
+        if isinstance(title, str) and title:
+            p._title.setText(title)
+            p._title.adjustSize()
+        tf = snapshot.get("title_font")
+        if isinstance(tf, int):
+            p._title.setStyleSheet(
+                f"color: #73dfff; font-weight:bold;font-size:{tf}pt; "
+                f"background: transparent; padding: 2px 6px;")
+            p._title.adjustSize()
+        btn_list = snapshot.get("buttons")
+        if btn_list:
+            for existing in list(p.custom_buttons):
+                lay = p.layout()
+                if lay is not None:
+                    lay.removeWidget(existing)
+                existing.setParent(None); existing.deleteLater()
+            p.custom_buttons.clear()
+            cols = getattr(p, "_grid_cols", None)
+            for idx, bd in enumerate(btn_list):
+                btn = CfgButton.from_dict(bd, p)
+                btn.setMinimumHeight(34)
+                lay = p.layout()
+                if isinstance(lay, QtWidgets.QGridLayout) and cols:
+                    lay.addWidget(btn, idx // cols, idx % cols)
+                elif lay is not None:
+                    lay.addWidget(btn)
+                p.custom_buttons.append(btn)
+        mc_data = snapshot.get("mcs")
+        if mc_data:
+            for existing_mc in p.findChildren(MC):
+                self.mcs = [m for m in self.mcs if m is not existing_mc]
+                existing_mc.setParent(None); existing_mc.deleteLater()
+            lay = p.layout()
+            for md in mc_data:
+                mc = MC(md.get("label", ""), md.get("pv", ""))
+                mc._custom_label = bool(md.get("custom"))
+                if md.get("twv"):
+                    mc.twv.setText(md["twv"])
+                if lay is not None:
+                    lay.addWidget(mc)
+                self.mcs.append(mc)
+        pv_data = snapshot.get("pv_fields", {})
+        slot = self._pv_fields.setdefault(new_key, {})
+        for fid, saved in pv_data.items():
+            f = slot.get(fid)
+            if f is None:
+                continue
+            if isinstance(saved, str) and hasattr(f, "pv"):
+                f.pv = saved.strip()
+            elif isinstance(saved, dict) and hasattr(f, "set_pvs_dict"):
+                f.set_pvs_dict(saved)
+        if plugin_kind:
+            if not hasattr(self, "_plugin_widgets"):
+                self._plugin_widgets = {}
+            self._plugin_widgets[new_key] = plugin_kind
+        p.set_edit(self._edit_mode)
+        return new_key
+
     def _remove_panel(self, panel_key, record=True):
         """Remove a panel and clean up references."""
+        # Snapshot before deletion so undo can rebuild the panel with
+        # its title, geometry, buttons, motor cards and PV wiring
+        # intact. Only records when it's a user-facing deletion — the
+        # loader calls _remove_panel with record=False for cleanup of
+        # hidden panels at startup, and those shouldn't clutter the
+        # history.
+        if record and not getattr(self, "_undo_in_progress", False):
+            snap = self._snapshot_panel(panel_key)
+            if snap is not None:
+                def _undo(s=snap):
+                    self._restore_panel(s)
+                def _redo(k=panel_key):
+                    self._remove_panel(k, record=False)
+                self._record_op(
+                    f"Delete panel {snap.get('title') or panel_key!r}",
+                    _undo, _redo)
         if record and panel_key not in self._deleted_panels:
             self._deleted_panels.append(panel_key)
         panel = self._panels.pop(panel_key, None)
@@ -1793,6 +2037,19 @@ class Win(QtWidgets.QMainWindow):
         for k in added:
             self._panels[k].set_edit(self._edit_mode)
         print(f"[WIDGETS] preset {label!r} added: {added}")
+        # Record undo op: capture the snapshot of what was just added
+        # so redo can rebuild identically. Undo simply deletes them.
+        if not getattr(self, "_undo_in_progress", False):
+            snaps = [self._snapshot_panel(k) for k in added]
+            snaps = [s for s in snaps if s is not None]
+            def _undo(ks=list(added)):
+                for k in ks:
+                    if k in self._panels:
+                        self._remove_panel(k, record=False)
+            def _redo(ss=snaps):
+                for s in ss:
+                    self._restore_panel(s)
+            self._record_op(f"Add preset {label!r}", _undo, _redo)
 
     def _new_field_id(self, prefix: str) -> str:
         """Generate a unique field_id for a dynamically-added PV field.
@@ -1900,6 +2157,19 @@ class Win(QtWidgets.QMainWindow):
             print(f"[WIDGET] '{p.key}' removed from _deleted_panels")
         print(f"[WIDGET] added '{name}' ({w}x{h}) on tab {current_tab!r}; "
               f"panel geometry now {p.geometry().width()}x{p.geometry().height()}")
+        # Record undo for atomic-widget add too. Skipped when this
+        # call originates from the load path or a paste (both set
+        # _undo_in_progress) so the history isn't polluted.
+        if panel_name is None and not getattr(self, "_undo_in_progress", False):
+            snap = self._snapshot_panel(p.key)
+            if snap is not None:
+                key_captured = p.key
+                def _undo(k=key_captured):
+                    if k in self._panels:
+                        self._remove_panel(k, record=False)
+                def _redo(s=snap):
+                    self._restore_panel(s)
+                self._record_op(f"Add widget {key!r}", _undo, _redo)
 
     # ── font scale ───────────────────────────────────────────────────
 

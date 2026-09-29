@@ -99,6 +99,18 @@ class Panel(QtWidgets.QFrame):
         menu.addAction("Panel Title Font...", self._change_title_font)
         menu.addAction("Duplicate Panel", self._duplicate_panel)
         menu.addAction("Delete Panel...", self._delete_panel)
+        menu.addSeparator()
+        # Cross-layout / cross-session clipboard — snapshot lives at
+        # ~/.bl_gui/clipboard.json so it survives relaunches, letting
+        # you copy a panel from bl32id, quit, launch MyGui, paste.
+        win = self.window()
+        if hasattr(win, "_copy_panel_to_clipboard"):
+            menu.addAction("Copy Panel to Clipboard",
+                           lambda k=self.key: win._copy_panel_to_clipboard(k))
+        if hasattr(win, "_paste_panel_from_clipboard"):
+            menu.addAction("Paste Panel from Clipboard",
+                           win._paste_panel_from_clipboard)
+        menu.addSeparator()
         # "Move to Tab..." submenu
         win = self.window()
         if hasattr(win, '_tab_names'):
