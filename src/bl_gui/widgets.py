@@ -229,6 +229,10 @@ class Panel(QtWidgets.QFrame):
         # and, if changed, asks the Win to record a reversible op.
         self._geo_before_drag = QtCore.QRect(self._geo0)
         self._mstart = e.globalPos()
+        # Selection: notify Win so the property inspector can point at us.
+        win = self.window()
+        if hasattr(win, "_select_panel"):
+            win._select_panel(self.key)
         r, b = self._edge_at(e.pos())
         if r or b:
             self._resize = True

@@ -15,6 +15,7 @@ from .pv_field import PVField, ValveField, ToggleField
 from . import theme as _theme_mod
 from .theme import _IMG, _PANEL_SS, _PANEL_SS_EDIT, _SS
 from . import widget_registry as _wreg
+from .inspector import PropertyInspector
 
 
 # ── XANES element edges — Energy-panel quick-select ─────────────────────
@@ -160,6 +161,8 @@ class Win(QtWidgets.QMainWindow):
         self._undo_stack: List[dict] = []
         self._redo_stack: List[dict] = []
         self._undo_in_progress = False  # suppresses recording during undo/redo replay
+        # Currently-selected panel key for the property inspector.
+        self._selected_panel_key: str | None = None
         # Per-tab window sizes: tab_name -> (width, height)
         self._tab_sizes: Dict[str, tuple] = {
             "User Mode": (1000, 600),
@@ -349,6 +352,13 @@ class Win(QtWidgets.QMainWindow):
         self.tab_widget.tabBar().customContextMenuRequested.connect(self._tab_context_menu)
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
         root.addWidget(self.tab_widget)
+
+        # ═══ PROPERTY INSPECTOR (dock, right side) ═══
+        # Only visible in edit mode — hidden alongside the top-bar
+        # editor buttons via _toggle_edit.
+        self._inspector = PropertyInspector(self)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self._inspector)
+        self._inspector.show_panel(None)
 
         # Create tabs. Skip _build_all_panels when:
         #   1) blank=True — CLI opened a name that doesn't exist yet.
@@ -2280,6 +2290,16 @@ class Win(QtWidgets.QMainWindow):
         dlg.setModal(False)
         dlg.show()
 
+    # ── selection (for the property inspector) ───────────────────────
+
+    def _select_panel(self, panel_key: str | None):
+        """Mark a panel as selected and refresh the inspector. Called
+        by Panel.mousePressEvent while in edit mode."""
+        self._selected_panel_key = panel_key
+        insp = getattr(self, "_inspector", None)
+        if insp is not None:
+            insp.show_panel(panel_key)
+
     # ── undo / redo ──────────────────────────────────────────────────
 
     _UNDO_MAX = 200
@@ -2313,6 +2333,9 @@ class Win(QtWidgets.QMainWindow):
         self._undo_in_progress = False
         self._redo_stack.append(op)
         self.statusBar().showMessage(f"Undo: {op['desc']}", 3000)
+        insp = getattr(self, "_inspector", None)
+        if insp is not None and self._edit_mode:
+            insp.refresh()
 
     def _redo(self):
         if not self._redo_stack:
@@ -2331,6 +2354,9 @@ class Win(QtWidgets.QMainWindow):
         self._undo_in_progress = False
         self._undo_stack.append(op)
         self.statusBar().showMessage(f"Redo: {op['desc']}", 3000)
+        insp = getattr(self, "_inspector", None)
+        if insp is not None and self._edit_mode:
+            insp.refresh()
 
     # ── edit mode ────────────────────────────────────────────────────
 
@@ -2360,6 +2386,14 @@ class Win(QtWidgets.QMainWindow):
                   self._font_label_widget, self.font_slider, self.font_lbl):
             if w is not None:
                 w.setVisible(on)
+        # Property inspector: only useful in edit mode.
+        insp = getattr(self, "_inspector", None)
+        if insp is not None:
+            insp.setVisible(on)
+            if not on:
+                # Clear selection when leaving edit mode so the panel
+                # highlight (if any) doesn't linger.
+                self._selected_panel_key = None
         # Reflect current state on the toggle button without re-firing.
         btn = getattr(self, "edit_toggle_btn", None)
         if btn is not None and btn.isChecked() != on:
