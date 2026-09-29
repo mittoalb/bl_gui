@@ -152,6 +152,14 @@ class Win(QtWidgets.QMainWindow):
         self._next_panel_id = 0  # for generating unique keys
         self._tab_label_font_size = 8  # default tab label font pt
         self._deleted_panels: List[str] = []  # "BaseName::TabName" keys deleted by user
+        # Op-based undo/redo — each entry is
+        # {desc: str, undo: callable, redo: callable}. Every edit that
+        # a user might reasonably want to reverse records an op here
+        # before/after the mutation. Full-snapshot undo would be
+        # simpler but requires hot-reload machinery we don't have.
+        self._undo_stack: List[dict] = []
+        self._redo_stack: List[dict] = []
+        self._undo_in_progress = False  # suppresses recording during undo/redo replay
         # Per-tab window sizes: tab_name -> (width, height)
         self._tab_sizes: Dict[str, tuple] = {
             "User Mode": (1000, 600),
@@ -397,6 +405,14 @@ class Win(QtWidgets.QMainWindow):
         save_as_action = file_menu.addAction("Save Layout As…")
         save_as_action.setShortcut(QtGui.QKeySequence("Ctrl+Shift+S"))
         save_as_action.triggered.connect(self._save_layout_as)
+
+        edit_menu = menubar.addMenu("Edit")
+        undo_action = edit_menu.addAction("Undo")
+        undo_action.setShortcut(QtGui.QKeySequence.Undo)
+        undo_action.triggered.connect(self._undo)
+        redo_action = edit_menu.addAction("Redo")
+        redo_action.setShortcut(QtGui.QKeySequence.Redo)
+        redo_action.triggered.connect(self._redo)
 
         # Keyboard zoom: Ctrl+=, Ctrl+-, Ctrl+0 to boost/shrink/reset font
         # scale without needing to see the top-bar slider.
@@ -1993,6 +2009,58 @@ class Win(QtWidgets.QMainWindow):
         grid.addLayout(btns, len(FONT_CATEGORIES), 0, 1, 3)
         dlg.setModal(False)
         dlg.show()
+
+    # ── undo / redo ──────────────────────────────────────────────────
+
+    _UNDO_MAX = 200
+
+    def _record_op(self, desc: str, undo, redo):
+        """Push an operation onto the undo stack. `undo` and `redo`
+        are zero-arg callables that mutate the state. `redo` is what
+        the user's action just did (already applied); `undo` reverses
+        it. Recording clears the redo stack (linear history)."""
+        if getattr(self, "_undo_in_progress", False):
+            return
+        self._undo_stack.append({"desc": desc, "undo": undo, "redo": redo})
+        if len(self._undo_stack) > self._UNDO_MAX:
+            self._undo_stack.pop(0)
+        self._redo_stack.clear()
+
+    def _undo(self):
+        if not self._undo_stack:
+            self.statusBar().showMessage("Nothing to undo.", 2000)
+            return
+        op = self._undo_stack.pop()
+        self._undo_in_progress = True
+        try:
+            op["undo"]()
+        except Exception as e:  # noqa: BLE001
+            print(f"[UNDO] '{op['desc']}' failed: {e}")
+            import traceback
+            traceback.print_exc()
+            self._undo_in_progress = False
+            return
+        self._undo_in_progress = False
+        self._redo_stack.append(op)
+        self.statusBar().showMessage(f"Undo: {op['desc']}", 3000)
+
+    def _redo(self):
+        if not self._redo_stack:
+            self.statusBar().showMessage("Nothing to redo.", 2000)
+            return
+        op = self._redo_stack.pop()
+        self._undo_in_progress = True
+        try:
+            op["redo"]()
+        except Exception as e:  # noqa: BLE001
+            print(f"[REDO] '{op['desc']}' failed: {e}")
+            import traceback
+            traceback.print_exc()
+            self._undo_in_progress = False
+            return
+        self._undo_in_progress = False
+        self._undo_stack.append(op)
+        self.statusBar().showMessage(f"Redo: {op['desc']}", 3000)
 
     # ── edit mode ────────────────────────────────────────────────────
 

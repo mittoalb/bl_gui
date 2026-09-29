@@ -155,11 +155,19 @@ class Panel(QtWidgets.QFrame):
             win.add_pv_row_dialog(self)
 
     def _rename_panel(self):
+        old = self._title.text()
         text, ok = QtWidgets.QInputDialog.getText(
-            self, "Rename Panel", "New title:", text=self._title.text())
-        if ok and text:
+            self, "Rename Panel", "New title:", text=old)
+        if ok and text and text != old:
             self._title.setText(text)
             self._title.adjustSize()
+            win = self.window()
+            if hasattr(win, "_record_op"):
+                p = self
+                win._record_op(
+                    f"Rename panel {old!r} → {text!r}",
+                    lambda p=p, t=old: (p._title.setText(t), p._title.adjustSize()),
+                    lambda p=p, t=text: (p._title.setText(t), p._title.adjustSize()))
 
     def _change_title_font(self):
         import re
@@ -169,11 +177,22 @@ class Panel(QtWidgets.QFrame):
         if m: cur = int(m.group(1))
         val, ok = QtWidgets.QInputDialog.getInt(
             self, "Panel Title Font", "Font size (pt):", cur, 4, 30)
-        if ok:
+        if ok and val != cur:
             self._title.setStyleSheet(
                 f"color: #73dfff; font-weight:bold;font-size:{val}pt; background: transparent; padding: 2px 6px;"
             )
             self._title.adjustSize()
+            win = self.window()
+            if hasattr(win, "_record_op"):
+                p = self
+                def _apply(pt, p=p):
+                    p._title.setStyleSheet(
+                        f"color: #73dfff; font-weight:bold;font-size:{pt}pt; background: transparent; padding: 2px 6px;")
+                    p._title.adjustSize()
+                win._record_op(
+                    f"Title font {p.title_text()!r}: {cur}pt → {val}pt",
+                    lambda pt=cur: _apply(pt),
+                    lambda pt=val: _apply(pt))
 
     def _edge_at(self, pos):
         """Return (right, bottom) hit-test for resize edges. Both True → BR corner."""
@@ -194,6 +213,9 @@ class Panel(QtWidgets.QFrame):
         if not self._edit or e.button() != QtCore.Qt.LeftButton:
             return super().mousePressEvent(e)
         self._geo0 = self.geometry()
+        # Snapshot for undo — mouseReleaseEvent compares against this
+        # and, if changed, asks the Win to record a reversible op.
+        self._geo_before_drag = QtCore.QRect(self._geo0)
         self._mstart = e.globalPos()
         r, b = self._edge_at(e.pos())
         if r or b:
@@ -296,6 +318,7 @@ class Panel(QtWidgets.QFrame):
     def mouseReleaseEvent(self, e):
         if not self._edit:
             return super().mouseReleaseEvent(e)
+        was_drag_or_resize = self._drag or self._resize
         self._drag = self._resize = False
         self._mstart = None
         self._resize_dir = (False, False)
@@ -306,6 +329,24 @@ class Panel(QtWidgets.QFrame):
             parent.update()
         r, b = self._edge_at(e.pos())
         self.setCursor(self._cursor_for_edge(r, b))
+        # Record undo op if the drag/resize actually changed geometry.
+        # The Win exposes _record_op via self.window() — cheaper than
+        # threading a callback per panel and works for both freshly
+        # loaded and duplicated panels.
+        if was_drag_or_resize:
+            before = getattr(self, "_geo_before_drag", None)
+            after = self.geometry()
+            if before is not None and QtCore.QRect(before) != QtCore.QRect(after):
+                win = self.window()
+                if hasattr(win, "_record_op"):
+                    before_snap = QtCore.QRect(before)
+                    after_snap = QtCore.QRect(after)
+                    p = self
+                    win._record_op(
+                        f"Move/resize panel {self.title_text()!r}",
+                        lambda p=p, r=before_snap: p.setGeometry(r),
+                        lambda p=p, r=after_snap: p.setGeometry(r))
+            self._geo_before_drag = None
 
     def paintEvent(self, e):
         super().paintEvent(e)
