@@ -567,11 +567,82 @@ class Win(QtWidgets.QMainWindow):
         self._panels[key] = p; self._panel_tab_map[key] = tab_name
         return p, key
 
+    # ── panel preset registry ────────────────────────────────────────
+    # Base-title → (builder method name, default width, default height).
+    # Every panel currently built by _build_all_panels is listed here;
+    # the widths/heights match what each section passes to _make_panel
+    # (or, for Motor groups, the len(motors)*116 + 16 rule that the
+    # loop computes per group). Informational for now — Phase 2 will
+    # wire this into the load path.
+    PANEL_PRESETS = {
+        "Shutters":       ("_build_panel_shutters",      560, 170),
+        "Beam":           ("_build_panel_beam_info",     350,  90),
+        "Presets":        ("_build_panel_presets",       200,  80),
+        "Condenser":      ("_build_panel_motor_groups",  596, 190),
+        "Zone Plate":     ("_build_panel_motor_groups",  364, 190),
+        "Phase Ring":     ("_build_panel_motor_groups",  364, 190),
+        "Detector":       ("_build_panel_motor_groups",  248, 190),
+        "Sample":         ("_build_panel_motor_groups",  248, 190),
+        "Pinhole":        ("_build_panel_motor_groups",  248, 190),
+        "Beamstop":       ("_build_panel_motor_groups",  248, 190),
+        "Diffuser":       ("_build_panel_motor_groups",  132, 190),
+        "Bertrand Lens":  ("_build_panel_motor_groups",  248, 190),
+        "Furnace":        ("_build_panel_motor_groups",  364, 190),
+        "Nano Focus":     ("_build_panel_motor_groups",  248, 190),
+        "Queensgate":     ("_build_panel_motor_groups",  248, 190),
+        "Ensemble":       ("_build_panel_motor_groups",  132, 190),
+        "Other":          ("_build_panel_motor_groups",  248, 190),
+        "In / Out":       ("_build_panel_in_out",       1024,  70),
+        "Energy":         ("_build_panel_energy",        380, 340),
+        "Camera":         ("_build_panel_camera",        340, 180),
+        "Crop":           ("_build_panel_crop",          360, 100),
+        "Valves":         ("_build_panel_valves",        320, 120),
+        "PLC Outputs":    ("_build_panel_plc_outputs",   320,  80),
+        "BPM/EPID":       ("_build_panel_bpm_epid",      440, 110),
+        "PV Save/Load":   ("_build_panel_pv_save_load",  360,  90),
+        "Beam Status":    ("_build_panel_beam_status",   400, 100),
+        "OPS Messages":   ("_build_panel_ops_messages",  400, 130),
+        "Shaker":         ("_build_panel_shaker",        360, 400),
+        "Launchers":      ("_build_panel_launchers",     560, 150),
+        "Displays":       ("_build_panel_displays",      560, 150),
+        "Schematic":      ("_build_panel_schematic",     500, 200),
+        "ALL STOP":       ("_build_panel_all_stop",      160,  60),
+    }
+
     # ── build all panels for one tab ─────────────────────────────────
 
     def _build_all_panels(self, tab_name):
-        x, y = 0, 0; GAP = 4
+        # Thin dispatcher. Section bodies were extracted (Phase 1) into
+        # _build_panel_<name> methods; each takes tab_name and shares
+        # bookkeeping (x, y, iy, ci, GAP) with its neighbours via
+        # self._build_state. A dict was chosen over explicit params
+        # because the extracted bodies are kept byte-for-byte identical
+        # to the original section code and reference the bare names —
+        # a dict lets each method unpack once at entry and repack any
+        # modifications at exit without rewriting the body itself.
+        self._build_state = {'x': 0, 'y': 0, 'GAP': 4, 'iy': 0, 'ci': 0}
+        self._build_panel_shutters(tab_name)
+        self._build_panel_beam_info(tab_name)
+        self._build_panel_presets(tab_name)
+        self._build_panel_motor_groups(tab_name)
+        self._build_panel_in_out(tab_name)
+        self._build_panel_energy(tab_name)
+        self._build_panel_camera(tab_name)
+        self._build_panel_crop(tab_name)
+        self._build_panel_valves(tab_name)
+        self._build_panel_plc_outputs(tab_name)
+        self._build_panel_bpm_epid(tab_name)
+        self._build_panel_pv_save_load(tab_name)
+        self._build_panel_beam_status(tab_name)
+        self._build_panel_ops_messages(tab_name)
+        self._build_panel_shaker(tab_name)
+        self._build_panel_launchers(tab_name)
+        self._build_panel_displays(tab_name)
+        self._build_panel_schematic(tab_name)
+        self._build_panel_all_stop(tab_name)
 
+    def _build_panel_shutters(self, tab_name):
+        _st = self._build_state; x = _st['x']; y = _st['y']
         # --- Shutters (3 shutters horizontally; each column: name / status / Open+Close) ---
         p, _ = self._make_panel("Shutters", 560, 170, tab_name)
         lay = QtWidgets.QHBoxLayout(); lay.setContentsMargins(6, 22, 6, 6); lay.setSpacing(10)
@@ -594,7 +665,10 @@ class Win(QtWidgets.QMainWindow):
             lay.addWidget(vf, 1)
             slot[fid] = vf
         p.setLayout(lay); p.setGeometry(x, y, 560, 170); x += 564
+        _st['x'] = x
 
+    def _build_panel_beam_info(self, tab_name):
+        _st = self._build_state; x = _st['x']; y = _st['y']
         # --- Beam Info ---
         p, _ = self._make_panel("Beam", 350, 90, tab_name)
         bl = QtWidgets.QFormLayout(); bl.setContentsMargins(6, 20, 6, 4); bl.setSpacing(3)
@@ -605,7 +679,10 @@ class Win(QtWidgets.QMainWindow):
             ('rb', "Und E:",   "beam_und_e", "S32ID:USID:EnergyM.VAL", dict(fmt=".3f")),
         ], bl)
         p.setLayout(bl); p.setGeometry(x, y, 350, 90); x += 354
+        _st['x'] = x
 
+    def _build_panel_presets(self, tab_name):
+        _st = self._build_state; x = _st['x']; y = _st['y']
         # --- Presets ---
         p, _ = self._make_panel("Presets", 200, 80, tab_name)
         pl = QtWidgets.QHBoxLayout(); pl.setContentsMargins(6, 20, 6, 4); pl.setSpacing(4)
@@ -629,6 +706,8 @@ class Win(QtWidgets.QMainWindow):
             p.custom_buttons.append(b)
         p.setLayout(pl); p.setGeometry(x, y, 200, 80)
 
+    def _build_panel_motor_groups(self, tab_name):
+        _st = self._build_state; GAP = _st['GAP']
         # --- Motor groups ---
         x, y = 0, 84 + GAP; COLS = 5; ci = 0
         for gname, motors in GROUPS:
@@ -640,7 +719,10 @@ class Win(QtWidgets.QMainWindow):
             p.setLayout(ml); p.setGeometry(x, y, pw, ph)
             x += pw + GAP; ci += 1
             if ci >= COLS: ci = 0; x = 0; y += ph + GAP
+        _st['x'] = x; _st['y'] = y; _st['ci'] = ci
 
+    def _build_panel_in_out(self, tab_name):
+        _st = self._build_state; y = _st['y']; GAP = _st['GAP']; ci = _st['ci']
         # --- In/Out ---
         iy = y + (0 if ci == 0 else 190 + GAP)
         p, _ = self._make_panel("In / Out", 760, 70, tab_name)
@@ -710,7 +792,10 @@ class Win(QtWidgets.QMainWindow):
         self._style_harmonic_button(harm_btn, on=False)
 
         p.setLayout(iol); p.setGeometry(0, iy, 1024, 70)
+        _st['iy'] = iy
 
+    def _build_panel_energy(self, tab_name):
+        _st = self._build_state; GAP = _st['GAP']
         # --- Energy ---
         p, _ = self._make_panel("Energy", 380, 300, tab_name)
         el = QtWidgets.QFormLayout(); el.setContentsMargins(6, 22, 6, 6); el.setSpacing(4)
@@ -870,6 +955,8 @@ class Win(QtWidgets.QMainWindow):
 
         p.setLayout(el); p.setGeometry(700 + GAP, 84 + GAP, 380, 340)
 
+    def _build_panel_camera(self, tab_name):
+        _st = self._build_state; GAP = _st['GAP']
         # --- Camera ---
         p, _ = self._make_panel("Camera", 340, 180, tab_name)
         cl = QtWidgets.QFormLayout(); cl.setContentsMargins(6, 22, 6, 6); cl.setSpacing(4)
@@ -920,6 +1007,8 @@ class Win(QtWidgets.QMainWindow):
             cam_slot[_name]._inner.returnPressed.connect(self._apply_cam_binning)
         p.setLayout(cl); p.setGeometry(700 + GAP + 344, 84 + GAP, 340, 180)
 
+    def _build_panel_crop(self, tab_name):
+        _st = self._build_state; GAP = _st['GAP']; iy = _st['iy']
         # --- Crop ---
         p, _ = self._make_panel("Crop", 360, 100, tab_name)
         crl = QtWidgets.QGridLayout(); crl.setContentsMargins(6, 22, 6, 4); crl.setSpacing(4)
@@ -941,6 +1030,8 @@ class Win(QtWidgets.QMainWindow):
         slot["crop_apply"] = apply_f
         p.setLayout(crl); p.setGeometry(700 + GAP, iy, 360, 100)
 
+    def _build_panel_valves(self, tab_name):
+        _st = self._build_state; GAP = _st['GAP']; iy = _st['iy']
         # --- Valves ---
         p, _ = self._make_panel("Valves", 320, 120, tab_name)
         vl = QtWidgets.QVBoxLayout(); vl.setContentsMargins(6, 22, 6, 4); vl.setSpacing(3)
@@ -958,6 +1049,8 @@ class Win(QtWidgets.QMainWindow):
             slot[fid] = vf
         p.setLayout(vl); p.setGeometry(1004 + GAP, iy, 320, 120)
 
+    def _build_panel_plc_outputs(self, tab_name):
+        _st = self._build_state; GAP = _st['GAP']; iy = _st['iy']
         # --- PLC Outputs (analog) ---
         p, _ = self._make_panel("PLC Outputs", 320, 80, tab_name)
         plc_form = QtWidgets.QFormLayout(); plc_form.setContentsMargins(6, 22, 6, 6); plc_form.setSpacing(4)
@@ -968,6 +1061,8 @@ class Win(QtWidgets.QMainWindow):
         self._register_pv_fields(p, plc_fields, plc_form)
         p.setLayout(plc_form); p.setGeometry(1004 + GAP, iy + 114, 320, 80)
 
+    def _build_panel_bpm_epid(self, tab_name):
+        _st = self._build_state; GAP = _st['GAP']; iy = _st['iy']
         # --- BPM/EPID ---
         p, _ = self._make_panel("BPM/EPID", 440, 110, tab_name)
         epl = QtWidgets.QGridLayout(); epl.setContentsMargins(6, 22, 6, 4); epl.setSpacing(3)
@@ -987,6 +1082,8 @@ class Win(QtWidgets.QMainWindow):
             fb = PVField('cmb', f"{base}:on",   f"{fid}_fb", choices=["Off", "On"], parent=p); epl.addWidget(fb, i, 3); slot[f"{fid}_fb"] = fb
         p.setLayout(epl); p.setGeometry(700 + GAP, iy + 64, 440, 110)
 
+    def _build_panel_pv_save_load(self, tab_name):
+        _st = self._build_state; GAP = _st['GAP']; iy = _st['iy']
         # --- PV Save/Load ---
         p, _ = self._make_panel("PV Save/Load", 360, 90, tab_name)
         pvl = QtWidgets.QFormLayout(); pvl.setContentsMargins(6, 22, 6, 4); pvl.setSpacing(4)
@@ -999,6 +1096,8 @@ class Win(QtWidgets.QMainWindow):
         pvl.addRow(btn_row)
         p.setLayout(pvl); p.setGeometry(1104 + GAP, iy + 64, 360, 90)
 
+    def _build_panel_beam_status(self, tab_name):
+        _st = self._build_state; GAP = _st['GAP']; iy = _st['iy']
         # --- Beam Status ---
         p, _ = self._make_panel("Beam Status", 400, 100, tab_name)
         bsl = QtWidgets.QFormLayout(); bsl.setContentsMargins(6, 22, 6, 4); bsl.setSpacing(3)
@@ -1009,6 +1108,8 @@ class Win(QtWidgets.QMainWindow):
         ], bsl)
         p.setLayout(bsl); p.setGeometry(700 + GAP, iy + 168, 400, 100)
 
+    def _build_panel_ops_messages(self, tab_name):
+        _st = self._build_state; GAP = _st['GAP']; iy = _st['iy']
         # --- OPS Messages ---
         p, _ = self._make_panel("OPS Messages", 400, 130, tab_name)
         opl = QtWidgets.QFormLayout(); opl.setContentsMargins(6, 20, 6, 4); opl.setSpacing(1)
@@ -1017,6 +1118,8 @@ class Win(QtWidgets.QMainWindow):
         ], opl)
         p.setLayout(opl); p.setGeometry(700 + GAP, iy + 272, 400, 130)
 
+    def _build_panel_shaker(self, tab_name):
+        _st = self._build_state; GAP = _st['GAP']; iy = _st['iy']
         # --- Shaker ---
         p, _ = self._make_panel("Shaker", 360, 360, tab_name)
         skl = QtWidgets.QFormLayout(); skl.setContentsMargins(6, 22, 6, 4); skl.setSpacing(4)
@@ -1057,6 +1160,8 @@ class Win(QtWidgets.QMainWindow):
         self._pv_fields[p.key]["shaker_run"] = shaker_run
         p.setLayout(skl); p.setGeometry(1104 + GAP, iy + 168, 360, 400)
 
+    def _build_panel_launchers(self, tab_name):
+        _st = self._build_state; iy = _st['iy']
         # --- Launchers ---
         p, _ = self._make_panel("Launchers", 560, 150, tab_name)
         ll2 = QtWidgets.QGridLayout(); ll2.setContentsMargins(6, 22, 6, 6); ll2.setSpacing(5)
@@ -1088,6 +1193,8 @@ class Win(QtWidgets.QMainWindow):
             p.custom_buttons.append(b)
         p.setLayout(ll2); p.setGeometry(0, iy + 64, 560, 150)
 
+    def _build_panel_displays(self, tab_name):
+        _st = self._build_state; iy = _st['iy']
         # --- Displays ---
         p, _ = self._make_panel("Displays", 560, 150, tab_name)
         dl = QtWidgets.QGridLayout(); dl.setContentsMargins(6, 22, 6, 6); dl.setSpacing(5)
@@ -1114,6 +1221,8 @@ class Win(QtWidgets.QMainWindow):
             dl.addWidget(b, i // 3, i % 3)
         p.setLayout(dl); p.setGeometry(0, iy + 220, 560, 150)
 
+    def _build_panel_schematic(self, tab_name):
+        _st = self._build_state; iy = _st['iy']
         # --- Schematic ---
         if os.path.isfile(_IMG):
             pix = QtGui.QPixmap(_IMG); pw = min(500, pix.width())
@@ -1123,6 +1232,7 @@ class Win(QtWidgets.QMainWindow):
             img = QtWidgets.QLabel(); img.setPixmap(pix); img.setScaledContents(True); img.setMinimumSize(100, 60)
             il.addWidget(img); p.setLayout(il); p.setGeometry(504, iy + 64, pw, ph)
 
+    def _build_panel_all_stop(self, tab_name):
         # --- ALL STOP (as a movable panel) ---
         p, _ = self._make_panel("ALL STOP", 160, 60, tab_name)
         asl = QtWidgets.QVBoxLayout(); asl.setContentsMargins(4, 20, 4, 4)
