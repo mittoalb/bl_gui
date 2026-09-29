@@ -2283,6 +2283,36 @@ class Win(QtWidgets.QMainWindow):
                     self._add_widget_from_registry(matched_kind, panel_name=base)
                     recreated += 1
                     continue
+                # Preset name-match: if no atomic widget claimed this
+                # base name, try the preset registry. Old-style default
+                # panels (Shutters, Beam, Energy, …) were built by
+                # _build_all_panels historically; under _no_defaults
+                # (or once _build_all_panels goes away entirely) the
+                # layout's _panels list is authoritative and each
+                # declared panel is rebuilt via its preset builder
+                # here. Saved [x,y,w,h] gets applied by the later
+                # geometry loop, so we don't worry about placement.
+                preset_entry = _wreg.preset_for_base(base)
+                if preset_entry is not None:
+                    print(f"[LOAD] preset (name-match): rebuilding "
+                          f"{k!r} via preset for {base!r}")
+                    for i in range(self.tab_widget.count()):
+                        if self.tab_widget.tabText(i) == tab_name:
+                            self.tab_widget.setCurrentIndex(i); break
+                    # Prime the shared bookkeeping dict so a builder
+                    # body copied byte-for-byte from _build_all_panels
+                    # doesn't KeyError on x/y/GAP/iy/ci.
+                    self._build_state = {'x': 0, 'y': 0, 'GAP': 4,
+                                         'iy': 0, 'ci': 0}
+                    _def_name, _w, _h, builder = preset_entry
+                    try:
+                        builder(self, tab_name)
+                        recreated += 1
+                    except Exception as e:  # noqa: BLE001
+                        print(f"[LOAD] preset build failed for {k!r}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                    continue
                 new_p = Panel(base + " (copy)", k, canvas)
                 # Use the saved MC list to decide layout orientation + contents
                 mc_list = mcs_saved.get(k, [])
