@@ -57,7 +57,7 @@ class Panel(QtWidgets.QFrame):
         self._btn_filter = _ButtonEditFilter(self)
         self._title = QtWidgets.QLabel(title, self)
         self._title.setStyleSheet(
-            "color: #73dfff; font: bold 12pt; background: transparent; padding: 2px 6px;"
+            "color: #73dfff; font-weight:bold;font-size:12pt; background: transparent; padding: 2px 6px;"
         )
         self._title.adjustSize()         # width to fit the text
         self._title.move(6, 2)
@@ -171,7 +171,7 @@ class Panel(QtWidgets.QFrame):
             self, "Panel Title Font", "Font size (pt):", cur, 4, 30)
         if ok:
             self._title.setStyleSheet(
-                f"color: #73dfff; font: bold {val}pt; background: transparent; padding: 2px 6px;"
+                f"color: #73dfff; font-weight:bold;font-size:{val}pt; background: transparent; padding: 2px 6px;"
             )
             self._title.adjustSize()
 
@@ -263,7 +263,7 @@ class CfgButton(QtWidgets.QPushButton):
         # buttons and need to look like buttons, not text labels.
         self.setStyleSheet(
             f"background:{self._bg};color:{self._fg};"
-            f"font:bold {self._font_size}pt;"
+            f"font-weight:bold;font-size:{self._font_size}pt;"
             f"border:1px solid #6a8cad;border-radius:4px;padding:6px 10px;")
 
     def set_edit_mode(self, on):
@@ -387,10 +387,10 @@ class CfgDialog(QtWidgets.QDialog):
             "shell: run command in shell\n"
             "caput: 'PV_NAME value' (e.g. 32id:TXMOptics:MoveAllIn 1)\n"
             "url: open URL in browser\nscript: run Python script")
-        help_lbl.setStyleSheet("color:#888;font:8pt;"); help_lbl.setWordWrap(True); L.addRow(help_lbl)
+        help_lbl.setStyleSheet("color:#888;font-size:8pt;"); help_lbl.setWordWrap(True); L.addRow(help_lbl)
         btns = QtWidgets.QHBoxLayout()
         bok = QtWidgets.QPushButton("OK")
-        bok.setStyleSheet("background:#1e5a8e;color:#fff;font:bold 9pt;")
+        bok.setStyleSheet("background:#1e5a8e;color:#fff;font-weight:bold;font-size:9pt;")
         bok.clicked.connect(self.accept); btns.addWidget(bok)
         bcancel = QtWidgets.QPushButton("Cancel"); bcancel.clicked.connect(self.reject); btns.addWidget(bcancel)
         L.addRow(btns)
@@ -479,7 +479,7 @@ class WidgetEditor(QtWidgets.QDialog):
                 "caput : 'PV_NAME value' (writes value to PV)\n"
                 "url   : open URL in default browser\n"
                 "script: run Python script")
-            help_lbl.setStyleSheet("color:#888;font:8pt;"); help_lbl.setWordWrap(True)
+            help_lbl.setStyleSheet("color:#888;font-size:8pt;"); help_lbl.setWordWrap(True)
             al.addRow(help_lbl)
             tabs.addTab(act_w, "Action")
             # Keep a blank _pv_edit so accept() can still reference it.
@@ -500,7 +500,7 @@ class WidgetEditor(QtWidgets.QDialog):
             tabs.addTab(pv_w, "PV")
         L.addWidget(tabs)
         btns = QtWidgets.QHBoxLayout()
-        bok = QtWidgets.QPushButton("OK"); bok.setStyleSheet("background:#1e5a8e;color:#fff;font:bold 9pt;")
+        bok = QtWidgets.QPushButton("OK"); bok.setStyleSheet("background:#1e5a8e;color:#fff;font-weight:bold;font-size:9pt;")
         bok.clicked.connect(self.accept); btns.addWidget(bok)
         bc = QtWidgets.QPushButton("Cancel"); bc.clicked.connect(self.reject); btns.addWidget(bc)
         L.addLayout(btns)
@@ -519,11 +519,11 @@ class WidgetEditor(QtWidgets.QDialog):
             return "#fff"
 
     def _color_ss(self, c):
-        return f"background:{c};color:{self._contrast(c)};font:bold 10pt;padding:6px;"
+        return f"background:{c};color:{self._contrast(c)};font-weight:bold;font-size:10pt;padding:6px;"
 
     def _update_preview(self):
         fs = self._fs_spin.value()
-        self._preview.setStyleSheet(f"background:{self._bg};color:{self._fg};font:{fs}pt;border:1px solid #404040;border-radius:3px;padding:6px 12px;")
+        self._preview.setStyleSheet(f"background:{self._bg};color:{self._fg};font-size:{fs}pt;border:1px solid #404040;border-radius:3px;padding:6px 12px;")
 
     def _pick_bg(self):
         c = QtWidgets.QColorDialog.getColor(QtGui.QColor(self._bg), self, "Background")
@@ -614,7 +614,7 @@ def _edit_widget(widget):
         return
 
     # Non-MC widgets: apply the full style / size / PV edits as before
-    widget.setStyleSheet(f"background:{d['bg']};color:{d['fg']};font:{d['fs']}pt;border:1px solid #404040;border-radius:3px;padding:4px 8px;")
+    widget.setStyleSheet(f"background:{d['bg']};color:{d['fg']};font-size:{d['fs']}pt;border:1px solid #404040;border-radius:3px;padding:4px 8px;")
     widget.setProperty("_custom_bg", d['bg']); widget.setProperty("_custom_fg", d['fg']); widget.setProperty("_custom_fs", d['fs'])
     widget.setMinimumSize(d['w'], d['h']); widget.setMaximumSize(d['w'], d['h']); widget.resize(d['w'], d['h'])
 

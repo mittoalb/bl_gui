@@ -187,7 +187,7 @@ class Win(QtWidgets.QMainWindow):
         # ═══ TOP BAR ═══
         top = QtWidgets.QHBoxLayout(); top.setSpacing(6)
         self._title_lbl = QtWidgets.QLabel(self._bl_name)
-        self._title_lbl.setStyleSheet("font:bold 14pt;color:#73dfff;")
+        self._title_lbl.setStyleSheet("font-weight:bold;font-size:14pt;color:#73dfff;")
         top.addWidget(self._title_lbl)
         top.addStretch()
         # Edit controls — only created if launched with 'edit' argument
@@ -200,7 +200,7 @@ class Win(QtWidgets.QMainWindow):
             "QSlider::handle:horizontal{background:#2980b9;border:1px solid #3a95d8;width:14px;margin:-5px 0;border-radius:7px;}"
             "QSlider::handle:horizontal:hover{background:#3a95d8;}")
         self.font_slider.valueChanged.connect(self._change_font_scale); top.addWidget(self.font_slider)
-        self.font_lbl = QtWidgets.QLabel("100%"); self.font_lbl.setFixedWidth(36); self.font_lbl.setStyleSheet("font:8pt;"); top.addWidget(self.font_lbl)
+        self.font_lbl = QtWidgets.QLabel("100%"); self.font_lbl.setFixedWidth(36); self.font_lbl.setStyleSheet("font-size:8pt;"); top.addWidget(self.font_lbl)
         # Per-category font scales (labels / values / buttons / titles) —
         # affects every non-MC widget across the GUI at once. Motor
         # cards keep using the slider above so power users don't lose
@@ -208,7 +208,7 @@ class Win(QtWidgets.QMainWindow):
         self.fonts_btn = QtWidgets.QPushButton("Fonts…")
         self.fonts_btn.setFixedSize(60, 28)
         self.fonts_btn.setStyleSheet(
-            "background:#2d2d2d;color:#e0e0e0;font:9pt;"
+            "background:#2d2d2d;color:#e0e0e0;font-size:9pt;"
             "border:1px solid #404040;border-radius:3px;")
         self.fonts_btn.clicked.connect(self._open_fonts_dialog)
         top.addWidget(self.fonts_btn)
@@ -216,7 +216,7 @@ class Win(QtWidgets.QMainWindow):
 
         # Edit-mode is now chosen at launch (`bl_gui edit`) — no in-GUI toggle.
         self.add_panel_btn = QtWidgets.QPushButton("+ Panel"); self.add_panel_btn.setFixedSize(70, 28)
-        self.add_panel_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;border:1px solid #404040;border-radius:3px;")
+        self.add_panel_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font-size:9pt;border:1px solid #404040;border-radius:3px;")
         self.add_panel_btn.clicked.connect(self._add_new_panel)
         top.addWidget(self.add_panel_btn)
 
@@ -234,7 +234,7 @@ class Win(QtWidgets.QMainWindow):
         # editing this file.
         self._populate_widget_registry()
         self.add_widget_btn = QtWidgets.QPushButton("+ Widget"); self.add_widget_btn.setFixedSize(80, 28)
-        self.add_widget_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;border:1px solid #404040;border-radius:3px;")
+        self.add_widget_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font-size:9pt;border:1px solid #404040;border-radius:3px;")
         _wmenu = QtWidgets.QMenu(self.add_widget_btn)
         _wmenu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;} "
                              "QMenu::item:selected{background:#1e5a8e;}")
@@ -266,7 +266,7 @@ class Win(QtWidgets.QMainWindow):
         self.snap_btn = QtWidgets.QPushButton("Snapshots")
         self.snap_btn.setFixedSize(90, 28)
         self.snap_btn.setStyleSheet(
-            "background:#2d2d2d;color:#e0e0e0;font:9pt;"
+            "background:#2d2d2d;color:#e0e0e0;font-size:9pt;"
             "border:1px solid #404040;border-radius:3px;")
         self.snap_btn.setToolTip("Browse hourly state snapshots and restore "
                                  "a past state PV-by-PV.")
@@ -274,7 +274,7 @@ class Win(QtWidgets.QMainWindow):
         top.addWidget(self.snap_btn)
 
         self.add_tab_btn = QtWidgets.QPushButton("+ Tab"); self.add_tab_btn.setFixedSize(60, 28)
-        self.add_tab_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;border:1px solid #404040;border-radius:3px;")
+        self.add_tab_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font-size:9pt;border:1px solid #404040;border-radius:3px;")
         self.add_tab_btn.clicked.connect(self._add_new_tab)
         top.addWidget(self.add_tab_btn)
 
@@ -788,7 +788,7 @@ class Win(QtWidgets.QMainWindow):
             slot[fid] = pf
         # A convenience launcher button (non-PV). Keep as plain button.
         bp = QtWidgets.QPushButton("PyStream"); bp.setFixedSize(90, 28)
-        bp.setStyleSheet("background:#27ae60;color:#fff;font:bold 10pt;border-radius:3px;")
+        bp.setStyleSheet("background:#27ae60;color:#fff;font-weight:bold;font-size:10pt;border-radius:3px;")
         bp.clicked.connect(lambda: subprocess.Popen(["/home/beams/USERTXM/scripts/start_pystream.sh"], start_new_session=True))
         iol.addWidget(bp, 0, len(inout_rows), 2, 1)
         # QGMax one-shot optimization — writes the request file that
@@ -848,14 +848,14 @@ class Win(QtWidgets.QMainWindow):
         energy_sp._inner.setStyleSheet(
             "QLineEdit{background:#2c3e50;color:#ecf0f1;"
             "border:1px solid #3498db;border-radius:3px;"
-            "padding:4px 8px;font:bold 15pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+            "padding:4px 8px;font-weight:bold;font-size:15pt;font-family:'Liberation Mono','DejaVu Sans Mono',monospace;}"
             "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}")
         bragg_rb._inner.setMinimumHeight(36)
         bragg_rb._inner.setStyleSheet(
-            "color:#2ecc71;background:transparent;font:bold 15pt 'Liberation Mono','DejaVu Sans Mono',monospace;padding:4px 6px;")
+            "color:#2ecc71;background:transparent;font-weight:bold;font-size:15pt;font-family:'Liberation Mono','DejaVu Sans Mono',monospace;padding:4px 6px;")
         energy_go._inner.setMinimumHeight(36)
         energy_go._inner.setStyleSheet(
-            "background:#27ae60;color:#fff;font:bold 13pt;"
+            "background:#27ae60;color:#fff;font-weight:bold;font-size:13pt;"
             "border:1px solid #2ecc71;border-radius:3px;padding:4px 16px;")
         row = QtWidgets.QWidget()
         hl = QtWidgets.QHBoxLayout(row); hl.setContentsMargins(0, 0, 0, 0); hl.setSpacing(6)
@@ -889,7 +889,7 @@ class Win(QtWidgets.QMainWindow):
         elem_cmb.setStyleSheet(
             "QComboBox{background:#2c3e50;color:#ecf0f1;"
             "border:1px solid #3498db;border-radius:3px;padding:4px 6px;"
-            "font:bold 11pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+            "font-weight:bold;font-size:11pt;font-family:'Liberation Mono','DejaVu Sans Mono',monospace;}"
             "QComboBox::drop-down{border:0;}"
             "QComboBox QAbstractItemView{background:#2c3e50;color:#ecf0f1;"
             "selection-background-color:#1e5a8e;}")
@@ -900,7 +900,7 @@ class Win(QtWidgets.QMainWindow):
         elem_move_btn = QtWidgets.QPushButton("Move")
         elem_move_btn.setMinimumHeight(32)
         elem_move_btn.setStyleSheet(
-            "background:#ae5207;color:#fff;font:bold 11pt;"
+            "background:#ae5207;color:#fff;font-weight:bold;font-size:11pt;"
             "border:1px solid #d35400;border-radius:3px;padding:4px 14px;")
         elem_move_btn.setToolTip("Set energy SP to the selected edge, "
                                  "trigger the mono move, then run QGMax "
@@ -949,7 +949,7 @@ class Win(QtWidgets.QMainWindow):
         from .beamlines.bl32id import xanes_calib
         calib_btn = QtWidgets.QPushButton("ZP Calibration...")
         calib_btn.setStyleSheet(
-            "background:#1e5a8e;color:#fff;font:bold 9pt;"
+            "background:#1e5a8e;color:#fff;font-weight:bold;font-size:9pt;"
             "border:1px solid #2980b9;border-radius:3px;padding:4px 10px;")
         calib_btn.clicked.connect(lambda: xanes_calib.launch(self))
         el.addRow("Calibration:", calib_btn)
@@ -976,7 +976,7 @@ class Win(QtWidgets.QMainWindow):
 
         gen_btn = QtWidgets.QPushButton("Generate Cal Files")
         gen_btn.setStyleSheet(
-            "background:#8e44ad;color:#fff;font:bold 9pt;"
+            "background:#8e44ad;color:#fff;font-weight:bold;font-size:9pt;"
             "border:1px solid #9b59b6;border-radius:3px;padding:4px 10px;")
         gen_btn.setToolTip(
             "Writes Energy_<E±range>keV.txt files from the ZP calibration "
@@ -1022,7 +1022,7 @@ class Win(QtWidgets.QMainWindow):
         exp_edit.setStyleSheet(
             "QLineEdit{background:#2c3e50;color:#ecf0f1;"
             "border:1px solid #3498db;border-radius:3px;"
-            "padding:4px 8px;font:bold 14pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+            "padding:4px 8px;font-weight:bold;font-size:14pt;font-family:'Liberation Mono','DejaVu Sans Mono',monospace;}"
             "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}")
         # AreaDetector binning needs SizeX/SizeY to be recomputed from the
         # sensor's max size when BinX/BinY change. PVField's default 'sp'
@@ -1269,7 +1269,7 @@ class Win(QtWidgets.QMainWindow):
         p, _ = self._make_panel("ALL STOP", 160, 60, tab_name)
         asl = QtWidgets.QVBoxLayout(); asl.setContentsMargins(4, 20, 4, 4)
         astop = QtWidgets.QPushButton("ALL STOP")
-        astop.setStyleSheet("background:#c0392b;color:#fff;font:bold 14pt;border:2px solid #e74c3c;border-radius:4px;padding:4px;")
+        astop.setStyleSheet("background:#c0392b;color:#fff;font-weight:bold;font-size:14pt;border:2px solid #e74c3c;border-radius:4px;padding:4px;")
         astop.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         astop.clicked.connect(self._on_all_stop)
         asl.addWidget(astop); p.setLayout(asl)
@@ -1484,7 +1484,7 @@ class Win(QtWidgets.QMainWindow):
         self.tab_widget.tabBar().setStyleSheet(
             f"QTabBar::tab{{background:#2d2d2d;color:#e0e0e0;"
             f"padding:{pad_v}px {pad_h}px;border:1px solid #404040;"
-            f"border-bottom:none;margin-right:2px;font:bold {fs}pt;}}"
+            f"border-bottom:none;margin-right:2px;font-weight:bold;font-size:{fs}pt;}}"
             f"QTabBar::tab:selected{{background:#1e5a8e;color:#fff;}}"
             f"QTabBar::tab:hover{{background:#3a3a3a;}}")
 
@@ -1499,9 +1499,9 @@ class Win(QtWidgets.QMainWindow):
         h_spin = QtWidgets.QSpinBox(); h_spin.setRange(300, 4000); h_spin.setValue(cur[1]); h_spin.setSuffix(" px")
         fl.addRow("Width:", w_spin); fl.addRow("Height:", h_spin)
         hint = QtWidgets.QLabel("Sets the scrollable canvas area.\nSmaller = no scrollbar needed if panels fit.")
-        hint.setStyleSheet("color:#888;font:8pt;"); fl.addRow(hint)
+        hint.setStyleSheet("color:#888;font-size:8pt;"); fl.addRow(hint)
         btns = QtWidgets.QHBoxLayout()
-        bok = QtWidgets.QPushButton("OK"); bok.setStyleSheet("background:#1e5a8e;color:#fff;font:bold 9pt;")
+        bok = QtWidgets.QPushButton("OK"); bok.setStyleSheet("background:#1e5a8e;color:#fff;font-weight:bold;font-size:9pt;")
         bok.clicked.connect(dlg.accept); btns.addWidget(bok)
         bc = QtWidgets.QPushButton("Cancel"); bc.clicked.connect(dlg.reject); btns.addWidget(bc)
         fl.addRow(btns)
@@ -1898,8 +1898,8 @@ class Win(QtWidgets.QMainWindow):
         dlg.setWindowTitle("Font Sizes")
         dlg.setStyleSheet(
             "QDialog{background:#1c1c1c;color:#e0e0e0;}"
-            "QLabel{color:#e0e0e0;font:9pt;}"
-            "QPushButton{background:#2d2d2d;color:#e0e0e0;font:9pt;"
+            "QLabel{color:#e0e0e0;font-size:9pt;}"
+            "QPushButton{background:#2d2d2d;color:#e0e0e0;font-size:9pt;"
             "border:1px solid #404040;border-radius:3px;padding:4px 10px;}"
             "QPushButton:hover{background:#3a3a3a;}")
         grid = QtWidgets.QGridLayout(dlg)
@@ -1972,7 +1972,7 @@ class Win(QtWidgets.QMainWindow):
                 "EDIT MODE — drag/resize panels, right-click panels/motors/PV fields to edit. "
                 "Layout autosaves every 5 seconds while edit mode is on."
             )
-            self.statusBar().setStyleSheet("background:#f39c12;color:#000;font:bold 9pt;")
+            self.statusBar().setStyleSheet("background:#f39c12;color:#000;font-weight:bold;font-size:9pt;")
             self._start_edit_autosave()
         else:
             self._stop_edit_autosave()
@@ -2379,7 +2379,7 @@ class Win(QtWidgets.QMainWindow):
                 p = self._panels.get(k)
                 if p:
                     p._title.setStyleSheet(
-                        f"color: #73dfff; font: bold {fs}pt; background: transparent; padding: 2px 6px;"
+                        f"color: #73dfff; font-weight:bold;font-size:{fs}pt; background: transparent; padding: 2px 6px;"
                     )
                     p._title.adjustSize()
             # Custom buttons — if the saved layout has buttons for a panel,
@@ -2475,7 +2475,7 @@ class Win(QtWidgets.QMainWindow):
                     if isinstance(btn, CfgButton): continue
                     if btn.text() == btn_text:
                         bg=sty.get("bg","#2d2d2d"); fg=sty.get("fg","#e0e0e0"); ffs=sty.get("fs",9)
-                        btn.setStyleSheet(f"background:{bg};color:{fg};font:{ffs}pt;border:1px solid #404040;border-radius:3px;padding:4px 8px;")
+                        btn.setStyleSheet(f"background:{bg};color:{fg};font-size:{ffs}pt;border:1px solid #404040;border-radius:3px;padding:4px 8px;")
                         btn.setProperty("_custom_bg",bg); btn.setProperty("_custom_fg",fg); btn.setProperty("_custom_fs",ffs)
                         w=sty.get("w"); h=sty.get("h")
                         if w and h: btn.setMinimumSize(w,h); btn.setMaximumSize(w,h)
@@ -2890,14 +2890,14 @@ class Win(QtWidgets.QMainWindow):
         if on:
             btn.setText("Harmonic Corr… ON")
             btn.setStyleSheet(
-                "background:#27ae60;color:#fff;font:bold 10pt;"
+                "background:#27ae60;color:#fff;font-weight:bold;font-size:10pt;"
                 "border:1px solid #2ecc71;border-radius:3px;")
             btn.setToolTip("Every 5 s (Nano only): if the frame is bright and "
                            "shows a central hot spot, nudge QG V (32idQG:m1).")
         else:
             btn.setText("Harmonic Correction")
             btn.setStyleSheet(
-                "background:#2d2d2d;color:#e0e0e0;font:10pt;"
+                "background:#2d2d2d;color:#e0e0e0;font-size:10pt;"
                 "border:1px solid #404040;border-radius:3px;")
             btn.setToolTip("Enable a 5-s background loop that nudges QG V away "
                            "from central bright spots in Nano mode.")
@@ -2928,14 +2928,14 @@ class Win(QtWidgets.QMainWindow):
         if running:
             btn.setText("QGMax… running")
             btn.setStyleSheet(
-                "background:#f39c12;color:#000;font:bold 10pt;"
+                "background:#f39c12;color:#000;font-weight:bold;font-size:10pt;"
                 "border:1px solid #f1c40f;border-radius:3px;")
             btn.setToolTip("QGMax is running — wait until it finishes.")
             btn.setEnabled(False)
         else:
             btn.setText("QGMax")
             btn.setStyleSheet(
-                "background:#8e44ad;color:#fff;font:bold 10pt;"
+                "background:#8e44ad;color:#fff;font-weight:bold;font-size:10pt;"
                 "border:1px solid #9b59b6;border-radius:3px;")
             btn.setToolTip(
                 "Trigger a single QGMax image-mean optimization cycle "

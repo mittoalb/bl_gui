@@ -104,12 +104,12 @@ class MotorDetailsDialog(QtWidgets.QDialog):
         self.setMinimumSize(680, 760)
         self.setStyleSheet(
             "QDialog{background:#000;color:#e0e0e0;}"
-            "QGroupBox{background:#0e0e0e;color:#73dfff;font:bold 10pt;"
+            "QGroupBox{background:#0e0e0e;color:#73dfff;font-weight:bold;font-size:10pt;"
             "border:1px solid #383838;border-radius:3px;margin-top:10px;padding:12px 6px 6px 6px;}"
             "QGroupBox::title{subcontrol-origin:margin;left:8px;padding:0 4px;}"
             "QLabel{color:#e0e0e0;background:transparent;}"
             "QLineEdit,QComboBox{background:#2d2d2d;color:#e0e0e0;padding:2px 5px;"
-            "border:1px solid #404040;border-radius:3px;font:9pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+            "border:1px solid #404040;border-radius:3px;font-size:9pt;font-family:'Liberation Mono','DejaVu Sans Mono',monospace;}"
             "QPushButton{background:#2d2d2d;color:#e0e0e0;padding:4px 10px;"
             "border:1px solid #404040;border-radius:3px;}"
             "QPushButton:hover{background:#3a3a3a;}"
@@ -120,7 +120,7 @@ class MotorDetailsDialog(QtWidgets.QDialog):
         root = QtWidgets.QVBoxLayout(self)
 
         header = QtWidgets.QLabel(f"<b>{self.pv}</b>  — live motor record fields")
-        header.setStyleSheet("font:bold 11pt;color:#73dfff;")
+        header.setStyleSheet("font-weight:bold;font-size:11pt;color:#73dfff;")
         root.addWidget(header)
 
         scroll = QtWidgets.QScrollArea(); scroll.setWidgetResizable(True)
@@ -179,14 +179,14 @@ class MotorDetailsDialog(QtWidgets.QDialog):
     def _make_field(self, sfx, kind):
         if kind == "ro":
             w = QtWidgets.QLabel("---")
-            w.setStyleSheet("color:#2ecc71;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;padding:2px 4px;"
+            w.setStyleSheet("color:#2ecc71;font-weight:bold;font-size:10pt;font-family:'Liberation Mono','DejaVu Sans Mono',monospace;padding:2px 4px;"
                             "background:#000;border:1px solid #333;border-radius:2px;")
             self._fields[sfx] = w
             return w
         if kind.startswith("btn:"):
             val = kind.split(":", 1)[1]
             b = QtWidgets.QPushButton(sfx)
-            b.setStyleSheet("background:#c0392b;color:#fff;font:bold 9pt;padding:4px;")
+            b.setStyleSheet("background:#c0392b;color:#fff;font-weight:bold;font-size:9pt;padding:4px;")
             b.clicked.connect(
                 lambda _=False, s=sfx, v=val:
                     caput_bg(_pv_for(self.pv, s), v))

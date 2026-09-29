@@ -62,13 +62,13 @@ class AddPVRowDialog(QtWidgets.QDialog):
         L.addRow("Options:", self.opt_edit)
 
         hint = QtWidgets.QLabel()
-        hint.setStyleSheet("color:#888;font:8pt;")
+        hint.setStyleSheet("color:#888;font-size:8pt;")
         hint.setWordWrap(True)
         L.addRow("", hint)
         self._hint = hint
 
         btns = QtWidgets.QHBoxLayout()
-        ok = QtWidgets.QPushButton("Add"); ok.setStyleSheet("background:#1e5a8e;color:#fff;font:bold 9pt;")
+        ok = QtWidgets.QPushButton("Add"); ok.setStyleSheet("background:#1e5a8e;color:#fff;font-weight:bold;font-size:9pt;")
         ok.clicked.connect(self._accept); btns.addWidget(ok)
         cancel = QtWidgets.QPushButton("Cancel"); cancel.clicked.connect(self.reject); btns.addWidget(cancel)
         L.addRow(btns)

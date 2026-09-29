@@ -111,7 +111,7 @@ class SnapshotWindow(QtWidgets.QMainWindow):
         act.addStretch()
         self.bn_restore = QtWidgets.QPushButton("Restore selected")
         self.bn_restore.setStyleSheet(
-            "background:#1e5a8e;color:#fff;font:bold 10pt;"
+            "background:#1e5a8e;color:#fff;font-weight:bold;font-size:10pt;"
             "padding:6px 14px;border-radius:3px;")
         self.bn_restore.clicked.connect(self._on_restore)
         act.addWidget(self.bn_restore)

@@ -48,7 +48,7 @@ class MCTOpticsView(QtWidgets.QWidget):
 
         header = QtWidgets.QLabel(f"mctOptics — {self._prefix}")
         header.setStyleSheet(
-            "color:#73dfff;font:bold 10pt;padding:2px 4px;"
+            "color:#73dfff;font-weight:bold;font-size:10pt;padding:2px 4px;"
             "background:#1c1c1c;border:1px solid #2d2d2d;border-radius:2px;")
         outer.addWidget(header)
 
@@ -135,7 +135,7 @@ class MCTOpticsView(QtWidgets.QWidget):
 
         # Camera group
         cam_box = QtWidgets.QGroupBox("Camera")
-        cam_box.setStyleSheet("QGroupBox{color:#73dfff;font:bold 9pt;"
+        cam_box.setStyleSheet("QGroupBox{color:#73dfff;font-weight:bold;font-size:9pt;"
                               "border:1px solid #2d2d2d;margin-top:8px;}"
                               "QGroupBox::title{subcontrol-origin:margin;"
                               "left:8px;padding:0 4px;}")
@@ -175,7 +175,7 @@ class MCTOpticsView(QtWidgets.QWidget):
         headers = ["", "Camera 0", "Camera 1"]
         for c, txt in enumerate(headers):
             lbl = QtWidgets.QLabel(txt)
-            lbl.setStyleSheet("color:#73dfff;font:bold 9pt;")
+            lbl.setStyleSheet("color:#73dfff;font-weight:bold;font-size:9pt;")
             lbl.setAlignment(QtCore.Qt.AlignCenter)
             grid.addWidget(lbl, 0, c)
 
@@ -225,7 +225,7 @@ class MCTOpticsView(QtWidgets.QWidget):
         v.setContentsMargins(8, 8, 8, 8); v.setSpacing(6)
 
         cut_box = QtWidgets.QGroupBox("Cut / ROI (pixels)")
-        cut_box.setStyleSheet("QGroupBox{color:#73dfff;font:bold 9pt;"
+        cut_box.setStyleSheet("QGroupBox{color:#73dfff;font-weight:bold;font-size:9pt;"
                               "border:1px solid #2d2d2d;margin-top:8px;}"
                               "QGroupBox::title{subcontrol-origin:margin;"
                               "left:8px;padding:0 4px;}")
@@ -275,7 +275,7 @@ class MCTOpticsView(QtWidgets.QWidget):
 
         def note(text: str):
             lbl = QtWidgets.QLabel(text)
-            lbl.setStyleSheet("color:#73dfff;font:bold 9pt;"
+            lbl.setStyleSheet("color:#73dfff;font-weight:bold;font-size:9pt;"
                               "background:#1c1c1c;padding:3px 6px;"
                               "border:1px solid #2d2d2d;border-radius:2px;")
             form.addRow(lbl)

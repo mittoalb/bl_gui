@@ -137,7 +137,7 @@ class CameraView(QtWidgets.QWidget):
         # into place. Read by main_window._toggle_edit.
         self._url_edit.setProperty("_bl_gui_always_enabled", True)
         self._url_edit.setStyleSheet(
-            "background:#2d2d2d;color:#e0e0e0;font:8pt "
+            "background:#2d2d2d;color:#e0e0e0;font-size:8pt;font-family:"
             "'Liberation Mono','DejaVu Sans Mono',monospace;"
             "border:1px solid #404040;border-radius:2px;padding:1px 4px;")
         btn_reload = QtWidgets.QPushButton("↻")
@@ -145,7 +145,7 @@ class CameraView(QtWidgets.QWidget):
         btn_reload.setToolTip("Reload")
         btn_reload.clicked.connect(self.reload)
         btn_reload.setStyleSheet(
-            "background:#2d2d2d;color:#e0e0e0;font:bold 10pt;"
+            "background:#2d2d2d;color:#e0e0e0;font-weight:bold;font-size:10pt;"
             "border:1px solid #404040;border-radius:2px;padding:0;")
         bar.addWidget(self._url_edit, 1)
         bar.addWidget(btn_reload, 0)

@@ -239,7 +239,7 @@ class XanesCalibWindow(QtWidgets.QMainWindow):
             H.addWidget(b)
         H.addStretch()
         bn_close = QtWidgets.QPushButton("Save && Close")
-        bn_close.setStyleSheet("background:#1e5a8e;color:#fff;font:bold 9pt;"
+        bn_close.setStyleSheet("background:#1e5a8e;color:#fff;font-weight:bold;font-size:9pt;"
                                "padding:4px 10px;border-radius:3px;")
         bn_close.clicked.connect(self._save_and_close)
         H.addWidget(bn_close)

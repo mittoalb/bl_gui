@@ -20,7 +20,7 @@ QPushButton:hover { background: #3a3a3a; border-color: #505050; }
 QPushButton:pressed { background: #222; }
 QLineEdit {
     background: #454545; color: #e0e0e0; padding: 2px 5px;
-    border: 1px solid #606060; border-radius: 3px; font: 9pt "Liberation Mono","DejaVu Sans Mono",monospace;
+    border: 1px solid #606060; border-radius: 3px; font-size:9pt;font-family:"Liberation Mono","DejaVu Sans Mono",monospace;
 }
 QLineEdit:focus { background: #555; border: 1px solid #2980b9; }
 QComboBox {
@@ -35,9 +35,9 @@ QTabBar { qproperty-expanding: 0; }
 
 _PANEL_SS = """
     background: #323232; border: 1px solid #484848; border-radius: 3px;
-    font: bold 9pt; color: #e0e0e0;
+    font-weight:bold;font-size:9pt; color: #e0e0e0;
 """
 _PANEL_SS_EDIT = """
     background: #323232; border: 2px dashed #f39c12; border-radius: 3px;
-    font: bold 9pt; color: #e0e0e0;
+    font-weight:bold;font-size:9pt; color: #e0e0e0;
 """

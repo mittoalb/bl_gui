@@ -27,13 +27,13 @@ from .pv import caput_bg
 _SP_STYLE_CLEAN = (
     "QLineEdit{background:#2c3e50;color:#ecf0f1;"
     "border:1px solid #3498db;border-radius:3px;"
-    "padding:4px 6px;font:10pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+    "padding:4px 6px;font-size:10pt;font-family:'Liberation Mono','DejaVu Sans Mono',monospace;}"
     "QLineEdit:focus{background:#34495e;border:1px solid #5dade2;}"
 )
 _SP_STYLE_DIRTY = (
     "QLineEdit{background:#2980b9;color:#fff;"
     "border:1px solid #f39c12;border-radius:3px;"
-    "padding:4px 6px;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;}"
+    "padding:4px 6px;font-weight:bold;font-size:10pt;font-family:'Liberation Mono','DejaVu Sans Mono',monospace;}"
     "QLineEdit:focus{background:#3498db;border:1px solid #f1c40f;}"
 )
 
@@ -120,7 +120,7 @@ class PVField(QtWidgets.QWidget):
             w.textEdited.connect(lambda _=None: self._update_sp_dirty())
         elif self.kind == 'rb':
             w = QtWidgets.QLabel("---")
-            w.setStyleSheet("color:#2ecc71;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;")
+            w.setStyleSheet("color:#2ecc71;font-weight:bold;font-size:10pt;font-family:'Liberation Mono','DejaVu Sans Mono',monospace;")
         elif self.kind == 'cmb':
             w = QtWidgets.QComboBox()
             if self._choices:
@@ -136,10 +136,10 @@ class PVField(QtWidgets.QWidget):
             w = QtWidgets.QPushButton(self._button_text)
             # Green for "go" actions (value != 0), red for "stop"-ish actions.
             if str(self._button_value) in ("0", "0.0"):
-                w.setStyleSheet("background:#c0392b;color:#fff;font:bold 9pt;"
+                w.setStyleSheet("background:#c0392b;color:#fff;font-weight:bold;font-size:9pt;"
                                 "border:1px solid #e74c3c;padding:4px 10px;border-radius:3px;")
             else:
-                w.setStyleSheet("background:#27ae60;color:#fff;font:bold 9pt;"
+                w.setStyleSheet("background:#27ae60;color:#fff;font-weight:bold;font-size:9pt;"
                                 "border:1px solid #2ecc71;padding:4px 10px;border-radius:3px;")
             w.clicked.connect(self._on_btn_clicked)
         elif self.kind == 'btn_pair':
@@ -147,11 +147,11 @@ class PVField(QtWidgets.QWidget):
             w = QtWidgets.QWidget()
             hl = QtWidgets.QHBoxLayout(w); hl.setContentsMargins(0, 0, 0, 0); hl.setSpacing(2)
             b_on = QtWidgets.QPushButton(self._button_text.split("/")[0] if "/" in self._button_text else "On")
-            b_on.setStyleSheet("background:#27ae60;color:#fff;font:bold 8pt;"
+            b_on.setStyleSheet("background:#27ae60;color:#fff;font-weight:bold;font-size:8pt;"
                                "border:1px solid #2ecc71;padding:2px;border-radius:2px;")
             b_on.clicked.connect(lambda: caput_bg(self.on_pv, self._on_value) if self.on_pv else None)
             b_off = QtWidgets.QPushButton(self._button_text.split("/")[1] if "/" in self._button_text else "Off")
-            b_off.setStyleSheet("background:#c0392b;color:#fff;font:bold 8pt;"
+            b_off.setStyleSheet("background:#c0392b;color:#fff;font-weight:bold;font-size:8pt;"
                                 "border:1px solid #e74c3c;padding:2px;border-radius:2px;")
             b_off.clicked.connect(lambda: caput_bg(self.off_pv, self._off_value) if self.off_pv else None)
             hl.addWidget(b_on); hl.addWidget(b_off)
@@ -159,7 +159,7 @@ class PVField(QtWidgets.QWidget):
             # Round LED-style indicator; lights up when subscribed PV is non-zero.
             w = QtWidgets.QLabel("●")
             w.setAlignment(QtCore.Qt.AlignCenter)
-            w.setStyleSheet("color:#555;font:bold 14pt;background:transparent;")
+            w.setStyleSheet("color:#555;font-weight:bold;font-size:14pt;background:transparent;")
         else:
             w = QtWidgets.QLabel(f"?? {self.kind}")
         self._inner = w
@@ -267,7 +267,7 @@ class PVField(QtWidgets.QWidget):
             except (ValueError, TypeError):
                 on = v in ("on", "open", "true", "high", "yes", "1")
             colour = "#2ecc71" if on else "#555"
-            self._inner.setStyleSheet(f"color:{colour};font:bold 14pt;background:transparent;")
+            self._inner.setStyleSheet(f"color:{colour};font-weight:bold;font-size:14pt;background:transparent;")
 
     def monitored_pvs(self):
         """PVs the window should subscribe to for this field."""
@@ -343,7 +343,7 @@ class PVField(QtWidgets.QWidget):
             e_on = QtWidgets.QLineEdit(self.on_pv);   form.addRow("On action PV:",  e_on)
             e_of = QtWidgets.QLineEdit(self.off_pv);  form.addRow("Off action PV:", e_of)
             btns = QtWidgets.QHBoxLayout()
-            ok_b = QtWidgets.QPushButton("OK"); ok_b.setStyleSheet("background:#1e5a8e;color:#fff;font:bold 9pt;")
+            ok_b = QtWidgets.QPushButton("OK"); ok_b.setStyleSheet("background:#1e5a8e;color:#fff;font-weight:bold;font-size:9pt;")
             ok_b.clicked.connect(dlg.accept); btns.addWidget(ok_b)
             cb = QtWidgets.QPushButton("Cancel"); cb.clicked.connect(dlg.reject); btns.addWidget(cb)
             form.addRow(btns)
@@ -428,13 +428,13 @@ class ValveField(QtWidgets.QWidget):
 
             self.name_lbl = QtWidgets.QLabel(self.label_text)
             self.name_lbl.setAlignment(QtCore.Qt.AlignCenter)
-            self.name_lbl.setStyleSheet("font:bold 10pt;color:#73dfff;padding:2px;")
+            self.name_lbl.setStyleSheet("font-weight:bold;font-size:10pt;color:#73dfff;padding:2px;")
             L.addWidget(self.name_lbl)
 
             self.status_lbl = QtWidgets.QLabel("---")
             self.status_lbl.setAlignment(QtCore.Qt.AlignCenter)
             self.status_lbl.setStyleSheet(
-                "background:#404040;color:#e0e0e0;font:bold 11pt;"
+                "background:#404040;color:#e0e0e0;font-weight:bold;font-size:11pt;"
                 "border:1px solid #606060;border-radius:3px;padding:4px;")
             self.status_lbl.setMinimumHeight(28)
             L.addWidget(self.status_lbl)
@@ -445,7 +445,7 @@ class ValveField(QtWidgets.QWidget):
                                       QtWidgets.QSizePolicy.Preferred)
             self.btn_on.setMinimumHeight(32)
             self.btn_on.setStyleSheet(
-                "background:#27ae60;color:#fff;font:bold 10pt;padding:4px;"
+                "background:#27ae60;color:#fff;font-weight:bold;font-size:10pt;padding:4px;"
                 "border:1px solid #2ecc71;border-radius:3px;")
             self.btn_on.clicked.connect(lambda: self._fire(self.on_pv, self._on_value))
             btn_row.addWidget(self.btn_on)
@@ -455,7 +455,7 @@ class ValveField(QtWidgets.QWidget):
                                        QtWidgets.QSizePolicy.Preferred)
             self.btn_off.setMinimumHeight(32)
             self.btn_off.setStyleSheet(
-                "background:#c0392b;color:#fff;font:bold 10pt;padding:4px;"
+                "background:#c0392b;color:#fff;font-weight:bold;font-size:10pt;padding:4px;"
                 "border:1px solid #e74c3c;border-radius:3px;")
             self.btn_off.clicked.connect(lambda: self._fire(self.off_pv, self._off_value))
             btn_row.addWidget(self.btn_off)
@@ -475,7 +475,7 @@ class ValveField(QtWidgets.QWidget):
         self.status_lbl = QtWidgets.QLabel("---")
         self.status_lbl.setAlignment(QtCore.Qt.AlignCenter)
         self.status_lbl.setStyleSheet(
-            "background:#404040;color:#e0e0e0;font:bold 9pt;"
+            "background:#404040;color:#e0e0e0;font-weight:bold;font-size:9pt;"
             "border:1px solid #606060;border-radius:2px;padding:2px 6px;"
         )
         self.status_lbl.setMinimumWidth(50)
@@ -484,13 +484,13 @@ class ValveField(QtWidgets.QWidget):
         fs = 8 if btn_width <= 50 else 10
         self.btn_on = QtWidgets.QPushButton(on_text); self.btn_on.setFixedWidth(btn_width)
         self.btn_on.setStyleSheet(
-            f"background:#27ae60;color:#fff;font:bold {fs}pt;padding:4px;")
+            f"background:#27ae60;color:#fff;font-weight:bold;font-size:{fs}pt;padding:4px;")
         self.btn_on.clicked.connect(lambda: self._fire(self.on_pv, self._on_value))
         L.addWidget(self.btn_on)
 
         self.btn_off = QtWidgets.QPushButton(off_text); self.btn_off.setFixedWidth(btn_width)
         self.btn_off.setStyleSheet(
-            f"background:#c0392b;color:#fff;font:bold {fs}pt;padding:4px;")
+            f"background:#c0392b;color:#fff;font-weight:bold;font-size:{fs}pt;padding:4px;")
         self.btn_off.clicked.connect(lambda: self._fire(self.off_pv, self._off_value))
         L.addWidget(self.btn_off)
 
@@ -513,7 +513,7 @@ class ValveField(QtWidgets.QWidget):
     def _show_pending(self, going_on):
         self.status_lbl.setText("ON?" if going_on else "OFF?")
         self.status_lbl.setStyleSheet(
-            "background:#2980b9;color:#fff;font:bold 10pt;"
+            "background:#2980b9;color:#fff;font-weight:bold;font-size:10pt;"
             "border:1px solid #3a95d8;border-radius:2px;padding:2px 6px;"
         )
         # Safety net so we don't get stuck on "?" forever. Cases where the
@@ -575,16 +575,16 @@ class ValveField(QtWidgets.QWidget):
             # Hide the status label; active button bright, inactive dim.
             self.status_lbl.hide()
             active_on = (
-                "background:#27ae60;color:#fff;font:bold 10pt;padding:4px;"
+                "background:#27ae60;color:#fff;font-weight:bold;font-size:10pt;padding:4px;"
                 "border:2px solid #2ecc71;border-radius:3px;")
             inactive_on = (
-                "background:#1e3d2a;color:#888;font:10pt;padding:4px;"
+                "background:#1e3d2a;color:#888;font-size:10pt;padding:4px;"
                 "border:1px solid #2c5e41;border-radius:3px;")
             active_off = (
-                "background:#c0392b;color:#fff;font:bold 10pt;padding:4px;"
+                "background:#c0392b;color:#fff;font-weight:bold;font-size:10pt;padding:4px;"
                 "border:2px solid #e74c3c;border-radius:3px;")
             inactive_off = (
-                "background:#4a1b15;color:#888;font:10pt;padding:4px;"
+                "background:#4a1b15;color:#888;font-size:10pt;padding:4px;"
                 "border:1px solid #7a2a22;border-radius:3px;")
             if on:
                 self.btn_on.setStyleSheet(active_on)
@@ -596,13 +596,13 @@ class ValveField(QtWidgets.QWidget):
         if on:
             self.status_lbl.setText(self._status_on_text)
             self.status_lbl.setStyleSheet(
-                "background:#27ae60;color:#fff;font:bold 11pt;"
+                "background:#27ae60;color:#fff;font-weight:bold;font-size:11pt;"
                 "border:1px solid #2ecc71;border-radius:3px;padding:4px;"
             )
         else:
             self.status_lbl.setText(self._status_off_text)
             self.status_lbl.setStyleSheet(
-                "background:#c0392b;color:#fff;font:bold 11pt;"
+                "background:#c0392b;color:#fff;font-weight:bold;font-size:11pt;"
                 "border:1px solid #e74c3c;border-radius:3px;padding:4px;"
             )
 
@@ -690,7 +690,7 @@ class ValveField(QtWidgets.QWidget):
         e_on   = QtWidgets.QLineEdit(self.on_pv);           form.addRow("On action PV:",    e_on)
         e_of   = QtWidgets.QLineEdit(self.off_pv);          form.addRow("Off action PV:",   e_of)
         btns = QtWidgets.QHBoxLayout()
-        ok = QtWidgets.QPushButton("OK"); ok.setStyleSheet("background:#1e5a8e;color:#fff;font:bold 9pt;")
+        ok = QtWidgets.QPushButton("OK"); ok.setStyleSheet("background:#1e5a8e;color:#fff;font-weight:bold;font-size:9pt;")
         ok.clicked.connect(dlg.accept); btns.addWidget(ok)
         cancel = QtWidgets.QPushButton("Cancel"); cancel.clicked.connect(dlg.reject); btns.addWidget(cancel)
         form.addRow(btns)
@@ -763,7 +763,7 @@ class ToggleField(QtWidgets.QWidget):
 
         self.name_lbl = QtWidgets.QLabel(self.label_text)
         self.name_lbl.setAlignment(QtCore.Qt.AlignCenter)
-        self.name_lbl.setStyleSheet("font:bold 9pt;color:#73dfff;padding:2px;")
+        self.name_lbl.setStyleSheet("font-weight:bold;font-size:9pt;color:#73dfff;padding:2px;")
         L.addWidget(self.name_lbl)
 
         self.btn = QtWidgets.QPushButton(self.open_text)
@@ -783,7 +783,7 @@ class ToggleField(QtWidgets.QWidget):
             bg = "#27ae60" if self._state_label else "#c0392b"
             bd = "#2ecc71" if self._state_label else "#e74c3c"
             self.btn.setStyleSheet(
-                f"background:{bg};color:#fff;font:bold 11pt;"
+                f"background:{bg};color:#fff;font-weight:bold;font-size:11pt;"
                 f"border:1px solid {bd};border-radius:3px;padding:4px;"
             )
         else:
@@ -791,7 +791,7 @@ class ToggleField(QtWidgets.QWidget):
             bg = "#c0392b" if self._state_label else "#27ae60"
             bd = "#e74c3c" if self._state_label else "#2ecc71"
             self.btn.setStyleSheet(
-                f"background:{bg};color:#fff;font:bold 11pt;"
+                f"background:{bg};color:#fff;font-weight:bold;font-size:11pt;"
                 f"border:1px solid {bd};border-radius:3px;padding:4px;"
             )
 
@@ -917,7 +917,7 @@ class ToggleField(QtWidgets.QWidget):
         e_open   = QtWidgets.QLineEdit(self.open_pv);     form.addRow("Open trigger PV:",   e_open)
         e_close  = QtWidgets.QLineEdit(self.close_pv);    form.addRow("Close trigger PV:",  e_close)
         btns = QtWidgets.QHBoxLayout()
-        ok = QtWidgets.QPushButton("OK"); ok.setStyleSheet("background:#1e5a8e;color:#fff;font:bold 9pt;")
+        ok = QtWidgets.QPushButton("OK"); ok.setStyleSheet("background:#1e5a8e;color:#fff;font-weight:bold;font-size:9pt;")
         ok.clicked.connect(dlg.accept); btns.addWidget(ok)
         cancel = QtWidgets.QPushButton("Cancel"); cancel.clicked.connect(dlg.reject); btns.addWidget(cancel)
         form.addRow(btns)

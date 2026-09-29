@@ -54,7 +54,7 @@ class MC(QtWidgets.QFrame):
         desc_row.addWidget(self.btn_details, 0)
         L.addLayout(desc_row)
         self.egu = QtWidgets.QLabel(""); self.egu.setAlignment(QtCore.Qt.AlignCenter)
-        self.egu.setStyleSheet("color:#888; font:7pt;"); self.egu.setFixedHeight(12); L.addWidget(self.egu)
+        self.egu.setStyleSheet("color:#888; font-size:7pt;"); self.egu.setFixedHeight(12); L.addWidget(self.egu)
         self.rbv = QtWidgets.QLabel("---"); self.rbv.setAlignment(QtCore.Qt.AlignCenter)
         self.rbv.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred); L.addWidget(self.rbv)
         self.val = QtWidgets.QLineEdit(); self.val.setAlignment(QtCore.Qt.AlignCenter)
@@ -163,52 +163,52 @@ class MC(QtWidgets.QFrame):
         if self._enabled:
             self.btn_able.setText("Enabled")
             self.btn_able.setStyleSheet(
-                f"background:#27ae60;color:#fff;font:bold {_fs(8)}pt;padding:1px;"
+                f"background:#27ae60;color:#fff;font-weight:bold;font-size:{_fs(8)}pt;padding:1px;"
                 "border:1px solid #2ecc71;border-radius:2px;"
             )
         else:
             self.btn_able.setText("Disabled")
             self.btn_able.setStyleSheet(
-                f"background:#7f8c8d;color:#fff;font:bold {_fs(8)}pt;padding:1px;"
+                f"background:#7f8c8d;color:#fff;font-weight:bold;font-size:{_fs(8)}pt;padding:1px;"
                 "border:1px solid #95a5a6;border-radius:2px;"
             )
 
     def _apply_fonts(self):
         sd=_fs(9); sr=_fs(12); sv=_fs(10); st=_fs(9); sb=_fs(8); stw=_fs(9)
         seg=_fs(8)
-        self.desc.setStyleSheet(f"background:#1e5a8e;color:#fff;font:bold {sd}pt;padding:2px;border-radius:2px;")
+        self.desc.setStyleSheet(f"background:#1e5a8e;color:#fff;font-weight:bold;font-size:{sd}pt;padding:2px;border-radius:2px;")
         self.btn_details.setStyleSheet(
-            f"QPushButton{{background:#2d2d2d;color:#e0e0e0;font:bold {sd}pt;"
+            f"QPushButton{{background:#2d2d2d;color:#e0e0e0;font-weight:bold;font-size:{sd}pt;"
             "border:1px solid #404040;border-radius:2px;padding:0px;}}"
             "QPushButton:hover{background:#3a3a3a;}"
         )
-        self.rbv.setStyleSheet(f"background:#000000;color:#2ecc71;font:bold {sr}pt 'Liberation Mono','DejaVu Sans Mono',monospace;padding:3px;border:1px solid #333;border-radius:2px;")
+        self.rbv.setStyleSheet(f"background:#000000;color:#2ecc71;font-weight:bold;font-size:{sr}pt;font-family:'Liberation Mono','DejaVu Sans Mono',monospace;padding:3px;border:1px solid #333;border-radius:2px;")
         # Dirty (un-committed edit) uses a blue background + amber border
         # so it's obvious you still owe an Enter. Clean is just the normal
         # font override the app-level theme sets.
         _dirty_ss = (
             "QLineEdit{{background:#2980b9;color:#fff;padding:2px 5px;"
             "border:1px solid #f39c12;border-radius:3px;"
-            "font:bold {pt}pt 'Liberation Mono','DejaVu Sans Mono',monospace;}}"
+            "font-weight:bold;font-size:{pt}pt;font-family:'Liberation Mono','DejaVu Sans Mono',monospace;}}"
             "QLineEdit:focus{{background:#3498db;border:1px solid #f1c40f;}}"
         )
         if getattr(self, "_val_dirty", False):
             self.val.setStyleSheet(_dirty_ss.format(pt=sv))
         else:
-            self.val.setStyleSheet(f"font:{sv}pt;")
+            self.val.setStyleSheet(f"font-size:{sv}pt;")
         if getattr(self, "_twv_dirty", False):
             self.twv.setStyleSheet(_dirty_ss.format(pt=st))
         else:
-            self.twv.setStyleSheet(f"font:bold {st}pt;")
+            self.twv.setStyleSheet(f"font-weight:bold;font-size:{st}pt;")
         # Units label (egu) — now scales with the font slider too.
-        self.egu.setStyleSheet(f"color:#888;font:{seg}pt;")
+        self.egu.setStyleSheet(f"color:#888;font-size:{seg}pt;")
         self.egu.setFixedHeight(max(12, seg + 4))
-        self.btn_twr.setStyleSheet(f"font:{stw}pt;padding:0 2px;"); self.btn_twf.setStyleSheet(f"font:{stw}pt;padding:0 2px;")
+        self.btn_twr.setStyleSheet(f"font-size:{stw}pt;padding:0 2px;"); self.btn_twf.setStyleSheet(f"font-size:{stw}pt;padding:0 2px;")
         self.btn_twr.setFixedWidth(max(18, _fs(18))); self.btn_twf.setFixedWidth(max(18, _fs(18)))
-        self.stat.setStyleSheet(f"font:{_fs(8)}pt;")
-        self.btn_stop.setStyleSheet(f"background:#c0392b;color:#fff;font:bold {sb}pt;padding:1px;border:1px solid #e74c3c;border-radius:2px;")
+        self.stat.setStyleSheet(f"font-size:{_fs(8)}pt;")
+        self.btn_stop.setStyleSheet(f"background:#c0392b;color:#fff;font-weight:bold;font-size:{sb}pt;padding:1px;border:1px solid #e74c3c;border-radius:2px;")
         self.btn_set.setStyleSheet(
-            f"background:#f39c12;color:#000;font:bold {sb}pt;"
+            f"background:#f39c12;color:#000;font-weight:bold;font-size:{sb}pt;"
             "padding:1px;border:1px solid #f1c40f;border-radius:2px;")
         # Refresh the enable/disable button colour + font
         self.set_enabled(self._enabled)
@@ -279,13 +279,13 @@ class MC(QtWidgets.QFrame):
         ss = _fs(8)
         moving = self._movn in ("1", "1.0")
         if moving:
-            self.stat.setText("Moving"); self.stat.setStyleSheet(f"font:bold {ss}pt;color:#e74c3c;")
+            self.stat.setText("Moving"); self.stat.setStyleSheet(f"font-weight:bold;font-size:{ss}pt;color:#e74c3c;")
             if not self._flash_timer.isActive():
                 self._flash_timer.start()
         elif self._dmov in ("1", "1.0"):
-            self.stat.setText("Done"); self.stat.setStyleSheet(f"font:{ss}pt;color:#2ecc71;")
+            self.stat.setText("Done"); self.stat.setStyleSheet(f"font-size:{ss}pt;color:#2ecc71;")
         else:
-            self.stat.setText(""); self.stat.setStyleSheet(f"font:{ss}pt;")
+            self.stat.setText(""); self.stat.setStyleSheet(f"font-size:{ss}pt;")
         if not moving and self._flash_timer.isActive():
             self._flash_timer.stop()
             self._flash_on = False
@@ -367,12 +367,12 @@ _DEFAULT_TABS = ["User Mode", "Expert Mode"]
 
 def _rb():
     lbl = QtWidgets.QLabel("---")
-    lbl.setStyleSheet("color:#2ecc71;font:bold 10pt 'Liberation Mono','DejaVu Sans Mono',monospace;")
+    lbl.setStyleSheet("color:#2ecc71;font-weight:bold;font-size:10pt;font-family:'Liberation Mono','DejaVu Sans Mono',monospace;")
     return lbl
 
 
 def _act(text, cb):
     b = QtWidgets.QPushButton(text)
-    b.setStyleSheet("background:#1e5a8e;color:#fff;font:bold 9pt;border:1px solid #2980b9;padding:4px 10px;")
+    b.setStyleSheet("background:#1e5a8e;color:#fff;font-weight:bold;font-size:9pt;border:1px solid #2980b9;padding:4px 10px;")
     b.clicked.connect(cb)
     return b
