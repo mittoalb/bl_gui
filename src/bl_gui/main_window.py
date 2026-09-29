@@ -278,6 +278,22 @@ class Win(QtWidgets.QMainWindow):
         self.add_tab_btn.clicked.connect(self._add_new_tab)
         top.addWidget(self.add_tab_btn)
 
+        # + New Layout — create a fresh blank layout file in ~/.bl_gui/
+        # without needing the CLI. Doesn't switch this session's
+        # layout; that still requires relaunching. See
+        # _open_new_layout_dialog for the details.
+        self.new_layout_btn = QtWidgets.QPushButton("+ New Layout")
+        self.new_layout_btn.setFixedSize(100, 28)
+        self.new_layout_btn.setStyleSheet(
+            "background:#2d2d2d;color:#e0e0e0;font-size:9pt;"
+            "border:1px solid #404040;border-radius:3px;")
+        self.new_layout_btn.setToolTip(
+            "Create a new empty layout in ~/.bl_gui/ (uses "
+            "_no_defaults so the canvas starts truly blank). "
+            "Relaunch bl_gui with its name to switch to it.")
+        self.new_layout_btn.clicked.connect(self._open_new_layout_dialog)
+        top.addWidget(self.new_layout_btn)
+
         # Hide all edit controls unless edit mode was requested at launch
         if not self._allow_edit:
             self._font_label_widget.setVisible(False)
@@ -286,6 +302,7 @@ class Win(QtWidgets.QMainWindow):
             self.add_panel_btn.setVisible(False)
             self.add_tab_btn.setVisible(False)
             self.add_widget_btn.setVisible(False)
+            self.new_layout_btn.setVisible(False)
 
         root.addLayout(top)
 
@@ -2630,6 +2647,69 @@ class Win(QtWidgets.QMainWindow):
     def _open_snapshot_window(self):
         from .snapshot_window import launch as _snap_launch
         _snap_launch(parent=self)
+
+    def _open_new_layout_dialog(self):
+        """Create a blank layout file in ~/.bl_gui/ from the top-bar
+        button, without needing the CLI. The new layout uses
+        _no_defaults so the canvas starts truly empty (nothing to
+        delete first). This session keeps its current layout — the
+        user must relaunch `bl_gui edit <name>` to switch into the
+        newly created one."""
+        name, ok = QtWidgets.QInputDialog.getText(
+            self, "New Layout",
+            "Layout name (letters, digits, dash or underscore):",
+            QtWidgets.QLineEdit.Normal, "")
+        if not ok:
+            return
+        name = name.strip()
+        if not name:
+            return
+        if not re.match(r"^[A-Za-z0-9._-]+$", name):
+            QtWidgets.QMessageBox.warning(
+                self, "Invalid Name",
+                "Layout name may contain only letters, digits, "
+                "dot, dash, or underscore.")
+            return
+        # Strip a trailing .json so the user can type either form.
+        if name.endswith(".json"):
+            name = name[:-5]
+        user_dir = os.path.expanduser("~/.bl_gui")
+        path = os.path.join(user_dir, f"{name}.json")
+        if os.path.isfile(path):
+            reply = QtWidgets.QMessageBox.question(
+                self, "Layout Exists",
+                f"{path} already exists.\n\n"
+                f"Overwrite it with a fresh blank layout?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No)
+            if reply != QtWidgets.QMessageBox.Yes:
+                return
+        try:
+            os.makedirs(user_dir, exist_ok=True)
+            starter = {
+                "_no_defaults": True,
+                "_tabs": ["Main"],
+                "_tab_sizes": {"Main": [1200, 720]},
+                "_tab_label_fs": 10,
+                "_panels": {},
+            }
+            # Atomic write — same pattern _save_layout uses.
+            tmp = path + ".tmp"
+            with open(tmp, "w") as fh:
+                json.dump(starter, fh, indent=2)
+                fh.flush(); os.fsync(fh.fileno())
+            os.replace(tmp, path)
+        except Exception as e:  # noqa: BLE001
+            QtWidgets.QMessageBox.critical(
+                self, "Save Failed",
+                f"Could not create {path}:\n{e}")
+            return
+        QtWidgets.QMessageBox.information(
+            self, "Layout Created",
+            f"Created {path}\n\n"
+            f"To open it, quit this window and relaunch:\n"
+            f"    bl_gui edit {name}\n"
+            f"\nThis session keeps its current layout untouched.")
 
     @QtCore.pyqtSlot(str, str)
     def _on_pv(self, pv_name, value):
