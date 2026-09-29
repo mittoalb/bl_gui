@@ -14,6 +14,7 @@ from .pv import PVEngine, caput_bg
 from .pv_field import PVField, ValveField, ToggleField
 from . import theme as _theme_mod
 from .theme import _IMG, _PANEL_SS, _PANEL_SS_EDIT, _SS
+from . import widget_registry as _wreg
 
 
 # ── XANES element edges — Energy-panel quick-select ─────────────────────
@@ -219,21 +220,43 @@ class Win(QtWidgets.QMainWindow):
         self.add_panel_btn.clicked.connect(self._add_new_panel)
         top.addWidget(self.add_panel_btn)
 
-        # + Widget: dropdown of pre-built widget types. Each menu entry
-        # drops a new panel wrapping that widget on the current tab.
-        # Only visible in edit mode + expert tabs, same as + Panel.
-        # To add a new plugin, extend WIDGET_REGISTRY below — no other
-        # code changes needed here.
+        # + Widget: dropdown of pre-built widget types. Two flavours:
+        #   * atomic — factory returns a QWidget that we drop into a
+        #     fresh Panel via _add_widget_from_registry.
+        #   * preset — builder owns the whole Panel (Shutters, Beam
+        #     Info, Energy, …). Registered by pointing at Win's
+        #     _build_panel_* methods via PANEL_PRESETS.
+        # Registrations come from three places, all unified through
+        # bl_gui.widget_registry: (1) the built-in atomics defined in
+        # _widget_registry() below, (2) any module under
+        # bl_gui.widgets_ext (auto-imported), and (3) any .py the user
+        # drops in ~/.bl_gui/widgets/. New widgets never require
+        # editing this file.
+        self._populate_widget_registry()
         self.add_widget_btn = QtWidgets.QPushButton("+ Widget"); self.add_widget_btn.setFixedSize(80, 28)
         self.add_widget_btn.setStyleSheet("background:#2d2d2d;color:#e0e0e0;font:9pt;border:1px solid #404040;border-radius:3px;")
         _wmenu = QtWidgets.QMenu(self.add_widget_btn)
         _wmenu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;} "
                              "QMenu::item:selected{background:#1e5a8e;}")
+        # Atomic entries (Motor card, PV rows, Camera, MCTOptics, plus
+        # anything registered from a widgets_ext module).
         for label, (default_name, default_w, default_h, _factory) in \
                 self._widget_registry().items():
             _wmenu.addAction(
                 label,
                 lambda checked=False, k=label: self._add_widget_from_registry(k))
+        # Preset entries as a submenu so the top-level menu doesn't
+        # explode once every default panel is a droppable preset.
+        presets = _wreg.registered_presets()
+        if presets:
+            _wmenu.addSeparator()
+            _pmenu = _wmenu.addMenu("Presets ▸")
+            _pmenu.setStyleSheet("QMenu{background:#2d2d2d;color:#e0e0e0;} "
+                                 "QMenu::item:selected{background:#1e5a8e;}")
+            for label in presets:
+                _pmenu.addAction(
+                    label,
+                    lambda checked=False, k=label: self._add_preset_from_registry(k))
         self.add_widget_btn.setMenu(_wmenu)
         top.addWidget(self.add_widget_btn)
 
@@ -1587,7 +1610,7 @@ class Win(QtWidgets.QMainWindow):
                            button_text="Action", button_value=1,
                            parent=parent)
 
-        return {
+        builtin = {
             "Motor card":         ("Motor", 130, 200, _motor_factory),
             "Valve / Shutter":    ("Valve", 260, 90,  _valve_factory),
             "Toggle button":      ("Toggle", 180, 90, _toggle_factory),
@@ -1598,6 +1621,104 @@ class Win(QtWidgets.QMainWindow):
             "Web view / Camera":  ("Web view", 480, 360, _webview_factory),
             "MCT Optics":         ("MCTOptics", 520, 420, _mctoptics_factory),
         }
+        # Merge in atomic widgets registered from widgets_ext modules
+        # or ~/.bl_gui/widgets/. Built-ins listed first (menu order);
+        # extension entries appended after unless they collide (in
+        # which case the extension wins — lets a project override a
+        # built-in with a locally-patched version).
+        merged = dict(builtin)
+        for label, entry in _wreg.registered_widgets().items():
+            merged[label] = entry
+        return merged
+
+    def _populate_widget_registry(self):
+        """Ensure widgets_ext modules are imported (register-on-import)
+        AND that every PANEL_PRESETS entry is registered as a preset
+        with a bound-method builder. Idempotent — the underlying
+        registry replaces on same key, and discovery uses importlib
+        which no-ops on re-import."""
+        if not getattr(self, "_widgets_discovered", False):
+            _wreg.discover_all()
+            self._widgets_discovered = True
+        # Bind each Win._build_panel_* method as a preset builder so
+        # the + Widget menu (and the load path in Phase 3) can find
+        # them via the same API third-party widgets use.
+        #
+        # PANEL_PRESETS lists all 14 motor-group base names against
+        # the same _build_panel_motor_groups method (that builder
+        # builds every group in one pass). For the menu we dedupe by
+        # method name so users see one "Motor groups (TXM)" entry, not
+        # 14 that each build the full loop. Phase 3 will do per-group
+        # instantiation properly.
+        _seen_methods = set()
+        # Friendlier label for method names that map from multiple
+        # panel base titles — used only in the menu; the underlying
+        # default_name (needed for load-path name-matching later)
+        # keeps the first base title seen.
+        _label_overrides = {
+            "_build_panel_motor_groups": "Motor groups (TXM defaults)",
+            "_build_panel_beam_info":    "Machine info",
+            "_build_panel_beam_status":  "Beam status",
+            "_build_panel_ops_messages": "OPS messages",
+            "_build_panel_pv_save_load": "PV save / load",
+            "_build_panel_plc_outputs":  "PLC outputs",
+            "_build_panel_bpm_epid":     "BPM / EPID",
+            "_build_panel_all_stop":     "ALL STOP",
+            "_build_panel_in_out":       "In / Out",
+        }
+        for base_name, (method_name, w, h) in self.PANEL_PRESETS.items():
+            if method_name in _seen_methods:
+                continue
+            _seen_methods.add(method_name)
+            method = getattr(self, method_name, None)
+            if method is None:
+                continue
+            label = _label_overrides.get(method_name, base_name)
+            # default-arg closure so the loop var doesn't leak.
+            def _builder(win, tab_name, _m=method):
+                return _m(tab_name)
+            _wreg.register_preset(label, base_name, w, h, _builder)
+
+    def _add_preset_from_registry(self, label):
+        """Handler for + Widget → Presets ▸ <label>. Primes the
+        _build_state shared-var dict so the preset builder (which
+        was originally an inline section of _build_all_panels) has
+        the (x, y, GAP, iy, ci) locals it expects, then invokes the
+        builder for the currently-shown tab."""
+        entry = _wreg.registered_presets().get(label)
+        if entry is None:
+            print(f"[WIDGETS] unknown preset {label!r}")
+            return
+        default_name, w, h, builder = entry
+        current_tab = self.tab_widget.tabText(self.tab_widget.currentIndex())
+        if not current_tab:
+            print("[WIDGETS] no current tab, cannot drop preset")
+            return
+        # Reset the shared-state dict so builders that read x/y see a
+        # sensible starting position (top-left of the canvas). Users
+        # can drag / resize after the drop.
+        self._build_state = {'x': 50, 'y': 50, 'GAP': 4, 'iy': 50, 'ci': 0}
+        before_keys = set(self._panels.keys())
+        try:
+            builder(self, current_tab)
+        except Exception as e:  # noqa: BLE001
+            print(f"[WIDGETS] preset {label!r} failed to build: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+        # If the builder marked a panel as pre-deleted (via the opt-in
+        # keep_keys mechanism) it would silently return None-panel and
+        # not add anything. Detect and log so the user isn't left
+        # wondering.
+        added = [k for k in self._panels if k not in before_keys]
+        if not added:
+            print(f"[WIDGETS] preset {label!r} produced no visible panel")
+            return
+        # Match edit-mode state and force widget refresh so the newly
+        # added panel is immediately draggable.
+        for k in added:
+            self._panels[k].set_edit(self._edit_mode)
+        print(f"[WIDGETS] preset {label!r} added: {added}")
 
     def _new_field_id(self, prefix: str) -> str:
         """Generate a unique field_id for a dynamically-added PV field.
