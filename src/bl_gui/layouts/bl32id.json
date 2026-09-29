@@ -1,462 +1,139 @@
 {
-  "_font_scale": 50,
+  "_no_defaults": true,
+  "_font_scale": 98,
   "_tabs": [
     "User Mode",
     "Expert Mode"
   ],
   "_tab_sizes": {
     "User Mode": [
-      1178,
-      1306
+      1337,
+      1111
     ],
     "Expert Mode": [
-      1488,
-      1290
+      1836,
+      1306
     ]
   },
   "_tab_label_fs": 8,
-  "_deleted_panels": [
-    "Nano Focus::User Mode",
-    "Beamstop::User Mode",
-    "Pinhole::User Mode",
-    "Condenser::User Mode",
-    "Phase Ring::User Mode",
-    "BPM/EPID::User Mode",
-    "Diffuser::User Mode",
-    "Detector::User Mode",
-    "Other::User Mode",
-    "Furnace::User Mode",
-    "Schematic::Expert Mode",
-    "Sample::User Mode",
-    "Nano Focus#1::Expert Mode",
-    "Nano Focus#2::Expert Mode",
-    "Nano Focus::Expert Mode",
-    "Bertrand Lens#1::User Mode"
-  ],
   "_panels": {
-    "Shutters::User Mode": [
-      8,
-      134,
-      397,
-      126
-    ],
-    "Beam::User Mode": [
-      811,
-      5,
-      350,
-      80
-    ],
-    "Presets::User Mode": [
-      810,
-      91,
-      351,
-      104
-    ],
-    "Zone Plate::User Mode": [
-      641,
-      396,
-      133,
-      190
-    ],
-    "Bertrand Lens::User Mode": [
-      2,
-      396,
-      248,
-      190
-    ],
-    "Queensgate::User Mode": [
-      572,
-      656,
-      248,
-      190
-    ],
-    "Ensemble::User Mode": [
-      254,
-      396,
-      132,
-      190
-    ],
-    "In / Out::User Mode": [
-      3,
-      590,
-      817,
-      63
-    ],
-    "Energy::User Mode": [
-      434,
-      113,
-      340,
-      280
-    ],
-    "Camera::User Mode": [
-      811,
-      202,
-      350,
-      246
-    ],
-    "Crop::User Mode": [
-      811,
-      451,
-      350,
-      63
-    ],
-    "Valves::User Mode": [
-      3,
-      287,
-      236,
-      106
-    ],
-    "PLC Outputs::User Mode": [
-      267,
-      303,
-      153,
-      83
-    ],
-    "PV Save/Load::User Mode": [
-      572,
-      1111,
-      372,
-      88
-    ],
-    "Beam Status::User Mode": [
-      3,
-      4,
-      400,
-      100
-    ],
-    "OPS Messages::User Mode": [
-      408,
-      4,
-      398,
-      101
-    ],
-    "Shaker::User Mode": [
-      836,
-      518,
-      325,
-      328
-    ],
+    "Shutters::User Mode": [5, 109, 397, 126],
+    "Beam::User Mode": [906, 7, 351, 95],
+    "Zone Plate::User Mode": [668, 380, 139, 208],
+    "Bertrand Lens::User Mode": [3, 380, 260, 208],
+    "Queensgate::User Mode": [572, 656, 250, 197],
+    "Ensemble::User Mode": [266, 380, 139, 208],
+    "In / Out::User Mode": [2, 591, 817, 63],
+    "Energy::User Mode": [815, 209, 506, 302],
+    "Camera::User Mode": [443, 151, 354, 215],
+    "Valves::User Mode": [6, 240, 243, 108],
+    "PLC Outputs::User Mode": [252, 244, 153, 83],
+    "PV Save/Load::User Mode": [572, 1111, 372, 88],
+    "Beam Status::User Mode": [3, 4, 397, 97],
+    "OPS Messages::User Mode": [408, 4, 389, 132],
+    "Shaker::User Mode": [929, 516, 325, 328],
+    "Launchers::User Mode": [571, 982, 625, 120],
+    "Displays::User Mode": [570, 851, 627, 126],
+    "Schematic::User Mode": [3, 664, 565, 543],
+    "ALL STOP::User Mode": [1160, 1106, 161, 95],
+    "Shutters::Expert Mode": [2, 141, 410, 130],
+    "Beam::Expert Mode": [813, 4, 360, 131],
+    "Condenser::Expert Mode": [8, 797, 596, 190],
+    "Zone Plate::Expert Mode": [263, 392, 364, 190],
+    "Phase Ring::Expert Mode": [7, 997, 364, 190],
+    "Detector::Expert Mode": [894, 995, 343, 194],
+    "Sample::Expert Mode": [634, 797, 248, 190],
+    "Pinhole::Expert Mode": [629, 393, 248, 190],
+    "Beamstop::Expert Mode": [264, 589, 248, 190],
+    "Diffuser::Expert Mode": [1020, 798, 132, 190],
+    "Furnace::Expert Mode": [374, 996, 364, 190],
+    "Queensgate::Expert Mode": [902, 594, 249, 195],
+    "Ensemble::Expert Mode": [885, 798, 132, 190],
+    "Other::Expert Mode": [1, 509, 248, 190],
+    "In / Out::Expert Mode": [1, 277, 785, 110],
+    "Energy::Expert Mode": [1175, 357, 475, 320],
+    "Camera::Expert Mode": [1176, 4, 340, 250],
+    "Crop::Expert Mode": [1177, 259, 340, 95],
+    "Valves::Expert Mode": [1, 392, 260, 110],
+    "PLC Outputs::Expert Mode": [578, 139, 191, 79],
+    "BPM/EPID::Expert Mode": [1413, 696, 400, 100],
+    "PV Save/Load::Expert Mode": [1550, 800, 264, 67],
+    "Beam Status::Expert Mode": [3, 4, 397, 130],
+    "OPS Messages::Expert Mode": [405, 4, 405, 131],
+    "Shaker::Expert Mode": [878, 139, 295, 337],
+    "ALL STOP::Expert Mode": [1639, 1073, 176, 111],
+    "Motor::User Mode": [831, 94, 130, 200],
+    "Bertrand Lens#3::User Mode": [407, 380, 259, 209],
+    "Queensgate#4::Expert Mode": [745, 995, 144, 194],
+    "Beam Stop#5::Expert Mode": [1252, 997, 248, 190],
+    "Launchers#7::Expert Mode": [1519, 4, 189, 281],
+    "Displays#8::Expert Mode": [1656, 307, 165, 371],
+    "Presets#11::Expert Mode": [416, 141, 160, 111],
+    "Beamstop#12::Expert Mode": [517, 588, 248, 190],
+    "Presets#13::User Mode": [965, 105, 233, 98],
+    "Beam#14::Expert Mode": [1186, 856, 360, 131]
+  },
+  "_buttons": {
     "Launchers::User Mode": [
-      572,
-      979,
-      591,
-      125
+      {"label": "ImageJ",     "type": "shell", "action": "/home/beams/USERTXM/Software/ImageJ/ImageJ.sh",                                                                                                                                            "bg": "#ffff7f", "fg": "#000000", "font_size": 10},
+      {"label": "Detector",   "type": "shell", "action": "/home/beams/USERTXM/epics/synApps/support/32idbSP1/iocBoot/ioc32idbSP1/softioc/32idbSP1.sh medm",                                                                                          "bg": "#55557f", "fg": "#ffffff", "font_size": 10},
+      {"label": "XRayServer", "type": "shell", "action": "firefox http://164.54.102.61:8009/ &",                                                                                                                                                    "bg": "#55557f", "fg": "#ffffff", "font_size": 10},
+      {"label": "IOCs",       "type": "shell", "action": "medm -x /home/beams/USERTXM/scripts/iocs_start.adl &",                                                                                                                                    "bg": "#623d2e", "fg": "#ffffff", "font_size": 10},
+      {"label": "32ID Main",  "type": "shell", "action": "/home/beams/USERTXM/start_caQtDM_32id",                                                                                                                                                    "bg": "#5555ff", "fg": "#ffffff", "font_size": 10},
+      {"label": "Web IOCs",   "type": "shell", "action": "/home/beams/USERTXM/scripts/ioc_page.sh",                                                                                                                                                  "bg": "#005500", "fg": "#ffffff", "font_size": 10},
+      {"label": "Web Cams",   "type": "shell", "action": "firefox 10.54.102.97 &",                                                                                                                                                                   "bg": "#005500", "fg": "#ffffff", "font_size": 10},
+      {"label": "Shaker",     "type": "shell", "action": "/net/s32dserv/xorApps/epics/synApps_6_3/ioc/32idbShaker/start_MEDM_32idbShaker",                                                                                                           "bg": "#55557f", "fg": "#ffffff", "font_size": 10},
+      {"label": "Blackfly",   "type": "shell", "action": "/home/beams/USERTXM/epics/synApps/support/32idbSP2/iocBoot/ioc32idbSP2/softioc/32idbSP2.sh medm",                                                                                          "bg": "#2980b9", "fg": "#ffffff", "font_size": 10}
     ],
     "Displays::User Mode": [
-      572,
-      850,
-      592,
-      126
+      {"label": "XANES",      "type": "shell", "action": "medm -x -macro 'P=32id:,R=TXMOptics:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/xanes.adl &",                                                              "bg": "#27ae60", "fg": "#ffffff", "font_size": 10},
+      {"label": "Furnace",    "type": "shell", "action": "medm -x /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/Furnace.adl &",                                                                                          "bg": "#27ae60", "fg": "#ffffff", "font_size": 10},
+      {"label": "DCM Motors", "type": "shell", "action": "medm -x -macro 'P=32ida:,P1=32idb:,M1=m1,M2=m2,M3=m3,M4=m4,M5=m5,M6=m6,M7=m7,M8=m8,M9=m5' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/dcm_motors9.adl &",   "bg": "#55557f", "fg": "#ffffff", "font_size": 10},
+      {"label": "TXMOptics",  "type": "shell", "action": "medm -x -macro 'P=32id:,R=TXMOptics:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/txmOptics_extended.adl &",                                                 "bg": "#623d2e", "fg": "#ffffff", "font_size": 10},
+      {"label": "TomoScan",   "type": "shell", "action": "medm -x -macro 'P=32id:,R=TomoScan:,BEAMLINE=tomoScan_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &",                             "bg": "#aa5500", "fg": "#ffffff", "font_size": 10},
+      {"label": "TomoStep",   "type": "shell", "action": "medm -x -macro 'P=32id:,R=TomoScanStep:,BEAMLINE=tomoScanStep_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &",                     "bg": "#aa5500", "fg": "#ffffff", "font_size": 10},
+      {"label": "TomoStream", "type": "shell", "action": "medm -x -macro 'P=32id:,R=TomoScanStream:,BEAMLINE=tomoScanStream_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &",                 "bg": "#aa5500", "fg": "#ffffff", "font_size": 10},
+      {"label": "CSS/BPM",    "type": "shell", "action": "/net/s32dserv/xorApps/epics/synApps_6_0/ioc/32idcBPM/iocBoot/iocbpm/32idcBPM.sh css",                                                                                                     "bg": "#27ae60", "fg": "#ffffff", "font_size": 10},
+      {"label": "Softglue",   "type": "shell", "action": "medm -x -macro 'P=32idSoftGlueZynq:' /home/beams19/USERTXM/epics/synApps/support/softGlueZynq/softGlueZynqApp/op/adl/softGlueZynq_top.adl &",                                              "bg": "#00aa00", "fg": "#ffffff", "font_size": 10}
     ],
-    "Schematic::User Mode": [
-      3,
-      664,
-      565,
-      543
+    "Launchers#7::Expert Mode": [
+      {"label": "ImageJ",    "type": "shell", "action": "/home/beams/USERTXM/Software/ImageJ/ImageJ.sh",                                                                    "bg": "#ffff7f", "fg": "#000000", "font_size": 10},
+      {"label": "Detector",  "type": "shell", "action": "/home/beams/USERTXM/epics/synApps/support/32idbSP1/iocBoot/ioc32idbSP1/softioc/32idbSP1.sh medm",                  "bg": "#55557f", "fg": "#ffffff", "font_size": 10},
+      {"label": "Blackfly",  "type": "shell", "action": "/home/beams/USERTXM/epics/synApps/support/32idbSP2/iocBoot/ioc32idbSP2/softioc/32idbSP2.sh medm",                  "bg": "#55557f", "fg": "#ffffff", "font_size": 10},
+      {"label": "IOCs",      "type": "shell", "action": "medm -x /home/beams/USERTXM/scripts/iocs_start.adl &",                                                             "bg": "#623d2e", "fg": "#ffffff", "font_size": 10},
+      {"label": "32ID Main", "type": "shell", "action": "/home/beams/USERTXM/start_caQtDM_32id",                                                                            "bg": "#5555ff", "fg": "#ffffff", "font_size": 10},
+      {"label": "Web IOCs",  "type": "shell", "action": "/home/beams/USERTXM/scripts/ioc_page.sh",                                                                          "bg": "#005500", "fg": "#ffffff", "font_size": 10},
+      {"label": "Web Cams",  "type": "shell", "action": "firefox 10.54.102.97 &",                                                                                           "bg": "#005500", "fg": "#ffffff", "font_size": 10},
+      {"label": "Shaker",    "type": "shell", "action": "/net/s32dserv/xorApps/epics/synApps_6_3/ioc/32idbShaker/start_MEDM_32idbShaker",                                   "bg": "#55557f", "fg": "#ffffff", "font_size": 10}
     ],
-    "ALL STOP::User Mode": [
-      1000,
-      1106,
-      161,
-      95
+    "Displays#8::Expert Mode": [
+      {"label": "XANES",      "type": "shell", "action": "medm -x -macro 'P=32id:,R=TXMOptics:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/xanes.adl &",                                                                  "bg": "#27ae60", "fg": "#ffffff", "font_size": 10},
+      {"label": "Furnace",    "type": "shell", "action": "medm -x /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/Furnace.adl &",                                                                                              "bg": "#27ae60", "fg": "#ffffff", "font_size": 10},
+      {"label": "DCM Motors", "type": "shell", "action": "medm -x -macro 'P=32ida:,M1=m1,M2=m2,M3=m3,M4=m4,M5=m5,M6=m6,M7=m7,M8=m8, P=32idb, M9=m5'  /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/dcm_motors9.adl &",     "bg": "#55557f", "fg": "#ffffff", "font_size": 10},
+      {"label": "TXMOptics",  "type": "shell", "action": "medm -x -macro 'P=32id:,R=TXMOptics:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/txmOptics_extended.adl &",                                                     "bg": "#623d2e", "fg": "#ffffff", "font_size": 10},
+      {"label": "TomoScan",   "type": "shell", "action": "medm -x -macro 'P=32id:,R=TomoScan:,BEAMLINE=tomoScan_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &",                                 "bg": "#aa5500", "fg": "#ffffff", "font_size": 10},
+      {"label": "TomoStep",   "type": "shell", "action": "medm -x -macro 'P=32id:,R=TomoScanStep:,BEAMLINE=tomoScanStep_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &",                         "bg": "#aa5500", "fg": "#ffffff", "font_size": 10},
+      {"label": "TomoStream", "type": "shell", "action": "medm -x -macro 'P=32id:,R=TomoScanStream:,BEAMLINE=tomoScanStream_32ID' /home/beams19/USERTXM/epics/synApps/support/tomoscan/tomoScanApp/op/adl/tomoScan_32ID_main.adl &",                     "bg": "#aa5500", "fg": "#ffffff", "font_size": 10},
+      {"label": "CSS/BPM",    "type": "shell", "action": "/net/s32dserv/xorApps/epics/synApps_6_0/ioc/32idcBPM/iocBoot/iocbpm/32idcBPM.sh css",                                                                                                          "bg": "#27ae60", "fg": "#ffffff", "font_size": 10},
+      {"label": "Softglue",   "type": "shell", "action": "medm -x -macro 'P=32idMZ1:' /home/beams19/USERTXM/epics/synApps/support/softGlueZynq/softGlueZynqApp/op/adl/softGlueZynq_top.adl &",                                                           "bg": "#00aa00", "fg": "#ffffff", "font_size": 10}
     ],
-    "Shutters::Expert Mode": [
-      3,
-      105,
-      380,
-      80
+    "Presets#11::Expert Mode": [
+      {"label": "Nano",  "type": "caput", "action": "32id:TXMOptics:MoveAllIn 1",  "bg": "#ae5b08", "fg": "#ffffff", "font_size": 11},
+      {"label": "Micro", "type": "caput", "action": "32id:TXMOptics:MoveAllOut 1", "bg": "#00aaff", "fg": "#ffffff", "font_size": 11}
     ],
-    "Beam::Expert Mode": [
-      810,
-      4,
-      350,
-      80
-    ],
-    "Presets::Expert Mode": [
-      387,
-      106,
-      200,
-      80
-    ],
-    "Condenser::Expert Mode": [
-      508,
-      871,
-      596,
-      190
-    ],
-    "Zone Plate::Expert Mode": [
-      256,
-      676,
-      364,
-      190
-    ],
-    "Phase Ring::Expert Mode": [
-      1107,
-      871,
-      364,
-      190
-    ],
-    "Detector::Expert Mode": [
-      3,
-      255,
-      343,
-      194
-    ],
-    "Sample::Expert Mode": [
-      649,
-      454,
-      248,
-      190
-    ],
-    "Pinhole::Expert Mode": [
-      5,
-      871,
-      248,
-      190
-    ],
-    "Beamstop::Expert Mode": [
-      256,
-      871,
-      248,
-      190
-    ],
-    "Diffuser::Expert Mode": [
-      989,
-      676,
-      132,
-      190
-    ],
-    "Bertrand Lens::Expert Mode": [
-      5,
-      676,
-      248,
-      190
-    ],
-    "Furnace::Expert Mode": [
-      622,
-      676,
-      364,
-      190
-    ],
-    "Queensgate::Expert Mode": [
-      495,
-      255,
-      249,
-      195
-    ],
-    "Ensemble::Expert Mode": [
-      515,
-      454,
-      132,
-      190
-    ],
-    "Other::Expert Mode": [
-      265,
-      454,
-      248,
-      190
-    ],
-    "In / Out::Expert Mode": [
-      3,
-      189,
-      700,
-      60
-    ],
-    "Energy::Expert Mode": [
-      1130,
-      375,
-      340,
-      280
-    ],
-    "Camera::Expert Mode": [
-      1130,
-      121,
-      340,
-      250
-    ],
-    "Crop::Expert Mode": [
-      590,
-      111,
-      300,
-      60
-    ],
-    "Valves::Expert Mode": [
-      3,
-      454,
-      260,
-      110
-    ],
-    "PLC Outputs::Expert Mode": [
-      895,
-      93,
-      191,
-      79
-    ],
-    "BPM/EPID::Expert Mode": [
-      1070,
-      1080,
-      400,
-      100
-    ],
-    "PV Save/Load::Expert Mode": [
-      860,
-      179,
-      264,
-      67
-    ],
-    "Beam Status::Expert Mode": [
-      3,
-      4,
-      400,
-      100
-    ],
-    "OPS Messages::Expert Mode": [
-      408,
-      4,
-      399,
-      101
-    ],
-    "Shaker::Expert Mode": [
-      825,
-      252,
-      300,
-      200
-    ],
-    "Launchers::Expert Mode": [
-      4,
-      1069,
-      500,
-      110
-    ],
-    "Displays::Expert Mode": [
-      506,
-      1068,
-      513,
-      111
-    ],
-    "ALL STOP::Expert Mode": [
-      1294,
-      5,
-      176,
-      111
-    ],
-    "Bertrand Lens#3::User Mode": [
-      390,
-      396,
-      248,
-      190
-    ],
-    "Queensgate#4::Expert Mode": [
-      348,
-      255,
-      144,
-      194
-    ],
-    "Beam Stop#5::Expert Mode": [
-      1188,
-      671,
-      248,
-      190
+    "Presets#13::User Mode": [
+      {"label": "Nano",  "type": "caput", "action": "32id:TXMOptics:MoveAllIn 1",  "bg": "#ae5b08", "fg": "#ffffff", "font_size": 11},
+      {"label": "Micro", "type": "caput", "action": "32id:TXMOptics:MoveAllOut 1", "bg": "#00aaff", "fg": "#ffffff", "font_size": 11}
     ]
   },
-  "_tab_map": {
-    "Shutters::User Mode": "User Mode",
-    "Beam::User Mode": "User Mode",
-    "Presets::User Mode": "User Mode",
-    "Zone Plate::User Mode": "User Mode",
-    "Bertrand Lens::User Mode": "User Mode",
-    "Queensgate::User Mode": "User Mode",
-    "Ensemble::User Mode": "User Mode",
-    "In / Out::User Mode": "User Mode",
-    "Energy::User Mode": "User Mode",
-    "Camera::User Mode": "User Mode",
-    "Crop::User Mode": "User Mode",
-    "Valves::User Mode": "User Mode",
-    "PLC Outputs::User Mode": "User Mode",
-    "PV Save/Load::User Mode": "User Mode",
-    "Beam Status::User Mode": "User Mode",
-    "OPS Messages::User Mode": "User Mode",
-    "Shaker::User Mode": "User Mode",
-    "Launchers::User Mode": "User Mode",
-    "Displays::User Mode": "User Mode",
-    "Schematic::User Mode": "User Mode",
-    "ALL STOP::User Mode": "User Mode",
-    "Shutters::Expert Mode": "Expert Mode",
-    "Beam::Expert Mode": "Expert Mode",
-    "Presets::Expert Mode": "Expert Mode",
-    "Condenser::Expert Mode": "Expert Mode",
-    "Zone Plate::Expert Mode": "Expert Mode",
-    "Phase Ring::Expert Mode": "Expert Mode",
-    "Detector::Expert Mode": "Expert Mode",
-    "Sample::Expert Mode": "Expert Mode",
-    "Pinhole::Expert Mode": "Expert Mode",
-    "Beamstop::Expert Mode": "Expert Mode",
-    "Diffuser::Expert Mode": "Expert Mode",
-    "Bertrand Lens::Expert Mode": "Expert Mode",
-    "Furnace::Expert Mode": "Expert Mode",
-    "Queensgate::Expert Mode": "Expert Mode",
-    "Ensemble::Expert Mode": "Expert Mode",
-    "Other::Expert Mode": "Expert Mode",
-    "In / Out::Expert Mode": "Expert Mode",
-    "Energy::Expert Mode": "Expert Mode",
-    "Camera::Expert Mode": "Expert Mode",
-    "Crop::Expert Mode": "Expert Mode",
-    "Valves::Expert Mode": "Expert Mode",
-    "PLC Outputs::Expert Mode": "Expert Mode",
-    "BPM/EPID::Expert Mode": "Expert Mode",
-    "PV Save/Load::Expert Mode": "Expert Mode",
-    "Beam Status::Expert Mode": "Expert Mode",
-    "OPS Messages::Expert Mode": "Expert Mode",
-    "Shaker::Expert Mode": "Expert Mode",
-    "Launchers::Expert Mode": "Expert Mode",
-    "Displays::Expert Mode": "Expert Mode",
-    "ALL STOP::Expert Mode": "Expert Mode",
-    "Bertrand Lens#3::User Mode": "User Mode",
-    "Queensgate#4::Expert Mode": "Expert Mode",
-    "Beam Stop#5::Expert Mode": "Expert Mode"
-  },
-  "_buttons": {},
   "_styles": {
-    "Presets::User Mode|||Nano": {
-      "bg": "#ae5d01",
-      "fg": "#fff",
-      "fs": 11,
-      "w": 166,
-      "h": 34
-    },
-    "Presets::User Mode|||Micro": {
-      "bg": "#001aae",
-      "fg": "#fff",
-      "fs": 11,
-      "w": 165,
-      "h": 34
-    },
-    "In / Out::User Mode|||PyStream": {
-      "bg": "#ae6600",
-      "fg": "#fff",
-      "fs": 12,
-      "w": 150,
-      "h": 40
-    },
-    "ALL STOP::User Mode|||ALL STOP": {
-      "bg": "#c0392b",
-      "fg": "#fff",
-      "fs": 12,
-      "w": 150,
-      "h": 60
-    },
-    "In / Out::Expert Mode|||PyStream": {
-      "bg": "#ae5207",
-      "fg": "#fff",
-      "fs": 10,
-      "w": 150,
-      "h": 40
-    }
+    "In / Out::User Mode|||PyStream":   {"bg": "#ae6600", "fg": "#fff", "fs": 12, "w": 150, "h": 40},
+    "ALL STOP::User Mode|||ALL STOP":   {"bg": "#c0392b", "fg": "#fff", "fs": 12, "w": 150, "h": 60},
+    "In / Out::Expert Mode|||PyStream": {"bg": "#ae5207", "fg": "#fff", "fs": 10, "w": 150, "h": 40}
   },
   "_title_fonts": {
     "Shutters::User Mode": 9,
     "Beam::User Mode": 9,
-    "Presets::User Mode": 9,
     "Zone Plate::User Mode": 9,
     "Bertrand Lens::User Mode": 9,
     "Queensgate::User Mode": 9,
@@ -464,7 +141,6 @@
     "In / Out::User Mode": 9,
     "Energy::User Mode": 9,
     "Camera::User Mode": 9,
-    "Crop::User Mode": 9,
     "Valves::User Mode": 9,
     "PLC Outputs::User Mode": 9,
     "PV Save/Load::User Mode": 9,
@@ -477,7 +153,6 @@
     "ALL STOP::User Mode": 9,
     "Shutters::Expert Mode": 7,
     "Beam::Expert Mode": 9,
-    "Presets::Expert Mode": 9,
     "Condenser::Expert Mode": 9,
     "Zone Plate::Expert Mode": 9,
     "Phase Ring::Expert Mode": 9,
@@ -486,7 +161,6 @@
     "Pinhole::Expert Mode": 9,
     "Beamstop::Expert Mode": 9,
     "Diffuser::Expert Mode": 9,
-    "Bertrand Lens::Expert Mode": 9,
     "Furnace::Expert Mode": 9,
     "Queensgate::Expert Mode": 9,
     "Ensemble::Expert Mode": 9,
@@ -502,495 +176,166 @@
     "Beam Status::Expert Mode": 9,
     "OPS Messages::Expert Mode": 9,
     "Shaker::Expert Mode": 9,
-    "Launchers::Expert Mode": 9,
-    "Displays::Expert Mode": 9,
     "ALL STOP::Expert Mode": 9,
+    "Motor::User Mode": 12,
     "Bertrand Lens#3::User Mode": 9,
     "Queensgate#4::Expert Mode": 9,
-    "Beam Stop#5::Expert Mode": 9
+    "Beam Stop#5::Expert Mode": 9,
+    "Launchers#7::Expert Mode": 12,
+    "Displays#8::Expert Mode": 12,
+    "Presets#11::Expert Mode": 12,
+    "Beamstop#12::Expert Mode": 12,
+    "Presets#13::User Mode": 12,
+    "Beam#14::Expert Mode": 12
   },
   "_titles": {
-    "Shutters::User Mode": "Shutters",
-    "Beam::User Mode": "Beam",
-    "Presets::User Mode": "Presets",
-    "Zone Plate::User Mode": "Zone Plate",
     "Bertrand Lens::User Mode": "Granite Pos",
-    "Queensgate::User Mode": "Queensgate",
     "Ensemble::User Mode": "Rotation",
-    "In / Out::User Mode": "In / Out",
-    "Energy::User Mode": "Energy",
-    "Camera::User Mode": "Camera",
-    "Crop::User Mode": "Crop",
-    "Valves::User Mode": "Valves",
     "PLC Outputs::User Mode": "He Box",
-    "PV Save/Load::User Mode": "PV Save/Load",
-    "Beam Status::User Mode": "Beam Status",
-    "OPS Messages::User Mode": "OPS Messages",
-    "Shaker::User Mode": "Shaker",
-    "Launchers::User Mode": "Launchers",
-    "Displays::User Mode": "Displays",
-    "Schematic::User Mode": "Schematic",
-    "ALL STOP::User Mode": "ALL STOP",
-    "Shutters::Expert Mode": "Shutters",
-    "Beam::Expert Mode": "Beam",
-    "Presets::Expert Mode": "Presets",
-    "Condenser::Expert Mode": "Condenser",
-    "Zone Plate::Expert Mode": "Zone Plate",
-    "Phase Ring::Expert Mode": "Phase Ring",
-    "Detector::Expert Mode": "Detector",
-    "Sample::Expert Mode": "Sample",
-    "Pinhole::Expert Mode": "Pinhole",
-    "Beamstop::Expert Mode": "Beamstop",
-    "Diffuser::Expert Mode": "Diffuser",
-    "Bertrand Lens::Expert Mode": "Beam Stop",
-    "Furnace::Expert Mode": "Furnace",
-    "Queensgate::Expert Mode": "Queensgate",
+    "Phase Ring::Expert Mode": "Scintillator",
     "Ensemble::Expert Mode": "Rotation",
     "Other::Expert Mode": "Granite Pos",
-    "In / Out::Expert Mode": "In / Out",
-    "Energy::Expert Mode": "Energy",
-    "Camera::Expert Mode": "Camera",
-    "Crop::Expert Mode": "Crop",
-    "Valves::Expert Mode": "Valves",
     "PLC Outputs::Expert Mode": "He Box",
-    "BPM/EPID::Expert Mode": "BPM/EPID",
-    "PV Save/Load::Expert Mode": "PV Save/Load",
-    "Beam Status::Expert Mode": "Beam Status",
-    "OPS Messages::Expert Mode": "OPS Messages",
-    "Shaker::Expert Mode": "Shaker",
-    "Launchers::Expert Mode": "Launchers",
-    "Displays::Expert Mode": "Displays",
-    "ALL STOP::Expert Mode": "ALL STOP",
     "Bertrand Lens#3::User Mode": "Sample Pos",
     "Queensgate#4::Expert Mode": "Det Rot",
-    "Beam Stop#5::Expert Mode": "B <---> C"
+    "Beam Stop#5::Expert Mode": "B <---> C",
+    "Launchers#7::Expert Mode": "Launchers (copy)",
+    "Displays#8::Expert Mode": "Displays (copy)",
+    "Presets#11::Expert Mode": "Presets (copy)",
+    "Beamstop#12::Expert Mode": "PhaseRing",
+    "Presets#13::User Mode": "Presets (copy)",
+    "Beam#14::Expert Mode": "Beam (copy)"
   },
   "_mcs": {
     "Zone Plate::User Mode": [
-      {
-        "label": "FZP Z Focus",
-        "pv": "32idbTXM:mcs2:c1:m15",
-        "custom": true,
-        "twv": ""
-      }
+      {"label": "FZP Z Focus", "pv": "32idbTXM:mcs2:c1:m15", "custom": true, "twv": "0.01"}
     ],
     "Bertrand Lens::User Mode": [
-      {
-        "label": "Granite X",
-        "pv": "32idbTXM:nf:m4",
-        "custom": true,
-        "twv": ""
-      },
-      {
-        "label": "Granite Y",
-        "pv": "32idbSoft:m5",
-        "custom": true,
-        "twv": ""
-      }
+      {"label": "Granite X", "pv": "32idbTXM:nf:m4",  "custom": true, "twv": "0.01"},
+      {"label": "Granite Y", "pv": "32idbSoft:m5",    "custom": true, "twv": "0.005"}
     ],
     "Queensgate::User Mode": [
-      {
-        "label": "Queensgate CH1",
-        "pv": "32idQG:m1",
-        "custom": true,
-        "twv": ""
-      },
-      {
-        "label": "Queensgate CH2",
-        "pv": "32idQG:m2",
-        "custom": true,
-        "twv": ""
-      }
+      {"label": "Queensgate CH1", "pv": "32idQG:m1", "custom": true, "twv": "1"},
+      {"label": "Queensgate CH2", "pv": "32idQG:m2", "custom": true, "twv": "1"}
     ],
     "Ensemble::User Mode": [
-      {
-        "label": "Rotation",
-        "pv": "32idbTXM:ens:c1:m1",
-        "custom": false,
-        "twv": "0"
-      }
+      {"label": "Rotation", "pv": "32idbTXM:ens:c1:m1", "custom": false, "twv": "5"}
     ],
     "Condenser::Expert Mode": [
-      {
-        "label": "Cond Pitch",
-        "pv": "32idbTXM:mcs2:c1:m1",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "Cond Y",
-        "pv": "32idbTXM:mcs2:c1:m2",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "Beamstop Y",
-        "pv": "32idbTXM:mcs2:c1:m3",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "Pinhole X",
-        "pv": "32idbTXM:mcs2:c1:m4",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "Pinhole Y",
-        "pv": "32idbTXM:mcs2:c1:m5",
-        "custom": false,
-        "twv": ""
-      }
+      {"label": "Cond X",     "pv": "32idbTXM:mcs2:c1:m10", "custom": true,  "twv": "0.001"},
+      {"label": "Cond Y",     "pv": "32idbTXM:mcs2:c1:m2",  "custom": false, "twv": "0.001"},
+      {"label": "Cond Z",     "pv": "32idbSoft:m6",         "custom": true,  "twv": "1"},
+      {"label": "Cond Pitch", "pv": "32idbTXM:mcs2:c1:m1",  "custom": true,  "twv": "0.0002"},
+      {"label": "Cond Yaw",   "pv": "32idbTXM:mcs2:c1:m11", "custom": true,  "twv": "0.0001"}
     ],
     "Zone Plate::Expert Mode": [
-      {
-        "label": "X",
-        "pv": "32idbTXM:mcs2:c1:m6",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "BPMX",
-        "pv": "32idbTXM:mcs2:c1:m7",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "BPMY",
-        "pv": "32idbTXM:mcs2:c1:m8",
-        "custom": false,
-        "twv": ""
-      }
+      {"label": "ZP X", "pv": "32idbTXM:mcs2:c1:m13", "custom": true, "twv": "0.01"},
+      {"label": "ZP Y", "pv": "32idbTXM:mcs2:c1:m14", "custom": true, "twv": "0.1"},
+      {"label": "ZP Z", "pv": "32idbTXM:mcs2:c1:m15", "custom": true, "twv": "0.01"}
     ],
     "Phase Ring::Expert Mode": [
-      {
-        "label": "Scint Yaw",
-        "pv": "32idbTXM:mcs2:c2:m1",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "Scint Pitch",
-        "pv": "32idbTXM:mcs2:c2:m2",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "Scint focus",
-        "pv": "32idbTXM:mcs2:c2:m3",
-        "custom": false,
-        "twv": ""
-      }
+      {"label": "Scint Yaw",   "pv": "32idbTXM:mcs2:c2:m1", "custom": false, "twv": "0.1"},
+      {"label": "Scint Pitch", "pv": "32idbTXM:mcs2:c2:m2", "custom": false, "twv": "0.02"},
+      {"label": "Scint focus", "pv": "32idbTXM:mcs2:c2:m3", "custom": false, "twv": "0.01"}
     ],
     "Detector::Expert Mode": [
-      {
-        "label": "Det X",
-        "pv": "32idbSoft:m3",
-        "custom": true,
-        "twv": ""
-      },
-      {
-        "label": "Det Y",
-        "pv": "32idbSoft:m4",
-        "custom": true,
-        "twv": ""
-      },
-      {
-        "label": "Det Z",
-        "pv": "32idbSoft:m1",
-        "custom": true,
-        "twv": ""
-      }
+      {"label": "Det X", "pv": "32idbSoft:m3", "custom": true, "twv": "0.1"},
+      {"label": "Det Y", "pv": "32idbSoft:m4", "custom": true, "twv": "0.5"},
+      {"label": "Det Z", "pv": "32idbSoft:m1", "custom": true, "twv": "0.1"}
     ],
     "Sample::Expert Mode": [
-      {
-        "label": "Sample TopX",
-        "pv": "32idbTXM:mcs:c2:m1",
-        "custom": true,
-        "twv": ""
-      },
-      {
-        "label": "Sample TopZ",
-        "pv": "32idbTXM:mcs:c2:m2",
-        "custom": true,
-        "twv": ""
-      }
+      {"label": "Sample TopX", "pv": "32idbTXM:mcs2:c4:m1", "custom": true, "twv": "0.005"},
+      {"label": "Sample TopZ", "pv": "32idbTXM:mcs2:c4:m2", "custom": true, "twv": "0.01"}
     ],
     "Pinhole::Expert Mode": [
-      {
-        "label": "ZP X new",
-        "pv": "32idbTXM:mcs2:c1:m13",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "ZP Y new",
-        "pv": "32idbTXM:mcs2:c1:m14",
-        "custom": false,
-        "twv": ""
-      }
+      {"label": "PinHole X", "pv": "32idbTXM:mcs2:c1:m4", "custom": true, "twv": "0.02"},
+      {"label": "PinHole Y", "pv": "32idbTXM:mcs2:c1:m5", "custom": true, "twv": "0.02"}
     ],
     "Beamstop::Expert Mode": [
-      {
-        "label": "ZP Z new",
-        "pv": "32idbTXM:mcs2:c1:m15",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "Phase ring 1",
-        "pv": "32idbTXM:mcs2:c3:m1",
-        "custom": false,
-        "twv": ""
-      }
+      {"label": "BeamStop X", "pv": "32idbTXM:mcs2:c1:m7", "custom": true, "twv": "0.1"},
+      {"label": "BeamStop Y", "pv": "32idbTXM:mcs2:c1:m8", "custom": true, "twv": "0.02"}
     ],
     "Diffuser::Expert Mode": [
-      {
-        "label": "Phase ring 1",
-        "pv": "32idbTXM:mcs2:c3:m2",
-        "custom": false,
-        "twv": ""
-      }
-    ],
-    "Bertrand Lens::Expert Mode": [
-      {
-        "label": "Sample Top X",
-        "pv": "32idbTXM:mcs:c2:m1",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "Sample Top Z",
-        "pv": "32idbTXM:mcs:c2:m2",
-        "custom": false,
-        "twv": ""
-      }
+      {"label": "Diffuser X", "pv": "32idbTXM:mcs2:c1:m9", "custom": true, "twv": "0.1"}
     ],
     "Furnace::Expert Mode": [
-      {
-        "label": "Det X",
-        "pv": "32idbSoft:m3",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "Det Y",
-        "pv": "32idbSoft:m4",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "Sample Y granite",
-        "pv": "32idbSoft:m5",
-        "custom": false,
-        "twv": ""
-      }
+      {"label": "Furnace X", "pv": "32idb:m25", "custom": true, "twv": "0.2"},
+      {"label": "Furnace Y", "pv": "32idb:m26", "custom": true, "twv": "0.5"},
+      {"label": "Furnace Z", "pv": "32idb:m27", "custom": true, "twv": "1"}
     ],
     "Queensgate::Expert Mode": [
-      {
-        "label": "Queensgate CH1",
-        "pv": "32idQG:m1",
-        "custom": false,
-        "twv": ""
-      },
-      {
-        "label": "Queensgate CH2",
-        "pv": "32idQG:m2",
-        "custom": false,
-        "twv": ""
-      }
+      {"label": "Queensgate CH1", "pv": "32idQG:m1", "custom": false, "twv": "1"},
+      {"label": "Queensgate CH2", "pv": "32idQG:m2", "custom": false, "twv": "1"}
     ],
     "Ensemble::Expert Mode": [
-      {
-        "label": "Rotation",
-        "pv": "32idbTXM:ens:c1:m1",
-        "custom": false,
-        "twv": ""
-      }
+      {"label": "Rotation", "pv": "32idbTXM:ens:c1:m1", "custom": false, "twv": "5"}
     ],
     "Other::Expert Mode": [
-      {
-        "label": "Granite X",
-        "pv": "32idbTXM:nf:m4",
-        "custom": true,
-        "twv": ""
-      },
-      {
-        "label": "Granite Y",
-        "pv": "32idbSoft:m5",
-        "custom": true,
-        "twv": ""
-      }
+      {"label": "Granite X", "pv": "32idbTXM:nf:m4", "custom": true, "twv": "0.01"},
+      {"label": "Granite Y", "pv": "32idbSoft:m5",   "custom": true, "twv": "0.005"}
+    ],
+    "Motor::User Mode": [
+      {"label": "New Motor", "pv": "", "custom": false, "twv": ""}
     ],
     "Bertrand Lens#3::User Mode": [
-      {
-        "label": "Sample TopX",
-        "pv": "32idbTXM:mcs:c2:m1",
-        "custom": true,
-        "twv": ""
-      },
-      {
-        "label": "Sample TopZ",
-        "pv": "32idbTXM:mcs:c2:m2",
-        "custom": true,
-        "twv": ""
-      }
+      {"label": "Sample TopX", "pv": "32idbTXM:mcs2:c4:m1", "custom": true, "twv": "0.005"},
+      {"label": "Sample TopZ", "pv": "32idbTXM:mcs2:c4:m2", "custom": true, "twv": "0.01"}
     ],
     "Queensgate#4::Expert Mode": [
-      {
-        "label": "Det Rot",
-        "pv": "32idbTXM:nf:m2",
-        "custom": true,
-        "twv": ""
-      }
+      {"label": "Det Rot", "pv": "32idbTXM:nf:m2", "custom": true, "twv": "0.1"}
     ],
     "Beam Stop#5::Expert Mode": [
-      {
-        "label": "TXM X",
-        "pv": "32idbSoft:m9",
-        "custom": true,
-        "twv": ""
-      },
-      {
-        "label": "Flying Pipe X",
-        "pv": "32idbSoft:m10",
-        "custom": true,
-        "twv": ""
-      }
+      {"label": "TXM X",         "pv": "32idbSoft:m9",  "custom": true, "twv": "10"},
+      {"label": "Flying Pipe X", "pv": "32idbSoft:m10", "custom": true, "twv": "10"}
+    ],
+    "Beamstop#12::Expert Mode": [
+      {"label": "PhaseRing X", "pv": "32idbTXM:mcs2:c3:m1", "custom": true, "twv": "0.001"},
+      {"label": "PhaseRing Y", "pv": "32idbTXM:mcs2:c3:m2", "custom": true, "twv": "0.001"}
     ]
   },
   "_pv_fields": {
     "Shutters::User Mode": {
-      "shtr_A": {
-        "kind": "valve",
-        "status": "PB:32ID:STA_A_FES_CLSD_PL",
-        "on": "32idb:rshtrA:Open",
-        "off": "32idb:rshtrA:Close",
-        "label": "A-Hutch",
-        "on_text": "Open",
-        "off_text": "Close"
-      },
-      "shtr_B": {
-        "kind": "valve",
-        "status": "PB:32ID:STA_B_SBS_CLSD_PL",
-        "on": "32idb:rshtrB:Open",
-        "off": "32idb:rshtrB:Close",
-        "label": "B-Hutch",
-        "on_text": "Open",
-        "off_text": "Close"
-      },
-      "shtr_U": {
-        "kind": "valve",
-        "status": "32idbTXM:uniblitz:control",
-        "on": "32idbTXM:uniblitz:control",
-        "off": "32idbTXM:uniblitz:control",
-        "label": "FastShutter",
-        "on_text": "Open",
-        "off_text": "Close"
-      }
+      "shtr_A": {"kind": "valve", "status": "PB:32ID:STA_A_FES_CLSD_PL", "on": "32idb:rshtrA:Open",        "off": "32idb:rshtrA:Close",       "label": "A-Hutch",     "on_text": "Open", "off_text": "Close"},
+      "shtr_B": {"kind": "valve", "status": "PB:32ID:STA_B_SBS_CLSD_PL", "on": "32idb:rshtrB:Open",        "off": "32idb:rshtrB:Close",       "label": "B-Hutch",     "on_text": "Open", "off_text": "Close"},
+      "shtr_U": {"kind": "valve", "status": "32idbTXM:uniblitz:control", "on": "32idbTXM:uniblitz:control", "off": "32idbTXM:uniblitz:control", "label": "FastShutter", "on_text": "Open", "off_text": "Close"}
     },
     "Beam::User Mode": {
-      "beam_curr": "S-DCCT:CurrentM",
-      "beam_life": "S-DCCT:LifetimeM",
-      "beam_mode": "S:ActualMode",
+      "beam_curr":  "S-DCCT:CurrentM",
+      "beam_life":  "S-DCCT:LifetimeM",
+      "beam_mode":  "S:ActualMode",
       "beam_und_e": "S32ID:USID:EnergyM.VAL"
     },
     "In / Out::User Mode": {
-      "io_sample": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveSampleIn",
-        "off": "32id:TXMOptics:MoveSampleOut"
-      },
-      "io_phring": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MovePhaseRingIn",
-        "off": "32id:TXMOptics:MovePhaseRingOut"
-      },
-      "io_zp": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveZonePlateIn",
-        "off": "32id:TXMOptics:MoveZonePlateOut"
-      },
-      "io_pinhole": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MovePinholeIn",
-        "off": "32id:TXMOptics:MovePinholeOut"
-      },
-      "io_cond": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveCondenserIn",
-        "off": "32id:TXMOptics:MoveCondenserOut"
-      },
-      "io_bs": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveBeamstopIn",
-        "off": "32id:TXMOptics:MoveBeamstopOut"
-      },
-      "io_diff": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveDiffuserIn",
-        "off": "32id:TXMOptics:MoveDiffuserOut"
-      }
+      "io_sample":  {"kind": "btn_pair", "on": "32id:TXMOptics:MoveSampleIn",    "off": "32id:TXMOptics:MoveSampleOut"},
+      "io_phring":  {"kind": "btn_pair", "on": "32id:TXMOptics:MovePhaseRingIn", "off": "32id:TXMOptics:MovePhaseRingOut"},
+      "io_zp":      {"kind": "btn_pair", "on": "32id:TXMOptics:MoveZonePlateIn", "off": "32id:TXMOptics:MoveZonePlateOut"},
+      "io_pinhole": {"kind": "btn_pair", "on": "32id:TXMOptics:MovePinholeIn",   "off": "32id:TXMOptics:MovePinholeOut"},
+      "io_cond":    {"kind": "btn_pair", "on": "32id:TXMOptics:MoveCondenserIn", "off": "32id:TXMOptics:MoveCondenserOut"},
+      "io_bs":      {"kind": "btn_pair", "on": "32id:TXMOptics:MoveBeamstopIn",  "off": "32id:TXMOptics:MoveBeamstopOut"},
+      "io_diff":    {"kind": "btn_pair", "on": "32id:TXMOptics:MoveDiffuserIn",  "off": "32id:TXMOptics:MoveDiffuserOut"}
     },
     "Energy::User Mode": {
-      "energy_sp": "32id:TXMOptics:Energy",
-      "bragg_rbv": "32ida:BraggERdbkAO",
-      "energy_detune": "32id:TXMOptics:EnergyDetune",
-      "energy_usecalib": "32id:TXMOptics:EnergyUseCalibration",
-      "energy_calfile1": "32id:TXMOptics:EnergyCalibrationFileOne",
-      "energy_calfile2": "32id:TXMOptics:EnergyCalibrationFileTwo",
-      "und_energy_rbv": "S32ID:USID:EnergyM.VAL",
-      "energy_set": "32id:TXMOptics:EnergySet",
-      "energy_busy_led": "32id:TXMOptics:EnergyBusy"
+      "energy_sp":        "32id:TXMOptics:Energy",
+      "bragg_rbv":        "32ida:BraggERdbkAO",
+      "energy_set":       "32id:TXMOptics:EnergySet",
+      "energy_detune":    "32id:TXMOptics:EnergyDetune",
+      "energy_calfile1":  "32id:TXMOptics:EnergyCalibrationFileOne",
+      "energy_calfile2":  "32id:TXMOptics:EnergyCalibrationFileTwo",
+      "energy_busy_led":  "32id:TXMOptics:EnergyBusy",
+      "energy_usecalib":  {"kind": "toggle", "status": "32id:TXMOptics:EnergyUseCalibration", "open": "32id:TXMOptics:EnergyUseCalibration", "close": "32id:TXMOptics:EnergyUseCalibration", "label": "", "open_text": "YES", "close_text": "NO", "open_value": "Yes", "close_value": "No"}
     },
     "Camera::User Mode": {
-      "cam_acquire": "32idbSP1:cam1:Acquire",
-      "cam_acq_led": "32idbSP1:cam1:Acquire",
+      "cam_run":    {"kind": "valve", "status": "32idbSP1:cam1:Acquire", "on": "32idbSP1:cam1:Acquire", "off": "32idbSP1:cam1:Acquire", "label": "", "on_text": "Start", "off_text": "Stop"},
       "cam_exp_sp": "32idbSP1:cam1:AcquireTime",
-      "cam_exp_rb": "32idbSP1:cam1:AcquireTime_RBV",
-      "cam_sizex": "32idbSP1:cam1:SizeX_RBV",
-      "cam_sizey": "32idbSP1:cam1:SizeY_RBV",
-      "cam_numfilt": "32idbSP1:Proc1:NumFilter",
-      "cam_filtered": "32idbSP1:Proc1:NumFiltered_RBV",
-      "cam_flat_valid": "32idbSP1:Proc1:ValidFlatField_RBV",
-      "cam_reset": "32idbSP1:Proc1:ResetFilter",
-      "cam_save_flat": "32idbSP1:Proc1:SaveFlatField"
-    },
-    "Crop::User Mode": {
-      "crop_L": "32id:TXMOptics:CropLeft",
-      "crop_R": "32id:TXMOptics:CropRight",
-      "crop_T": "32id:TXMOptics:CropTop",
-      "crop_B": "32id:TXMOptics:CropBottom",
-      "crop_apply": "32id:TXMOptics:Crop"
+      "cam_sizex":  "32idbSP1:cam1:SizeX_RBV",
+      "cam_sizey":  "32idbSP1:cam1:SizeY_RBV",
+      "cam_binx":   "32idbSP1:cam1:BinX",
+      "cam_biny":   "32idbSP1:cam1:BinY"
     },
     "Valves::User Mode": {
-      "valve_all": {
-        "kind": "valve",
-        "status": "32idbSoft:PLC1:C3",
-        "on": "32idbSoft:PLC1:oC23",
-        "off": "32idbSoft:PLC1:oC33",
-        "label": "Master",
-        "on_text": "On",
-        "off_text": "Off"
-      },
-      "valve_granite_x": {
-        "kind": "valve",
-        "status": "32idbSoft:PLC1:C2",
-        "on": "32idbSoft:PLC1:oC22",
-        "off": "32idbSoft:PLC1:oC32",
-        "label": "Granite X",
-        "on_text": "On",
-        "off_text": "Off"
-      },
-      "valve_granite_y": {
-        "kind": "valve",
-        "status": "32idbSoft:PLC1:C1",
-        "on": "32idbSoft:PLC1:oC21",
-        "off": "32idbSoft:PLC1:oC31",
-        "label": "Granite Y",
-        "on_text": "On",
-        "off_text": "Off"
-      }
+      "valve_all":       {"kind": "valve", "status": "32idbSoft:PLC1:C3", "on": "32idbSoft:PLC1:oC23", "off": "32idbSoft:PLC1:oC33", "label": "Master",    "on_text": "On", "off_text": "Off"},
+      "valve_granite_x": {"kind": "valve", "status": "32idbSoft:PLC1:C2", "on": "32idbSoft:PLC1:oC22", "off": "32idbSoft:PLC1:oC32", "label": "Granite X", "on_text": "On", "off_text": "Off"},
+      "valve_granite_y": {"kind": "valve", "status": "32idbSoft:PLC1:C1", "on": "32idbSoft:PLC1:oC21", "off": "32idbSoft:PLC1:oC31", "label": "Granite Y", "on_text": "On", "off_text": "Off"}
     },
     "PLC Outputs::User Mode": {
       "plc_ao1_sp": "32idbSoft:PLC1:ao1",
@@ -1001,8 +346,8 @@
     },
     "Beam Status::User Mode": {
       "bs_desired_mode": "S:DesiredMode",
-      "bs_actual_mode": "S:ActualMode",
-      "bs_inj_period": "S-INJ:InjectionPeriodCounterM"
+      "bs_actual_mode":  "S:ActualMode",
+      "bs_inj_period":   "S-INJ:InjectionPeriodCounterM"
     },
     "OPS Messages::User Mode": {
       "ops_msg1": "OPS:message1",
@@ -1013,150 +358,67 @@
       "ops_msg6": "OPS:message6"
     },
     "Shaker::User Mode": {
-      "shaker_freq": "32idbShaker:shaker:frequency.VAL",
-      "shaker_time": "32idbShaker:shaker:timePerPoint.VAL",
-      "shaker_npts": "32idbShaker:shaker:numPoints.VAL",
-      "shaker_menu": "32idbShaker:shakerMenu",
-      "shaker_run": "32idbShaker:shaker:run",
-      "shaker_stop": "32idbShaker:shaker:run",
-      "shaker_A_amp": "32idbShaker:shaker:A:ampMult.VAL",
-      "shaker_A_off": "32idbShaker:shaker:A:ampOffset.VAL",
+      "shaker_freq":   "32idbShaker:shaker:frequency.VAL",
+      "shaker_time":   "32idbShaker:shaker:timePerPoint.VAL",
+      "shaker_npts":   "32idbShaker:shaker:numPoints.VAL",
+      "shaker_menu":   "32idbShaker:shakerMenu",
+      "shaker_A_amp":   "32idbShaker:shaker:A:ampMult.VAL",
+      "shaker_A_off":   "32idbShaker:shaker:A:ampOffset.VAL",
       "shaker_A_phase": "32idbShaker:shaker:A:phaseShift.VAL",
-      "shaker_B_amp": "32idbShaker:shaker:B:ampMult",
-      "shaker_B_off": "32idbShaker:shaker:B:ampOffset.VAL",
-      "shaker_B_fmult": "32idbShaker:shaker:B:freqMult.VAL"
+      "shaker_B_amp":   "32idbShaker:shaker:B:ampMult",
+      "shaker_B_off":   "32idbShaker:shaker:B:ampOffset.VAL",
+      "shaker_B_fmult": "32idbShaker:shaker:B:freqMult.VAL",
+      "shaker_run":    {"kind": "valve", "status": "32idbShaker:shaker:run", "on": "32idbShaker:shaker:run", "off": "32idbShaker:shaker:run", "label": "", "on_text": "Run", "off_text": "Stop"}
     },
     "Shutters::Expert Mode": {
-      "shtr_A": {
-        "kind": "valve",
-        "status": "PB:32ID:STA_A_FES_CLSD_PL",
-        "on": "",
-        "off": "",
-        "label": "A-Stn",
-        "on_text": "Open",
-        "off_text": "Close"
-      },
-      "shtr_B": {
-        "kind": "valve",
-        "status": "PB:32ID:STA_B_SBS_CLSD_PL",
-        "on": "",
-        "off": "",
-        "label": "B-Stn",
-        "on_text": "Open",
-        "off_text": "Close"
-      },
-      "shtr_U": {
-        "kind": "valve",
-        "status": "",
-        "on": "",
-        "off": "",
-        "label": "Uniblitz",
-        "on_text": "Open",
-        "off_text": "Close"
-      }
+      "shtr_A": {"kind": "valve", "status": "PB:32ID:STA_A_FES_CLSD_PL", "on": "32idb:rshtrA:Open.PROC",   "off": "32idb:rshtrA:Close.PROC",  "label": "A-Stn",    "on_text": "Open", "off_text": "Close"},
+      "shtr_B": {"kind": "valve", "status": "PB:32ID:STA_B_SBS_CLSD_PL", "on": "32idb:rshtrB:Open.PROC",   "off": "32idb:rshtrB:Close.PROC",  "label": "B-Stn",    "on_text": "Open", "off_text": "Close"},
+      "shtr_U": {"kind": "valve", "status": "32idbTXM:uniblitz:control", "on": "32idbTXM:uniblitz:control", "off": "32idbTXM:uniblitz:control", "label": "Uniblitz", "on_text": "Open", "off_text": "Close"}
     },
     "Beam::Expert Mode": {
-      "beam_curr": "S-DCCT:CurrentM",
-      "beam_life": "S-DCCT:LifetimeM",
-      "beam_mode": "S:ActualMode",
+      "beam_curr":  "S-DCCT:CurrentM",
+      "beam_life":  "S-DCCT:LifetimeM",
+      "beam_mode":  "S:ActualMode",
       "beam_und_e": "S32ID:USID:EnergyM.VAL"
     },
     "In / Out::Expert Mode": {
-      "io_sample": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveSampleIn",
-        "off": "32id:TXMOptics:MoveSampleOut"
-      },
-      "io_phring": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MovePhaseRingIn",
-        "off": "32id:TXMOptics:MovePhaseRingOut"
-      },
-      "io_zp": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveZonePlateIn",
-        "off": "32id:TXMOptics:MoveZonePlateOut"
-      },
-      "io_pinhole": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MovePinholeIn",
-        "off": "32id:TXMOptics:MovePinholeOut"
-      },
-      "io_cond": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveCondenserIn",
-        "off": "32id:TXMOptics:MoveCondenserOut"
-      },
-      "io_bs": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveBeamstopIn",
-        "off": "32id:TXMOptics:MoveBeamstopOut"
-      },
-      "io_diff": {
-        "kind": "btn_pair",
-        "on": "32id:TXMOptics:MoveDiffuserIn",
-        "off": "32id:TXMOptics:MoveDiffuserOut"
-      }
+      "io_sample":  {"kind": "btn_pair", "on": "32id:TXMOptics:MoveSampleIn",    "off": "32id:TXMOptics:MoveSampleOut"},
+      "io_phring":  {"kind": "btn_pair", "on": "32id:TXMOptics:MovePhaseRingIn", "off": "32id:TXMOptics:MovePhaseRingOut"},
+      "io_zp":      {"kind": "btn_pair", "on": "32id:TXMOptics:MoveZonePlateIn", "off": "32id:TXMOptics:MoveZonePlateOut"},
+      "io_pinhole": {"kind": "btn_pair", "on": "32id:TXMOptics:MovePinholeIn",   "off": "32id:TXMOptics:MovePinholeOut"},
+      "io_cond":    {"kind": "btn_pair", "on": "32id:TXMOptics:MoveCondenserIn", "off": "32id:TXMOptics:MoveCondenserOut"},
+      "io_bs":      {"kind": "btn_pair", "on": "32id:TXMOptics:MoveBeamstopIn",  "off": "32id:TXMOptics:MoveBeamstopOut"},
+      "io_diff":    {"kind": "btn_pair", "on": "32id:TXMOptics:MoveDiffuserIn",  "off": "32id:TXMOptics:MoveDiffuserOut"}
     },
     "Energy::Expert Mode": {
-      "energy_sp": "32id:TXMOptics:Energy",
-      "bragg_rbv": "32ida:BraggERdbkAO",
-      "energy_detune": "32id:TXMOptics:EnergyDetune",
-      "energy_usecalib": "32id:TXMOptics:EnergyUseCalibration",
-      "energy_calfile1": "32id:TXMOptics:EnergyCalibrationFileOne",
-      "energy_calfile2": "32id:TXMOptics:EnergyCalibrationFileTwo",
-      "und_energy_rbv": "S32ID:USID:EnergyM.VAL",
-      "energy_set": "32id:TXMOptics:EnergySet",
-      "energy_busy_led": "32id:TXMOptics:EnergyBusy"
+      "energy_sp":        "32id:TXMOptics:Energy",
+      "bragg_rbv":        "32ida:BraggERdbkAO",
+      "energy_set":       "32id:TXMOptics:EnergySet",
+      "energy_detune":    "32id:TXMOptics:EnergyDetune",
+      "energy_calfile1":  "32id:TXMOptics:EnergyCalibrationFileOne",
+      "energy_calfile2":  "32id:TXMOptics:EnergyCalibrationFileTwo",
+      "energy_busy_led":  "32id:TXMOptics:EnergyBusy",
+      "energy_usecalib":  {"kind": "toggle", "status": "32id:TXMOptics:EnergyUseCalibration", "open": "32id:TXMOptics:EnergyUseCalibration", "close": "32id:TXMOptics:EnergyUseCalibration", "label": "", "open_text": "YES", "close_text": "NO", "open_value": "Yes", "close_value": "No"}
     },
     "Camera::Expert Mode": {
-      "cam_acquire": "32idbSP1:cam1:Acquire",
-      "cam_acq_led": "32idbSP1:cam1:Acquire",
+      "cam_run":    {"kind": "valve", "status": "32idbSP1:cam1:Acquire", "on": "32idbSP1:cam1:Acquire", "off": "32idbSP1:cam1:Acquire", "label": "", "on_text": "Start", "off_text": "Stop"},
       "cam_exp_sp": "32idbSP1:cam1:AcquireTime",
-      "cam_exp_rb": "32idbSP1:cam1:AcquireTime_RBV",
-      "cam_sizex": "32idbSP1:cam1:SizeX_RBV",
-      "cam_sizey": "32idbSP1:cam1:SizeY_RBV",
-      "cam_numfilt": "32idbSP1:Proc1:NumFilter",
-      "cam_filtered": "32idbSP1:Proc1:NumFiltered_RBV",
-      "cam_flat_valid": "32idbSP1:Proc1:ValidFlatField_RBV",
-      "cam_reset": "32idbSP1:Proc1:ResetFilter",
-      "cam_save_flat": "32idbSP1:Proc1:SaveFlatField"
+      "cam_sizex":  "32idbSP1:cam1:SizeX_RBV",
+      "cam_sizey":  "32idbSP1:cam1:SizeY_RBV",
+      "cam_binx":   "32idbSP1:cam1:BinX",
+      "cam_biny":   "32idbSP1:cam1:BinY"
     },
     "Crop::Expert Mode": {
-      "crop_L": "32id:TXMOptics:CropLeft",
-      "crop_R": "32id:TXMOptics:CropRight",
-      "crop_T": "32id:TXMOptics:CropTop",
-      "crop_B": "32id:TXMOptics:CropBottom",
+      "crop_L":     "32id:TXMOptics:CropLeft",
+      "crop_R":     "32id:TXMOptics:CropRight",
+      "crop_T":     "32id:TXMOptics:CropTop",
+      "crop_B":     "32id:TXMOptics:CropBottom",
       "crop_apply": "32id:TXMOptics:Crop"
     },
     "Valves::Expert Mode": {
-      "valve_all": {
-        "kind": "valve",
-        "status": "32idbSoft:PLC1:C1",
-        "on": "32idbSoft:PLC1:oC21",
-        "off": "32idbSoft:PLC1:oC31",
-        "label": "all",
-        "on_text": "On",
-        "off_text": "Off"
-      },
-      "valve_granite_x": {
-        "kind": "valve",
-        "status": "32idbSoft:PLC1:C2",
-        "on": "32idbSoft:PLC1:oC22",
-        "off": "32idbSoft:PLC1:oC32",
-        "label": "Granite X",
-        "on_text": "On",
-        "off_text": "Off"
-      },
-      "valve_granite_y": {
-        "kind": "valve",
-        "status": "32idbSoft:PLC1:C3",
-        "on": "32idbSoft:PLC1:oC23",
-        "off": "32idbSoft:PLC1:oC33",
-        "label": "Granite Y",
-        "on_text": "On",
-        "off_text": "Off"
-      }
+      "valve_all":       {"kind": "valve", "status": "32idbSoft:PLC1:C3", "on": "32idbSoft:PLC1:oC23", "off": "32idbSoft:PLC1:oC33", "label": "Master",    "on_text": "On", "off_text": "Off"},
+      "valve_granite_x": {"kind": "valve", "status": "32idbSoft:PLC1:C2", "on": "32idbSoft:PLC1:oC22", "off": "32idbSoft:PLC1:oC32", "label": "Granite X", "on_text": "On", "off_text": "Off"},
+      "valve_granite_y": {"kind": "valve", "status": "32idbSoft:PLC1:C1", "on": "32idbSoft:PLC1:oC21", "off": "32idbSoft:PLC1:oC31", "label": "Granite Y", "on_text": "On", "off_text": "Off"}
     },
     "PLC Outputs::Expert Mode": {
       "plc_ao1_sp": "32idbSoft:PLC1:ao1",
@@ -1175,8 +437,8 @@
     },
     "Beam Status::Expert Mode": {
       "bs_desired_mode": "S:DesiredMode",
-      "bs_actual_mode": "S:ActualMode",
-      "bs_inj_period": "S-INJ:InjectionPeriodCounterM"
+      "bs_actual_mode":  "S:ActualMode",
+      "bs_inj_period":   "S-INJ:InjectionPeriodCounterM"
     },
     "OPS Messages::Expert Mode": {
       "ops_msg1": "OPS:message1",
@@ -1187,19 +449,29 @@
       "ops_msg6": "OPS:message6"
     },
     "Shaker::Expert Mode": {
-      "shaker_freq": "32idbShaker:shaker:frequency.VAL",
-      "shaker_time": "32idbShaker:shaker:timePerPoint.VAL",
-      "shaker_npts": "32idbShaker:shaker:numPoints.VAL",
-      "shaker_menu": "32idbShaker:shakerMenu",
-      "shaker_run": "32idbShaker:shaker:run",
-      "shaker_stop": "32idbShaker:shaker:run",
-      "shaker_A_amp": "32idbShaker:shaker:A:ampMult.VAL",
-      "shaker_A_off": "32idbShaker:shaker:A:ampOffset.VAL",
+      "shaker_freq":   "32idbShaker:shaker:frequency.VAL",
+      "shaker_time":   "32idbShaker:shaker:timePerPoint.VAL",
+      "shaker_npts":   "32idbShaker:shaker:numPoints.VAL",
+      "shaker_menu":   "32idbShaker:shakerMenu",
+      "shaker_A_amp":   "32idbShaker:shaker:A:ampMult.VAL",
+      "shaker_A_off":   "32idbShaker:shaker:A:ampOffset.VAL",
       "shaker_A_phase": "32idbShaker:shaker:A:phaseShift.VAL",
-      "shaker_B_amp": "32idbShaker:shaker:B:ampMult",
-      "shaker_B_off": "32idbShaker:shaker:B:ampOffset.VAL",
-      "shaker_B_fmult": "32idbShaker:shaker:B:freqMult.VAL"
+      "shaker_B_amp":   "32idbShaker:shaker:B:ampMult",
+      "shaker_B_off":   "32idbShaker:shaker:B:ampOffset.VAL",
+      "shaker_B_fmult": "32idbShaker:shaker:B:freqMult.VAL",
+      "shaker_run":    {"kind": "valve", "status": "32idbShaker:shaker:run", "on": "32idbShaker:shaker:run", "off": "32idbShaker:shaker:run", "label": "", "on_text": "Run", "off_text": "Stop"}
     }
   },
-  "_custom_rows": {}
+  "_plugin_widgets": {
+    "Motor::User Mode": "Motor card"
+  },
+  "_io_labels": {
+    "io_sample":  "Sample",
+    "io_phring":  "PhRing",
+    "io_zp":      "ZP",
+    "io_pinhole": "Pinhole",
+    "io_cond":    "Cond",
+    "io_bs":      "BS",
+    "io_diff":    "Diff"
+  }
 }
