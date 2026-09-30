@@ -2358,12 +2358,38 @@ class Win(QtWidgets.QMainWindow):
         """Mark a panel as selected and refresh the inspector. Called
         by Panel.mousePressEvent while in edit mode."""
         self._selected_panel_key = panel_key
+        self._selected_widget = None
         insp = getattr(self, "_inspector", None)
         if insp is not None:
             insp.show_panel(panel_key)
         outl = getattr(self, "_outliner", None)
         if outl is not None:
             outl.select_key(panel_key)
+
+    def _select_widget(self, widget):
+        """Generic selection dispatch — the inspector renders a
+        different property form depending on the widget's type.
+        Currently understood: Panel (delegates to _select_panel),
+        MC (inline motor-card editing). Anything else falls back to
+        selecting the enclosing panel."""
+        from .widgets import Panel as _P
+        if isinstance(widget, _P):
+            self._select_panel(widget.key)
+            return
+        if isinstance(widget, MC):
+            self._selected_widget = widget
+            self._selected_panel_key = None
+            insp = getattr(self, "_inspector", None)
+            if insp is not None and hasattr(insp, "show_mc"):
+                insp.show_mc(widget)
+            return
+        # Fallback: find the enclosing Panel and select it.
+        w = widget.parent() if hasattr(widget, "parent") else None
+        while w is not None:
+            if isinstance(w, _P):
+                self._select_panel(w.key)
+                return
+            w = w.parent() if hasattr(w, "parent") else None
 
     def _refresh_outliner(self):
         """Rebuild the outliner tree from current panel/tab state.

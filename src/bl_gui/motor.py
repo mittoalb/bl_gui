@@ -299,6 +299,20 @@ class MC(QtWidgets.QFrame):
         """Called by the owning Panel to enable/disable per-motor editing."""
         self._panel_edit_mode = bool(on)
 
+    def mousePressEvent(self, e):
+        """Left-click on the MC frame while the owning panel is in
+        edit mode marks this motor card as the selected widget so
+        the property inspector points at it. Right-click still opens
+        contextMenuEvent, and every child widget (buttons, line
+        edits) handles its own clicks before reaching this event —
+        so users can still operate the motor without accidentally
+        losing selection."""
+        if self._panel_edit_mode and e.button() == QtCore.Qt.LeftButton:
+            win = self.window()
+            if hasattr(win, "_select_widget"):
+                win._select_widget(self)
+        super().mousePressEvent(e)
+
     def contextMenuEvent(self, e):
         """Right-click menu. 'Motor Details...' is always available (view + edit
         modes); the edit-only entries only show when the panel is in edit mode."""

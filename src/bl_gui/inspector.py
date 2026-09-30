@@ -64,6 +64,9 @@ class PropertyInspector(QtWidgets.QDockWidget):
         super().__init__("Properties", parent)
         self._win = win
         self._current_key: str | None = None
+        # When a motor card is the selected widget instead of a panel,
+        # _current_mc holds the MC object.
+        self._current_mc = None
         # Guard flag — set while we programmatically populate fields
         # from a newly selected panel, so the field's editingFinished
         # signal doesn't fire a spurious edit op back at the panel.
@@ -124,15 +127,40 @@ class PropertyInspector(QtWidgets.QDockWidget):
         form.addRow("Tab:", self._tab_combo)
 
         outer.addWidget(self._form_widget)
+
+        # ── Motor card form (shown when an MC is selected) ─────────
+        self._mc_form_widget = QtWidgets.QWidget()
+        mform = QtWidgets.QFormLayout(self._mc_form_widget)
+        mform.setContentsMargins(0, 6, 0, 0); mform.setSpacing(6)
+
+        self._mc_label_edit = QtWidgets.QLineEdit()
+        self._mc_label_edit.editingFinished.connect(self._on_mc_label_committed)
+        mform.addRow("Label:", self._mc_label_edit)
+
+        self._mc_pv_edit = QtWidgets.QLineEdit()
+        self._mc_pv_edit.editingFinished.connect(self._on_mc_pv_committed)
+        mform.addRow("PV:", self._mc_pv_edit)
+
+        self._mc_twv_edit = QtWidgets.QLineEdit()
+        self._mc_twv_edit.setPlaceholderText("(motor's default)")
+        self._mc_twv_edit.editingFinished.connect(self._on_mc_twv_committed)
+        mform.addRow("Tweak value:", self._mc_twv_edit)
+
+        self._mc_custom_chk = QtWidgets.QCheckBox("Custom label (don't overwrite from .DESC)")
+        self._mc_custom_chk.stateChanged.connect(self._on_mc_custom_committed)
+        mform.addRow("", self._mc_custom_chk)
+
+        outer.addWidget(self._mc_form_widget)
         outer.addStretch(1)
 
-        # Danger zone
+        # Danger zone (shared button — text changes with selection type)
         self._delete_btn = QtWidgets.QPushButton("Delete Panel")
         self._delete_btn.setObjectName("DangerBtn")
         self._delete_btn.clicked.connect(self._on_delete_clicked)
         outer.addWidget(self._delete_btn)
 
         self._form_widget.setVisible(False)
+        self._mc_form_widget.setVisible(False)
         self._delete_btn.setVisible(False)
         self.setWidget(body)
 
@@ -142,6 +170,8 @@ class PropertyInspector(QtWidgets.QDockWidget):
         """Point the inspector at the given panel key. `None` shows
         the empty state."""
         self._current_key = panel_key
+        self._current_mc = None
+        self._mc_form_widget.setVisible(False)
         if panel_key is None or panel_key not in self._win._panels:
             self._sel_header.setText("No panel selected")
             self._sel_sub.setText("Click a panel while in edit mode to inspect it.")
@@ -153,6 +183,7 @@ class PropertyInspector(QtWidgets.QDockWidget):
         self._sel_sub.setText(panel_key)
         self._form_widget.setVisible(True)
         self._delete_btn.setVisible(True)
+        self._delete_btn.setText("Delete Panel")
         self._syncing = True
         try:
             self._title_edit.setText(p.title_text())
@@ -175,9 +206,38 @@ class PropertyInspector(QtWidgets.QDockWidget):
         finally:
             self._syncing = False
 
+    def show_mc(self, mc):
+        """Point the inspector at a motor card. Hides the panel form,
+        shows the MC-specific one."""
+        self._current_mc = mc
+        self._current_key = None
+        self._form_widget.setVisible(False)
+        self._mc_form_widget.setVisible(True)
+        self._delete_btn.setVisible(True)
+        self._delete_btn.setText("Delete This Motor")
+        self._sel_header.setText(mc._label or "(unlabelled motor)")
+        self._sel_sub.setText(mc.pv or "(no PV)")
+        self._syncing = True
+        try:
+            self._mc_label_edit.setText(mc._label or "")
+            self._mc_pv_edit.setText(mc.pv or "")
+            self._mc_twv_edit.setText(mc.twv.text() or "")
+            self._mc_custom_chk.setChecked(bool(mc._custom_label))
+        finally:
+            self._syncing = False
+
     def refresh(self):
-        """Re-read the current panel's state (used after undo/redo)."""
-        self.show_panel(self._current_key)
+        """Re-read the current selection's state (used after undo/redo)."""
+        if self._current_mc is not None:
+            # Guard against a deleted MC (undo of add).
+            try:
+                _ = self._current_mc._label
+            except RuntimeError:
+                self.show_panel(None)
+                return
+            self.show_mc(self._current_mc)
+        else:
+            self.show_panel(self._current_key)
 
     # ── field commit handlers ───────────────────────────────────────
 
@@ -291,9 +351,21 @@ class PropertyInspector(QtWidgets.QDockWidget):
                 _undo, _redo)
 
     def _on_delete_clicked(self):
+        win = self._win
+        if self._current_mc is not None:
+            reply = QtWidgets.QMessageBox.question(
+                self, "Delete Motor",
+                f"Delete motor '{self._sel_header.text()}'?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No)
+            if reply != QtWidgets.QMessageBox.Yes:
+                return
+            from .widgets import _delete_widget
+            _delete_widget(self._current_mc)
+            self.show_panel(None)
+            return
         if self._current_key is None:
             return
-        win = self._win
         reply = QtWidgets.QMessageBox.question(
             self, "Delete Panel",
             f"Delete panel '{self._sel_header.text()}'?",
@@ -305,3 +377,100 @@ class PropertyInspector(QtWidgets.QDockWidget):
         key = self._current_key
         win._remove_panel(key, record=True)
         self.show_panel(None)
+
+    # ── motor-card commit handlers ─────────────────────────────────
+
+    def _on_mc_label_committed(self):
+        if self._syncing or self._current_mc is None:
+            return
+        mc = self._current_mc
+        new = self._mc_label_edit.text()
+        old = mc._label or ""
+        if new == old:
+            return
+        def _apply(v, m=mc, insp=self):
+            m._label = v
+            if hasattr(m, "desc") and m.desc is not None:
+                m.desc.setText(v)
+            if insp._current_mc is m:
+                insp._sel_header.setText(v or "(unlabelled motor)")
+        _apply(new)
+        # Setting the label via the inspector is user intent → treat
+        # as a custom label so the IOC's .DESC callback won't wipe it.
+        mc._custom_label = True
+        self._mc_custom_chk.blockSignals(True)
+        self._mc_custom_chk.setChecked(True)
+        self._mc_custom_chk.blockSignals(False)
+        win = self._win
+        if hasattr(win, "_record_op"):
+            win._record_op(
+                f"MC label {old!r} → {new!r}",
+                lambda v=old: _apply(v),
+                lambda v=new: _apply(v))
+
+    def _on_mc_pv_committed(self):
+        if self._syncing or self._current_mc is None:
+            return
+        mc = self._current_mc
+        new = self._mc_pv_edit.text().strip()
+        old = mc.pv or ""
+        if new == old:
+            return
+        def _apply(v, m=mc, insp=self):
+            m.pv = v
+            if insp._current_mc is m:
+                insp._sel_sub.setText(v or "(no PV)")
+        _apply(new)
+        # Subscribe to the new PV if the engine is running.
+        pve = getattr(self._win, "_pve", None)
+        if pve is not None and new:
+            import threading
+            threading.Thread(target=pve.monitor_many, args=([new],),
+                             daemon=True, name=f"pv-monitor-mc-{new}").start()
+        win = self._win
+        if hasattr(win, "_record_op"):
+            win._record_op(
+                f"MC PV {old!r} → {new!r}",
+                lambda v=old: _apply(v),
+                lambda v=new: _apply(v))
+
+    def _on_mc_twv_committed(self):
+        if self._syncing or self._current_mc is None:
+            return
+        mc = self._current_mc
+        new = self._mc_twv_edit.text()
+        old = mc.twv.text() if mc.twv is not None else ""
+        if new == old:
+            return
+        def _apply(v, m=mc):
+            if m.twv is not None:
+                m.twv.setText(v)
+        _apply(new)
+        win = self._win
+        if hasattr(win, "_record_op"):
+            win._record_op(
+                f"MC tweak {old!r} → {new!r}",
+                lambda v=old: _apply(v),
+                lambda v=new: _apply(v))
+
+    def _on_mc_custom_committed(self, state):
+        if self._syncing or self._current_mc is None:
+            return
+        mc = self._current_mc
+        new = bool(state)
+        old = bool(mc._custom_label)
+        if new == old:
+            return
+        mc._custom_label = new
+        win = self._win
+        if hasattr(win, "_record_op"):
+            def _apply(v, m=mc, insp=self):
+                m._custom_label = v
+                if insp._current_mc is m:
+                    insp._mc_custom_chk.blockSignals(True)
+                    insp._mc_custom_chk.setChecked(v)
+                    insp._mc_custom_chk.blockSignals(False)
+            win._record_op(
+                f"MC custom-label {old} → {new}",
+                lambda v=old: _apply(v),
+                lambda v=new: _apply(v))
