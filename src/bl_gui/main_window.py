@@ -4184,6 +4184,29 @@ def main():
     # readable when viewing across monitors of very different sizes.
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
+    # Over SSH X-forwarding / NoMachine, Qt's GLX FBConfig probe
+    # fails (`qt.glx: qglx_findConfig: Failed to finding matching
+    # FBConfig …`) for every widget that needs a native window.
+    # When that happens, Qt gives up on embedding the widget as a
+    # child X window and promotes it to a top-level X window — the
+    # cascade of "Beamline GUI (on host)" panels the user sees on
+    # launch. Fixing this at the source: force software OpenGL so
+    # Qt never probes GLX in the first place. Also silence the GL
+    # env vars that trigger the probe.
+    _display = os.environ.get("DISPLAY", "")
+    _looks_like_ssh = bool(os.environ.get("SSH_CONNECTION")) or \
+                      _display.startswith("localhost:") or \
+                      bool(os.environ.get("NXSESSIONID"))
+    if _looks_like_ssh:
+        QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseSoftwareOpenGL, True)
+        # Skip GLX integration — Qt XCB will use pure X11 painting
+        # instead of trying to allocate GL contexts per widget.
+        os.environ.setdefault("QT_XCB_GL_INTEGRATION", "none")
+        # Silence the qglx warning stream itself in case anything
+        # else still probes.
+        os.environ.setdefault("QT_LOGGING_RULES", "qt.glx.warning=false")
+        print("[GUI] remote X detected — forcing software OpenGL "
+              "and disabling XCB GL integration (fixes qglx cascade)")
     # AA_ShareOpenGLContexts is REQUIRED for QtWebEngine (Web-view /
     # Camera plugin) to import after QApplication is created. But
     # setting it triggers immediate GLX initialisation, which
