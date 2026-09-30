@@ -907,6 +907,8 @@ class Win(QtWidgets.QMainWindow):
             pl.addWidget(b)
             p.custom_buttons.append(b)
         p.setLayout(pl); p.setGeometry(x, y, 200, 80)
+        print(f"[PRESETS-BUILD] key={p.key!r} layout after setLayout: "
+              f"{type(p.layout()).__name__ if p.layout() else 'None'}")
 
     def _build_panel_motor_groups(self, tab_name):
         _st = self._build_state; GAP = _st['GAP']
@@ -3140,6 +3142,25 @@ class Win(QtWidgets.QMainWindow):
                           f"{type(p.layout()).__name__ if p.layout() else 'None'}, "
                           f"panel geom={p.geometry()!r}, "
                           f"panel visible={p.isVisible()}")
+                # If the panel has no layout at this point (preset
+                # builder never installed one, or something removed
+                # it in between), install a fresh one — otherwise
+                # every button would fall into the `btn.move(10, 30)`
+                # fallback and stack on top of each other (the actual
+                # cause of Nano-behind-Micro reported by the user).
+                lay = p.layout()
+                if lay is None:
+                    if cols and cols == 1:
+                        lay = QtWidgets.QVBoxLayout()
+                    elif cols and cols > 1:
+                        lay = QtWidgets.QGridLayout()
+                    else:
+                        lay = QtWidgets.QHBoxLayout()
+                    lay.setContentsMargins(6, 22, 6, 6); lay.setSpacing(4)
+                    p.setLayout(lay)
+                    if "Presets" in panel_key:
+                        print(f"[BTNS] {panel_key!r}: installed fresh "
+                              f"{type(lay).__name__} because panel had no layout")
                 for idx, bd in enumerate(merged):
                     btn = CfgButton.from_dict(bd, p)
                     btn.setMinimumHeight(34)
