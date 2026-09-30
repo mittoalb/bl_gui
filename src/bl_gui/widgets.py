@@ -47,6 +47,13 @@ class Panel(QtWidgets.QFrame):
 
     def __init__(self, title, key, parent=None):
         super().__init__(parent)
+        # Force widget-only role even if parent is transient — Qt's
+        # default for a QWidget without a live parent is to promote
+        # it to a top-level window, which caused "small dark panels
+        # flashing across the screen" during layout load when
+        # canvases weren't fully realized yet.
+        self.setWindowFlags(QtCore.Qt.Widget)
+        self.setAttribute(QtCore.Qt.WA_DontShowOnScreen, False)
         self.key = key
         self._edit = False
         self._drag = False

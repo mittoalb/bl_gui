@@ -24,6 +24,12 @@ def get_font_scale():
 class MC(QtWidgets.QFrame):
     def __init__(self, label, pv):
         super().__init__()
+        # Widget-only role. Preset builders instantiate MC() with no
+        # parent (added to a free-floating QHBoxLayout, reparented
+        # later when p.setLayout(ml) fires). Without this flag Qt
+        # briefly treats the MC as a top-level window during the
+        # gap, producing the "small dark panels flashing" symptom.
+        self.setWindowFlags(QtCore.Qt.Widget)
         self.pv = pv; self._label = label
         self._panel_edit_mode = False
         self._custom_label = False   # set True once user picks a name so .DESC doesn't clobber it
