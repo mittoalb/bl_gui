@@ -397,15 +397,20 @@ class Win(QtWidgets.QMainWindow):
 
         # ═══ PANEL OUTLINER (dock, left side) ═══
         # Tree of tabs → panels for quick navigation on crowded layouts.
+        # Hidden by default in view mode — _toggle_edit(True) shows it.
         self._outliner = PanelOutliner(self)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self._outliner)
+        self._outliner.setVisible(bool(self._allow_edit))
 
         # ═══ PROPERTY INSPECTOR (dock, right side) ═══
         # Only visible in edit mode — hidden alongside the top-bar
-        # editor buttons via _toggle_edit.
+        # editor buttons via _toggle_edit. addDockWidget defaults a
+        # dock to visible, so hide explicitly here in view mode
+        # otherwise the docks flash into existence on startup.
         self._inspector = PropertyInspector(self)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self._inspector)
         self._inspector.show_panel(None)
+        self._inspector.setVisible(bool(self._allow_edit))
 
         # Create tabs. Skip _build_all_panels when:
         #   1) blank=True — CLI opened a name that doesn't exist yet.
