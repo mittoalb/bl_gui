@@ -3088,11 +3088,20 @@ class Win(QtWidgets.QMainWindow):
                     print(f"[BTNS] {panel_key!r}: saved btn_list has "
                           f"{len(btn_list)} entries: "
                           f"{[b.get('label') for b in btn_list]}")
-                for existing in list(p.custom_buttons):
-                    lay = p.layout()
-                    if lay is not None:
-                        lay.removeWidget(existing)
-                    existing.setParent(None); existing.deleteLater()
+                # Nuclear layout wipe — takeAt drains every item from
+                # the layout, whether or not it's in p.custom_buttons.
+                # Fixes the case where a preset-built button remained
+                # in the QHBoxLayout after tracked-only cleanup and
+                # squatted the layout slot the first saved button
+                # would otherwise take.
+                lay = p.layout()
+                if lay is not None:
+                    while lay.count() > 0:
+                        item = lay.takeAt(0)
+                        w = item.widget() if item is not None else None
+                        if w is not None:
+                            w.setParent(None)
+                            w.deleteLater()
                 p.custom_buttons.clear()
                 cols = grid_cols_override.get(panel_key,
                                               getattr(p, "_grid_cols", None))
