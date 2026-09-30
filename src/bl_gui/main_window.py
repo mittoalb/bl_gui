@@ -130,6 +130,47 @@ def _lay_path():
     return u if os.path.isfile(u) else _bundled_lay_path()
 from .widgets import CfgButton, Panel, _ButtonEditFilter, _change_font_size, _duplicate_widget, _edit_widget
 
+
+class _TabCanvas(QtWidgets.QWidget):
+    """Tab canvas that paints alignment guides during a Panel drag.
+
+    Each child Panel sets ``self._drag_guides`` (list of
+    ``(orientation, coord)`` tuples in canvas coordinates) while its
+    edges are snapping to a sibling. Panel.mouseMoveEvent then calls
+    ``self.parent().update()``, which fires this paintEvent — we walk
+    every child Panel and draw a thin dashed line at each guide's
+    coord across the full width/height. On mouse release the panel
+    clears its guide list and requests another repaint, so the lines
+    vanish.
+    """
+
+    _GUIDE_COLOR = QtGui.QColor("#e67e22")  # orange, matches edit chrome
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        guides_v: set[int] = set()
+        guides_h: set[int] = set()
+        for ch in self.findChildren(Panel):
+            for orient, coord in getattr(ch, "_drag_guides", ()) or ():
+                if orient == 'v':
+                    guides_v.add(int(coord))
+                elif orient == 'h':
+                    guides_h.add(int(coord))
+        if not guides_v and not guides_h:
+            return
+        p = QtGui.QPainter(self)
+        pen = QtGui.QPen(self._GUIDE_COLOR)
+        pen.setStyle(QtCore.Qt.DashLine)
+        pen.setWidth(1)
+        p.setPen(pen)
+        w = self.width(); h = self.height()
+        for x in guides_v:
+            p.drawLine(x, 0, x, h)
+        for y in guides_h:
+            p.drawLine(0, y, w, y)
+        p.end()
+
+
 class Win(QtWidgets.QMainWindow):
     def __init__(self, allow_edit=False, blank=False):
         super().__init__()
@@ -645,7 +686,7 @@ class Win(QtWidgets.QMainWindow):
                         except Exception: pass
 
     def _create_tab(self, name):
-        canvas = QtWidgets.QWidget()
+        canvas = _TabCanvas()
         canvas.setAutoFillBackground(True)
         pal = canvas.palette(); pal.setColor(QtGui.QPalette.Window, QtGui.QColor("#000000")); canvas.setPalette(pal)
         scroll = QtWidgets.QScrollArea()
