@@ -726,9 +726,37 @@ class Win(QtWidgets.QMainWindow):
     def _make_panel(self, title, w, h, tab_name):
         canvas = self._tab_canvases.get(tab_name)
         key = self._unique_key(title, tab_name)
-        p = Panel(title, key, canvas); p.resize(w, h); p.show()
+        p = Panel(title, key, canvas); p.resize(w, h)
+        # Only call show() when Win itself is already visible (i.e.
+        # this call came from a runtime action like + Widget or a
+        # paste, not from load). During __init__/_load_layout, Win
+        # isn't shown yet — showing a child then propagates over
+        # X11/NoMachine as a top-level window for each panel until
+        # the parent chain is fully realized. Panels created during
+        # load get shown en-masse by _show_all_panels() below,
+        # called on the first showEvent so every parent is ready.
+        if self.isVisible():
+            p.show()
         self._panels[key] = p; self._panel_tab_map[key] = tab_name
         return p, key
+
+    def _show_all_panels(self):
+        """Explicit show pass after the layout is fully built. Called
+        once from showEvent so no panel briefly renders as a top-level
+        X window while the parent chain is still forming during
+        construction."""
+        for p in self._panels.values():
+            if not p.isVisible():
+                p.show()
+
+    def showEvent(self, event):
+        """First-show hook: after Qt has realized the widget hierarchy
+        (Win + central + tab widget + canvases), show every panel that
+        was created hidden during __init__. Subsequent showEvent calls
+        (Win minimize/restore etc.) also run this but it's a no-op
+        since panels are already visible."""
+        super().showEvent(event)
+        self._show_all_panels()
 
     # ── panel preset registry ────────────────────────────────────────
     # Base-title → (builder method name, default width, default height).
