@@ -1582,6 +1582,31 @@ class Win(QtWidgets.QMainWindow):
             f"Pasted {snap.get('title') or new_key!r} onto {current_tab!r}.",
             3000)
 
+    def _rekey_panel(self, old_key: str, new_key: str):
+        """Rename a panel's key across every tracking dict so its
+        saved geometry / buttons / mcs / pv_fields look up correctly.
+        Used by the loader when a preset builder produces a base key
+        (e.g. "Launchers::Expert Mode") but the saved layout used a
+        duplicate suffix (e.g. "Launchers#7::Expert Mode")."""
+        if old_key == new_key or old_key not in self._panels:
+            return
+        if new_key in self._panels:
+            # Would clobber another panel — refuse.
+            print(f"[REKEY] refusing to overwrite existing key {new_key!r}")
+            return
+        p = self._panels.pop(old_key)
+        p.key = new_key
+        self._panels[new_key] = p
+        tab = self._panel_tab_map.pop(old_key, None)
+        if tab is not None:
+            self._panel_tab_map[new_key] = tab
+        slot = self._pv_fields.pop(old_key, None)
+        if slot is not None:
+            self._pv_fields[new_key] = slot
+        pw = getattr(self, "_plugin_widgets", None)
+        if pw is not None and old_key in pw:
+            pw[new_key] = pw.pop(old_key)
+
     def _snapshot_panel(self, panel_key: str):
         """Capture the full state of a panel so it can be recreated
         later by _restore_panel. Returns None if the panel doesn't
@@ -2067,6 +2092,39 @@ class Win(QtWidgets.QMainWindow):
             def _builder(win, tab_name, _m=method):
                 return _m(tab_name)
             _wreg.register_preset(label, base_name, w, h, _builder)
+        # For motor groups, ALSO register a per-group preset for every
+        # group base name so the loader's name-match path finds a
+        # builder for "Zone Plate", "Phase Ring", "Bertrand Lens",
+        # etc. — not just "Condenser". Each per-group builder is
+        # idempotent (skips if the group's panel already exists on
+        # this tab), so calling it multiple times or after the full
+        # motor_groups builder produces no duplicates.
+        def _make_group_builder(gname, motors, pw):
+            def _b(win, tab_name):
+                if f"{gname}::{tab_name}" in win._panels:
+                    return
+                p, _ = win._make_panel(gname, pw, 190, tab_name)
+                ml = QtWidgets.QHBoxLayout()
+                ml.setContentsMargins(4, 20, 4, 4); ml.setSpacing(3)
+                for mlbl, mpv in motors:
+                    mc = MC(mlbl, mpv)
+                    ml.addWidget(mc); win.mcs.append(mc)
+                p.setLayout(ml)
+            return _b
+        for gname, motors in GROUPS:
+            pw = len(motors) * 116 + 16
+            _wreg.register_preset(
+                gname, gname, pw, 190,
+                _make_group_builder(gname, motors, pw))
+        # Condenser now has TWO registered presets: the full
+        # "Motor groups (TXM defaults)" (from the dedupe loop above,
+        # under default_name="Condenser") and the per-group Condenser
+        # (registered just now). register_preset overwrites on
+        # collision by menu label, and preset_for_base returns the
+        # last-registered entry with a matching default_name — so the
+        # loader's name-match uses the per-group idempotent builder
+        # while the menu keeps "Motor groups (TXM defaults)" as the
+        # dropdown entry for building all 14 at once.
 
     def _add_preset_from_registry(self, label):
         """Handler for + Widget → Presets ▸ <label>. Primes the
@@ -2873,6 +2931,7 @@ class Win(QtWidgets.QMainWindow):
                     self._build_state = {'x': 0, 'y': 0, 'GAP': 4,
                                          'iy': 0, 'ci': 0}
                     _def_name, _w, _h, builder = preset_entry
+                    keys_before_build = set(self._panels.keys())
                     try:
                         builder(self, tab_name)
                         recreated += 1
@@ -2880,6 +2939,21 @@ class Win(QtWidgets.QMainWindow):
                         print(f"[LOAD] preset build failed for {k!r}: {e}")
                         import traceback
                         traceback.print_exc()
+                        continue
+                    # The builder calls _make_panel → _unique_key,
+                    # which allocates the FIRST free key of the base
+                    # name (e.g. "Launchers::Expert Mode"). If the
+                    # saved key uses a duplicate-suffix like
+                    # "Launchers#7::Expert Mode" — and no earlier
+                    # panel had reserved the base key — the built
+                    # panel gets the wrong key, and the geometry /
+                    # buttons / mcs / pv_fields loops below can't
+                    # find it. Rename the just-built panel(s) so
+                    # their keys match the saved keys.
+                    new_keys = [nk for nk in self._panels
+                                if nk not in keys_before_build]
+                    if len(new_keys) == 1 and new_keys[0] != k:
+                        self._rekey_panel(new_keys[0], k)
                     continue
                 new_p = Panel(base + " (copy)", k, canvas)
                 # Use the saved MC list to decide layout orientation + contents
