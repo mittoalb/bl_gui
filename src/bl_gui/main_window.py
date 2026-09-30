@@ -3073,6 +3073,11 @@ class Win(QtWidgets.QMainWindow):
             self._deleted_buttons = {
                 k: list(v) for k, v in (data.get("_deleted_buttons") or {}).items()
             }
+            # Optional per-panel grid-column override — lets a layout
+            # declare `_panel_grid_cols: {panel_key: N}` to override
+            # the preset's baked-in column count. Set N=1 to stack a
+            # button panel vertically without changing the preset.
+            grid_cols_override = data.get("_panel_grid_cols") or {}
             for panel_key, btn_list in buttons.items():
                 p = self._panels.get(panel_key)
                 if not p: continue
@@ -3082,7 +3087,8 @@ class Win(QtWidgets.QMainWindow):
                         lay.removeWidget(existing)
                     existing.setParent(None); existing.deleteLater()
                 p.custom_buttons.clear()
-                cols = getattr(p, "_grid_cols", None)
+                cols = grid_cols_override.get(panel_key,
+                                              getattr(p, "_grid_cols", None))
                 defaults = getattr(p, "_cfg_btn_defaults", None)
                 default_specs = getattr(p, "_default_btn_specs", [])
                 # Merge: if the saved list is missing any default button,
