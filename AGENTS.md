@@ -581,24 +581,91 @@ on `pip install -e .` only — re-run if you add a new sub-package).
 
 ## 10. Editing in the GUI
 
-`bl_gui <layout> edit` enables edit mode at startup. In edit mode:
+Two ways to enter edit mode:
 
-* Panels can be dragged and resized; their geometry is saved.
-* Right-click on a Panel: rename, change title font, add motor /
-  PV row, duplicate panel, delete panel.
-* Right-click on an MC motor card: open Motor Details, edit motor PV,
+* CLI: `bl_gui <layout> edit` starts in edit mode.
+* Runtime: click the **Edit** toggle in the top bar. No relaunch —
+  edit mode is a runtime state, not a startup permission gate.
+
+In edit mode:
+
+* Panels can be dragged and resized; geometry snaps to a 10 px grid
+  and to sibling-panel edges (6 px tolerance). Hold **Shift** to
+  bypass snapping for 1 px precision. Dashed orange lines appear
+  while snapping to show which edges are aligning.
+* Right-click a Panel: rename, change title font, add motor / PV row,
+  duplicate, delete, copy/paste to clipboard, move to tab.
+* Right-click an MC motor card: open Motor Details, edit motor PV,
   duplicate, change font, delete.
-* Right-click on a PVField/ValveField/ToggleField: edit PV(s), delete
+* Right-click a PVField/ValveField/ToggleField: edit PV(s), delete
   row, add PV row here.
-* Right-click on a CfgButton: edit Action (label, type, command).
+* Right-click a CfgButton: edit Action (label, type, command).
 
-The **font slider** in the top bar (50–200 %) re-applies fonts to
-every motor card; `Ctrl+= / Ctrl+- / Ctrl+0` are the keyboard shortcuts
-(also active in view mode).
+### Docks
 
-Any panel duplication snapshots the source's geometry, layout
-orientation, motor cards, and `custom_buttons` list (via
-`CfgButton.to_dict`/`from_dict`), then rebuilds them in the new panel.
+Two dockable widgets appear in edit mode. Users can drag them out or
+close them; they reappear on next entry to edit mode.
+
+* **Panels** (left) — tree of tabs → panels. Click a row to select
+  that panel: it comes to the front and populates the inspector.
+* **Properties** (right) — inline editor for the selected widget.
+  * Panel selected: title, title font, x/y/w/h, tab, delete.
+  * MC selected: label, PV, tweak value, custom-label flag, delete.
+  * (PVField/CfgButton use their right-click dialogs for now.)
+
+Every edit through the docks records an undo op.
+
+### Keyboard
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+S` | Save layout |
+| `Ctrl+Shift+S` | Save layout as… |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Shift+Z` / `Ctrl+Y` | Redo |
+| `Ctrl+V` | Paste panel from clipboard |
+| `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | Motor-card font boost / shrink / reset |
+
+### Undo / Redo
+
+Bounded 200-entry op-based history. Wired ops:
+
+* Move / resize a panel (drag or via inspector spinboxes).
+* Rename a panel (right-click or inspector).
+* Change a panel's title font.
+* Delete a panel — snapshot captured beforehand so undo rebuilds it
+  with every widget, PV wiring, button, and motor card intact.
+* Add a panel via `+ Panel`, `+ Widget`, or `+ Widget → Presets ▸`.
+* Move a panel to another tab.
+* Paste a panel from the clipboard.
+* MC label / PV / tweak / custom-label edits via the inspector.
+
+Motor-card PV changes via right-click dialogs and PVField/CfgButton
+edits are not yet undoable — they still work, just outside history.
+
+### Clipboard
+
+Right-click any panel → **Copy Panel to Clipboard** writes a
+JSON snapshot to `~/.bl_gui/clipboard.json`. The clipboard is a
+single slot and survives quit/relaunch. Paste (right-click any
+panel → **Paste Panel from Clipboard**, or `Ctrl+V`, or Edit menu)
+rebuilds the panel on the current tab via the preset/plugin
+registry, offset by `(+30, +30)` from the source coords. Works
+across layouts: copy from `bl32id`, quit, launch `MyGui`, paste.
+
+### Panel duplication
+
+Same mechanism as clipboard paste, in-process — the source's
+geometry, title, layout orientation, motor cards, and custom
+buttons are captured (via `CfgButton.to_dict` / MC serialization)
+and reproduced in a new panel with a unique `#N` suffix.
+
+### The font slider
+
+The top-bar font slider (50–200 %) re-applies fonts to every motor
+card. Independent per-category font scales (titles / labels /
+values / buttons) live in the **Fonts…** dialog and affect every
+non-MC widget across the GUI at once.
 
 ---
 
@@ -671,10 +738,14 @@ declares `PyQt5 >= 5.15` and `pvapy` (which installs `pvaccess`).
 
 * **New beamline** → add `src/bl_gui/layouts/<bl>.json` and
   optionally a sub-package `src/bl_gui/beamlines/<bl>/`. Run
-  `bl_gui <bl>.json edit` to lay it out and save.
+  `bl_gui <bl>.json edit` to lay it out and save. New layouts should
+  set `"_no_defaults": true` at top level so no TXM-flavoured
+  defaults get built and destroyed on load.
 * **New PV-bound widget kind** → add to `pv_field.PVField._build_inner`,
   give it a stable id, register a `monitored_pvs()` and
   `update_value()` if it should react to a PV.
+* **New droppable widget or preset** → register via `widget_registry`
+  (see Section 14a below). No edits to `main_window.py` needed.
 * **New programmatic action button** → add to
   `Win._build_all_panels` as a `CfgButton` with the right
   `action_type`/`action`, *and* register a default spec on the panel
@@ -683,6 +754,71 @@ declares `PyQt5 >= 5.15` and `pvapy` (which installs `pvaccess`).
   `qgmax_trigger.py`: a tiny module that writes a request file plus a
   `read_status()` helper, with a button in the main window polling
   the status file.
+
+---
+
+## 14a. `widget_registry` — pluggable widgets
+
+Every entry in the `+ Widget` menu goes through
+`bl_gui.widget_registry`. Two flavours:
+
+* **Atomic** — a factory that returns a `QWidget`. bl_gui drops it
+  into a fresh `Panel` via `_add_widget_from_registry`. Motor cards,
+  PV rows, valves, LEDs, action buttons, camera views, MCTOptics
+  view are atomics.
+* **Preset** — a builder that owns the whole panel (creates it via
+  `win._make_panel` and populates it fully). Every `_build_panel_*`
+  method on `Win` is registered as a preset (Shutters, Machine info,
+  Energy, Camera, motor groups, Launchers, ALL STOP, …).
+
+### Registering a widget
+
+Drop a module in `src/bl_gui/widgets_ext/` (in-repo) or
+`~/.bl_gui/widgets/` (per-user). Both directories are auto-imported
+at Win construction, so any `register_*` call at import time takes
+effect. See `src/bl_gui/widgets_ext/example.py` for the reference.
+
+```python
+from bl_gui.widget_registry import register_widget, register_preset
+
+# Atomic — call-style
+def _mywidget(parent):
+    return MyWidget(parent=parent)
+register_widget("My Widget", "MyWidget", 300, 200, _mywidget)
+
+# Atomic — decorator-style
+@register_widget("My Widget", "MyWidget", 300, 200)
+def _mywidget(parent):
+    return MyWidget(parent=parent)
+
+# Preset — builder takes (win, tab_name)
+def _mypreset(win, tab_name):
+    p, _ = win._make_panel("MyPreset", 400, 300, tab_name)
+    # ... populate p ...
+register_preset("My Preset", "MyPreset", 400, 300, _mypreset)
+```
+
+Parameters: `menu_label` (visible in `+ Widget`), `default_name`
+(also used as the saved panel base name for layout name-match on
+reload), `default_w`, `default_h`, factory/builder.
+
+### How the load path finds presets
+
+For any panel key in the JSON's `_panels` that isn't already
+constructed (which is every panel when `_no_defaults: true`), the
+loader:
+
+1. Looks in `_plugin_widgets[key]` for an explicit atomic-widget
+   kind — if present, calls `_add_widget_from_registry(kind, ...)`.
+2. Otherwise matches the key's base name against
+   `_widget_registry.preset_for_base(base)`. If a preset owns that
+   name, its builder runs.
+3. Otherwise creates an empty placeholder panel (survives motor
+   cards from the saved `_mcs` block).
+
+So a layout can be entirely declarative: list its panels in
+`_panels`, and each panel's base name resolves to a registered
+preset builder. No hidden Python defaults.
 
 ---
 
