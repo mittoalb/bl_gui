@@ -3090,21 +3090,22 @@ class Win(QtWidgets.QMainWindow):
                     print(f"[BTNS] {panel_key!r}: saved btn_list has "
                           f"{len(btn_list)} entries: "
                           f"{[b.get('label') for b in btn_list]}")
-                # Nuclear layout wipe — takeAt drains every item from
-                # the layout, whether or not it's in p.custom_buttons.
-                # Fixes the case where a preset-built button remained
-                # in the QHBoxLayout after tracked-only cleanup and
-                # squatted the layout slot the first saved button
-                # would otherwise take.
-                lay = p.layout()
-                if lay is not None:
-                    while lay.count() > 0:
-                        item = lay.takeAt(0)
-                        w = item.widget() if item is not None else None
-                        if w is not None:
-                            w.setParent(None)
-                            w.deleteLater()
+                    print(f"[BTNS] {panel_key!r}: BEFORE WIPE "
+                          f"layout={type(p.layout()).__name__ if p.layout() else 'None'} "
+                          f"custom_buttons={len(p.custom_buttons)}")
+                # Wipe existing p.custom_buttons — deleteLater without
+                # setParent(None) so we don't accidentally detach the
+                # widget from its layout via reparent side-effects.
+                # takeAt on the layout would drain everything but
+                # earlier experiments (nuclear wipe) suggested some
+                # side-effect was nulling the layout. Keeping the
+                # simple deleteLater path.
+                for existing in list(p.custom_buttons):
+                    existing.deleteLater()
                 p.custom_buttons.clear()
+                if "Presets" in panel_key:
+                    print(f"[BTNS] {panel_key!r}: AFTER WIPE "
+                          f"layout={type(p.layout()).__name__ if p.layout() else 'None'}")
                 cols = grid_cols_override.get(panel_key,
                                               getattr(p, "_grid_cols", None))
                 defaults = getattr(p, "_cfg_btn_defaults", None)
