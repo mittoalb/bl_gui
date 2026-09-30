@@ -174,6 +174,15 @@ class _TabCanvas(QtWidgets.QWidget):
 class Win(QtWidgets.QMainWindow):
     def __init__(self, allow_edit=False, blank=False):
         super().__init__()
+        # Suppress every Panel.setVisible(True) that fires during
+        # construction (loader, preset builders, plugin recreate,
+        # etc.). Over X11/NoMachine an unblocked show() on a Panel
+        # whose parent chain isn't fully realized yet creates a
+        # top-level X window per panel, producing the "hundreds of
+        # small dark panels flashing" cascade. showEvent flips the
+        # flag off and calls _show_all_panels() so every panel comes
+        # up in one pass with the full hierarchy realized.
+        Panel.defer_show = True
         self._allow_edit = allow_edit
         # Beamline name = currently loaded layout file's basename (no .json).
         # This gets updated by main() if the user passes a layout file.
@@ -742,19 +751,21 @@ class Win(QtWidgets.QMainWindow):
 
     def _show_all_panels(self):
         """Explicit show pass after the layout is fully built. Called
-        once from showEvent so no panel briefly renders as a top-level
-        X window while the parent chain is still forming during
-        construction."""
+        from showEvent — before this fires, Panel.defer_show is True
+        and every setVisible(True) is a no-op, so no panel can render
+        as a top-level X window during construction. Here we flip the
+        flag off and issue setVisible(True) for every panel in one
+        pass with the full hierarchy realized."""
+        Panel.defer_show = False
         for p in self._panels.values():
-            if not p.isVisible():
-                p.show()
+            p.setVisible(True)
 
     def showEvent(self, event):
         """First-show hook: after Qt has realized the widget hierarchy
         (Win + central + tab widget + canvases), show every panel that
-        was created hidden during __init__. Subsequent showEvent calls
-        (Win minimize/restore etc.) also run this but it's a no-op
-        since panels are already visible."""
+        was deferred during __init__. Subsequent showEvent calls (Win
+        minimize/restore etc.) also run this but it's a no-op since
+        panels are already visible."""
         super().showEvent(event)
         self._show_all_panels()
 

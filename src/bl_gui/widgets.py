@@ -45,15 +45,18 @@ class _ButtonEditFilter(QtCore.QObject):
 class Panel(QtWidgets.QFrame):
     HANDLE = 12
 
+    # Global defer flag — while True, EVERY setVisible(True) on any
+    # Panel is a no-op. Win flips this to True at the start of
+    # __init__ and back to False from its showEvent(), so no matter
+    # what call path (loader, plugin recreate, empty-panel fallback,
+    # etc.) tries to show a panel during construction, X11 never
+    # gets a chance to create top-level windows for them.
+    defer_show = False
+
     def __init__(self, title, key, parent=None):
         super().__init__(parent)
-        # Force widget-only role even if parent is transient — Qt's
-        # default for a QWidget without a live parent is to promote
-        # it to a top-level window, which caused "small dark panels
-        # flashing across the screen" during layout load when
-        # canvases weren't fully realized yet.
+        # Force widget-only role even if parent is transient.
         self.setWindowFlags(QtCore.Qt.Widget)
-        self.setAttribute(QtCore.Qt.WA_DontShowOnScreen, False)
         self.key = key
         self._edit = False
         self._drag = False
@@ -70,6 +73,14 @@ class Panel(QtWidgets.QFrame):
         self._title.move(6, 2)
         self._title.raise_()             # keep above any later siblings
         self.setStyleSheet(_PANEL_SS)
+
+    def setVisible(self, on):
+        # Global defer swallows every show attempt during Win.__init__.
+        # Win._show_all_panels() (called from showEvent) flips the
+        # flag off and then calls setVisible(True) on every panel.
+        if on and Panel.defer_show:
+            return
+        super().setVisible(on)
 
     def title_text(self):
         return self._title.text()
