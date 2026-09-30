@@ -4235,6 +4235,26 @@ def main():
     else:
         _blank_layout = False
 
+    # Install a Qt message handler that drops the two noise streams
+    # bl_gui can't cleanly fix at source:
+    #   * "Could not parse stylesheet of object QPushButton(0x…)" —
+    #     from Qt's stylesheet parser being stricter than any browser;
+    #     it fires per widget on every re-style, drowning real logs.
+    #   * "qt.glx: qglx_findConfig: Failed to finding matching
+    #     FBConfig …" — Qt's OpenGL probe. We already force software
+    #     OpenGL over remote-X below to sidestep the actual bug, but
+    #     the warning line can still fire during startup.
+    def _bl_qt_msg_handler(msg_type, context, message):
+        if not message:
+            return
+        if "Could not parse stylesheet" in message:
+            return
+        if "qglx_findConfig" in message:
+            return
+        # Fall through — send to stderr like Qt's default handler.
+        sys.stderr.write(message + "\n")
+    QtCore.qInstallMessageHandler(_bl_qt_msg_handler)
+
     # HiDPI scaling — makes the GUI adapt to the display DPI so text stays
     # readable when viewing across monitors of very different sizes.
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
