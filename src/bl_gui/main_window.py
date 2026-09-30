@@ -1704,7 +1704,8 @@ class Win(QtWidgets.QMainWindow):
                 if canvas is None:
                     return None
                 new_p = Panel(base, self._unique_key(base, tab), canvas)
-                new_p.show()
+                if self.isVisible():
+                    new_p.show()  # runtime restore — safe to show now
                 self._panels[new_p.key] = new_p
                 self._panel_tab_map[new_p.key] = tab
             else:
@@ -2299,9 +2300,14 @@ class Win(QtWidgets.QMainWindow):
                              name=f"pv-monitor-new-{p.key}").start()
 
         # Explicitly show the widget in case something in the panel's
-        # edit-mode toggle above suppressed it.
-        widget.show()
-        p.show()
+        # edit-mode toggle above suppressed it. But only if Win is
+        # already visible — during __init__/load, showing a panel
+        # over X11/NoMachine promotes it to a top-level X window
+        # briefly. _show_all_panels() shows deferred panels once
+        # Win itself becomes visible.
+        if self.isVisible():
+            widget.show()
+            p.show()
         # Track so _save_layout can persist the widget-kind, and
         # _load_layout can rebuild it via _add_widget_from_registry.
         if not hasattr(self, "_plugin_widgets"):
@@ -2996,7 +3002,8 @@ class Win(QtWidgets.QMainWindow):
                     lay.addWidget(mc)
                     self.mcs.append(mc)
                 lay.addStretch()
-                new_p.show()
+                if self.isVisible():
+                    new_p.show()  # runtime — safe to show now
                 self._panels[k] = new_p
                 self._panel_tab_map[k] = tab_name
                 recreated += 1
