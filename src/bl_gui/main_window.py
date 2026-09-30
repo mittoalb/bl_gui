@@ -3080,7 +3080,14 @@ class Win(QtWidgets.QMainWindow):
             grid_cols_override = data.get("_panel_grid_cols") or {}
             for panel_key, btn_list in buttons.items():
                 p = self._panels.get(panel_key)
-                if not p: continue
+                if not p:
+                    if "Presets" in panel_key:
+                        print(f"[BTNS] skip {panel_key!r}: no panel")
+                    continue
+                if "Presets" in panel_key:
+                    print(f"[BTNS] {panel_key!r}: saved btn_list has "
+                          f"{len(btn_list)} entries: "
+                          f"{[b.get('label') for b in btn_list]}")
                 for existing in list(p.custom_buttons):
                     lay = p.layout()
                     if lay is not None:
@@ -3117,6 +3124,9 @@ class Win(QtWidgets.QMainWindow):
                                    "bg": defaults[0] if defaults else "#2d2d2d",
                                    "fg": defaults[1] if defaults else "#e0e0e0",
                                    "font_size": defaults[2] if defaults else 9})
+                if "Presets" in panel_key:
+                    print(f"[BTNS] {panel_key!r}: merged={len(merged)} "
+                          f"labels={[b.get('label') for b in merged]}")
                 for idx, bd in enumerate(merged):
                     btn = CfgButton.from_dict(bd, p)
                     btn.setMinimumHeight(34)
