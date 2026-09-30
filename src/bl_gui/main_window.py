@@ -16,6 +16,7 @@ from . import theme as _theme_mod
 from .theme import _IMG, _PANEL_SS, _PANEL_SS_EDIT, _SS
 from . import widget_registry as _wreg
 from .inspector import PropertyInspector
+from .outliner import PanelOutliner
 
 
 # ── XANES element edges — Energy-panel quick-select ─────────────────────
@@ -352,6 +353,11 @@ class Win(QtWidgets.QMainWindow):
         self.tab_widget.tabBar().customContextMenuRequested.connect(self._tab_context_menu)
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
         root.addWidget(self.tab_widget)
+
+        # ═══ PANEL OUTLINER (dock, left side) ═══
+        # Tree of tabs → panels for quick navigation on crowded layouts.
+        self._outliner = PanelOutliner(self)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self._outliner)
 
         # ═══ PROPERTY INSPECTOR (dock, right side) ═══
         # Only visible in edit mode — hidden alongside the top-bar
@@ -1698,6 +1704,12 @@ class Win(QtWidgets.QMainWindow):
                     _undo, _redo)
         if record and panel_key not in self._deleted_panels:
             self._deleted_panels.append(panel_key)
+        # Clear selection if the deleted panel was selected.
+        if getattr(self, "_selected_panel_key", None) == panel_key:
+            self._selected_panel_key = None
+            insp = getattr(self, "_inspector", None)
+            if insp is not None:
+                insp.show_panel(None)
         panel = self._panels.pop(panel_key, None)
         self._panel_tab_map.pop(panel_key, None)
         if panel:
@@ -1720,6 +1732,9 @@ class Win(QtWidgets.QMainWindow):
                     else:
                         del io_labels[fid]
             panel.deleteLater()
+        # Refresh outliner if edit mode is active.
+        if getattr(self, "_edit_mode", False):
+            self._refresh_outliner()
 
     # ── tab operations ───────────────────────────────────────────────
 
@@ -2060,6 +2075,9 @@ class Win(QtWidgets.QMainWindow):
                 for s in ss:
                     self._restore_panel(s)
             self._record_op(f"Add preset {label!r}", _undo, _redo)
+        # Refresh outliner in edit mode.
+        if getattr(self, "_edit_mode", False):
+            self._refresh_outliner()
 
     def _new_field_id(self, prefix: str) -> str:
         """Generate a unique field_id for a dynamically-added PV field.
@@ -2180,6 +2198,9 @@ class Win(QtWidgets.QMainWindow):
                 def _redo(s=snap):
                     self._restore_panel(s)
                 self._record_op(f"Add widget {key!r}", _undo, _redo)
+        # Refresh outliner in edit mode.
+        if getattr(self, "_edit_mode", False):
+            self._refresh_outliner()
 
     # ── font scale ───────────────────────────────────────────────────
 
@@ -2299,6 +2320,17 @@ class Win(QtWidgets.QMainWindow):
         insp = getattr(self, "_inspector", None)
         if insp is not None:
             insp.show_panel(panel_key)
+        outl = getattr(self, "_outliner", None)
+        if outl is not None:
+            outl.select_key(panel_key)
+
+    def _refresh_outliner(self):
+        """Rebuild the outliner tree from current panel/tab state.
+        Called after add/remove/move/rename/tab changes so the tree
+        stays in sync with the canvas. Cheap — the tree is small."""
+        outl = getattr(self, "_outliner", None)
+        if outl is not None:
+            outl.refresh()
 
     # ── undo / redo ──────────────────────────────────────────────────
 
@@ -2336,6 +2368,9 @@ class Win(QtWidgets.QMainWindow):
         insp = getattr(self, "_inspector", None)
         if insp is not None and self._edit_mode:
             insp.refresh()
+        outl = getattr(self, "_outliner", None)
+        if outl is not None and self._edit_mode:
+            outl.refresh()
 
     def _redo(self):
         if not self._redo_stack:
@@ -2357,6 +2392,9 @@ class Win(QtWidgets.QMainWindow):
         insp = getattr(self, "_inspector", None)
         if insp is not None and self._edit_mode:
             insp.refresh()
+        outl = getattr(self, "_outliner", None)
+        if outl is not None and self._edit_mode:
+            outl.refresh()
 
     # ── edit mode ────────────────────────────────────────────────────
 
@@ -2394,6 +2432,14 @@ class Win(QtWidgets.QMainWindow):
                 # Clear selection when leaving edit mode so the panel
                 # highlight (if any) doesn't linger.
                 self._selected_panel_key = None
+        # Outliner: also edit-only by default (navigation tool for
+        # authoring). Users who want it during runtime can pop it
+        # back out via the standard dock menu.
+        outl = getattr(self, "_outliner", None)
+        if outl is not None:
+            outl.setVisible(on)
+            if on:
+                outl.refresh()
         # Reflect current state on the toggle button without re-firing.
         btn = getattr(self, "edit_toggle_btn", None)
         if btn is not None and btn.isChecked() != on:
