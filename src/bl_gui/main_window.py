@@ -3127,6 +3127,10 @@ class Win(QtWidgets.QMainWindow):
                 if "Presets" in panel_key:
                     print(f"[BTNS] {panel_key!r}: merged={len(merged)} "
                           f"labels={[b.get('label') for b in merged]}")
+                    print(f"[BTNS] {panel_key!r}: panel layout is "
+                          f"{type(p.layout()).__name__ if p.layout() else 'None'}, "
+                          f"panel geom={p.geometry()!r}, "
+                          f"panel visible={p.isVisible()}")
                 for idx, bd in enumerate(merged):
                     btn = CfgButton.from_dict(bd, p)
                     btn.setMinimumHeight(34)
@@ -3154,6 +3158,10 @@ class Win(QtWidgets.QMainWindow):
                     else:
                         btn.move(10, 30)
                     btn.show(); p.custom_buttons.append(btn)
+                    if "Presets" in panel_key:
+                        print(f"[BTNS]   added #{idx} label={bd.get('label')!r} "
+                              f"visible={btn.isVisible()} geom={btn.geometry()!r} "
+                              f"parent={btn.parent().__class__.__name__ if btn.parent() else 'None'}")
             # Per-button styles
             styles = data.get("_styles", {})
             for btn_id, sty in styles.items():
