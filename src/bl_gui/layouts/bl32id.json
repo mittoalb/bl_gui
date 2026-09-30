@@ -17,7 +17,8 @@
   },
   "_tab_label_fs": 8,
   "_panel_grid_cols": {
-    "Displays#8::Expert Mode": 1
+    "Displays#8::Expert Mode": 1,
+    "Launchers#7::Expert Mode": 1
   },
   "_panels": {
     "Shutters::User Mode": [5, 109, 397, 126],
@@ -69,7 +70,7 @@
     "Bertrand Lens#3::User Mode": [407, 380, 259, 209],
     "Queensgate#4::Expert Mode": [745, 995, 144, 194],
     "Beam Stop#5::Expert Mode": [1252, 997, 248, 190],
-    "Launchers#7::Expert Mode": [1519, 4, 189, 281],
+    "Launchers#7::Expert Mode": [1519, 4, 170, 430],
     "Displays#8::Expert Mode": [1656, 307, 170, 430],
     "Presets#11::Expert Mode": [416, 141, 160, 111],
     "Beamstop#12::Expert Mode": [517, 588, 248, 190],
@@ -100,14 +101,15 @@
       {"label": "Softglue",   "type": "shell", "action": "medm -x -macro 'P=32idSoftGlueZynq:' /home/beams19/USERTXM/epics/synApps/support/softGlueZynq/softGlueZynqApp/op/adl/softGlueZynq_top.adl &",                                              "bg": "#00aa00", "fg": "#ffffff", "font_size": 10}
     ],
     "Launchers#7::Expert Mode": [
-      {"label": "ImageJ",    "type": "shell", "action": "/home/beams/USERTXM/Software/ImageJ/ImageJ.sh",                                                                    "bg": "#ffff7f", "fg": "#000000", "font_size": 10},
-      {"label": "Detector",  "type": "shell", "action": "/home/beams/USERTXM/epics/synApps/support/32idbSP1/iocBoot/ioc32idbSP1/softioc/32idbSP1.sh medm",                  "bg": "#55557f", "fg": "#ffffff", "font_size": 10},
-      {"label": "Blackfly",  "type": "shell", "action": "/home/beams/USERTXM/epics/synApps/support/32idbSP2/iocBoot/ioc32idbSP2/softioc/32idbSP2.sh medm",                  "bg": "#55557f", "fg": "#ffffff", "font_size": 10},
-      {"label": "IOCs",      "type": "shell", "action": "medm -x /home/beams/USERTXM/scripts/iocs_start.adl &",                                                             "bg": "#623d2e", "fg": "#ffffff", "font_size": 10},
-      {"label": "32ID Main", "type": "shell", "action": "/home/beams/USERTXM/start_caQtDM_32id",                                                                            "bg": "#5555ff", "fg": "#ffffff", "font_size": 10},
-      {"label": "Web IOCs",  "type": "shell", "action": "/home/beams/USERTXM/scripts/ioc_page.sh",                                                                          "bg": "#005500", "fg": "#ffffff", "font_size": 10},
-      {"label": "Web Cams",  "type": "shell", "action": "firefox 10.54.102.97 &",                                                                                           "bg": "#005500", "fg": "#ffffff", "font_size": 10},
-      {"label": "Shaker",    "type": "shell", "action": "/net/s32dserv/xorApps/epics/synApps_6_3/ioc/32idbShaker/start_MEDM_32idbShaker",                                   "bg": "#55557f", "fg": "#ffffff", "font_size": 10}
+      {"label": "ImageJ",     "type": "shell", "action": "/home/beams/USERTXM/Software/ImageJ/ImageJ.sh",                                                                                                                                            "bg": "#ffff7f", "fg": "#000000", "font_size": 10},
+      {"label": "Detector",   "type": "shell", "action": "/home/beams/USERTXM/epics/synApps/support/32idbSP1/iocBoot/ioc32idbSP1/softioc/32idbSP1.sh medm",                                                                                          "bg": "#55557f", "fg": "#ffffff", "font_size": 10},
+      {"label": "XRayServer", "type": "shell", "action": "firefox http://164.54.102.61:8009/ &",                                                                                                                                                    "bg": "#55557f", "fg": "#ffffff", "font_size": 10},
+      {"label": "IOCs",       "type": "shell", "action": "medm -x /home/beams/USERTXM/scripts/iocs_start.adl &",                                                                                                                                    "bg": "#623d2e", "fg": "#ffffff", "font_size": 10},
+      {"label": "32ID Main",  "type": "shell", "action": "/home/beams/USERTXM/start_caQtDM_32id",                                                                                                                                                    "bg": "#5555ff", "fg": "#ffffff", "font_size": 10},
+      {"label": "Web IOCs",   "type": "shell", "action": "/home/beams/USERTXM/scripts/ioc_page.sh",                                                                                                                                                  "bg": "#005500", "fg": "#ffffff", "font_size": 10},
+      {"label": "Web Cams",   "type": "shell", "action": "firefox 10.54.102.97 &",                                                                                                                                                                   "bg": "#005500", "fg": "#ffffff", "font_size": 10},
+      {"label": "Shaker",     "type": "shell", "action": "/net/s32dserv/xorApps/epics/synApps_6_3/ioc/32idbShaker/start_MEDM_32idbShaker",                                                                                                           "bg": "#55557f", "fg": "#ffffff", "font_size": 10},
+      {"label": "Blackfly",   "type": "shell", "action": "/home/beams/USERTXM/epics/synApps/support/32idbSP2/iocBoot/ioc32idbSP2/softioc/32idbSP2.sh medm",                                                                                          "bg": "#2980b9", "fg": "#ffffff", "font_size": 10}
     ],
     "Displays#8::Expert Mode": [
       {"label": "XANES",      "type": "shell", "action": "medm -x -macro 'P=32id:,R=TXMOptics:' /home/beams19/USERTXM/epics/synApps/support/txmoptics/txmOpticsApp/op/adl/xanes.adl &",                                                              "bg": "#27ae60", "fg": "#ffffff", "font_size": 10},
