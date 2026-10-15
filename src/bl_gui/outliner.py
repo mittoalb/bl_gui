@@ -21,6 +21,22 @@ QDockWidget::title {
     background: #1c1c1c; padding: 4px 8px; color: #73dfff;
     border-bottom: 1px solid #2d2d2d;
 }
+QWidget#OutlinerTitleBar {
+    background: #1c1c1c; border-bottom: 1px solid #2d2d2d;
+}
+QLabel#OutlinerTitleLabel {
+    color: #73dfff; font-weight: bold; font-size: 9pt;
+    padding: 2px 6px; background: transparent;
+}
+QPushButton#OutlinerCollapseBtn, QPushButton#OutlinerCloseBtn {
+    background: #2d2d2d; color: #e0e0e0; font-weight: bold;
+    border: 1px solid #404040; border-radius: 2px;
+    padding: 0px; min-width: 18px; max-width: 18px;
+    min-height: 18px; max-height: 18px; font-size: 10pt;
+}
+QPushButton#OutlinerCollapseBtn:hover, QPushButton#OutlinerCloseBtn:hover {
+    background: #3a3a3a; border-color: #73dfff;
+}
 QWidget#OutlinerBody { background: #1c1c1c; color: #e0e0e0; }
 QTreeWidget {
     background: #1c1c1c; color: #e0e0e0;
@@ -57,7 +73,34 @@ class PanelOutliner(QtWidgets.QDockWidget):
         self.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea
                              | QtCore.Qt.RightDockWidgetArea)
         self.setFeatures(QtWidgets.QDockWidget.DockWidgetMovable
-                         | QtWidgets.QDockWidget.DockWidgetFloatable)
+                         | QtWidgets.QDockWidget.DockWidgetFloatable
+                         | QtWidgets.QDockWidget.DockWidgetClosable)
+
+        # Collapsible titlebar — same pattern as PropertyInspector so
+        # the user can shrink both docks to a thin strip while resizing
+        # the main window.
+        self._collapsed = False
+        self._expanded_width = 220
+        tb = QtWidgets.QWidget(); tb.setObjectName("OutlinerTitleBar")
+        tb_l = QtWidgets.QHBoxLayout(tb)
+        tb_l.setContentsMargins(6, 2, 4, 2); tb_l.setSpacing(4)
+        self._title_label = QtWidgets.QLabel("Panels")
+        self._title_label.setObjectName("OutlinerTitleLabel")
+        self._collapse_btn = QtWidgets.QPushButton("◀")
+        self._collapse_btn.setObjectName("OutlinerCollapseBtn")
+        self._collapse_btn.setToolTip("Collapse (hide body, keep strip)")
+        self._collapse_btn.setCursor(QtCore.Qt.PointingHandCursor)
+        self._collapse_btn.clicked.connect(self.toggle_collapsed)
+        close_btn = QtWidgets.QPushButton("✕")
+        close_btn.setObjectName("OutlinerCloseBtn")
+        close_btn.setToolTip("Hide (reopen via View menu)")
+        close_btn.setCursor(QtCore.Qt.PointingHandCursor)
+        close_btn.clicked.connect(self.hide)
+        tb_l.addWidget(self._title_label)
+        tb_l.addStretch(1)
+        tb_l.addWidget(self._collapse_btn)
+        tb_l.addWidget(close_btn)
+        self.setTitleBarWidget(tb)
 
         body = QtWidgets.QWidget()
         body.setObjectName("OutlinerBody")
@@ -75,8 +118,41 @@ class PanelOutliner(QtWidgets.QDockWidget):
         self._tree.itemDoubleClicked.connect(self._on_item_double_clicked)
         lay.addWidget(self._tree)
 
+        self._body = body
         self.setWidget(body)
         self.refresh()
+
+    # ── collapse / expand ──────────────────────────────────────────
+
+    def toggle_collapsed(self):
+        self.set_collapsed(not self._collapsed)
+
+    def set_collapsed(self, on: bool):
+        if on == self._collapsed:
+            return
+        if on:
+            w = self.width()
+            if w > 40:
+                self._expanded_width = w
+            self._body.setVisible(False)
+            self.setMaximumWidth(52); self.setMinimumWidth(52)
+            self._collapse_btn.setText("▶")
+            self._collapse_btn.setToolTip("Expand (restore outliner)")
+            self._title_label.setVisible(False)
+        else:
+            self.setMaximumWidth(16777215); self.setMinimumWidth(0)
+            self._body.setVisible(True)
+            self._title_label.setVisible(True)
+            self._collapse_btn.setText("◀")
+            self._collapse_btn.setToolTip("Collapse (hide body, keep strip)")
+            mw = self._win
+            if mw is not None and hasattr(mw, "resizeDocks"):
+                try:
+                    mw.resizeDocks([self], [max(160, self._expanded_width)],
+                                   QtCore.Qt.Horizontal)
+                except Exception:
+                    pass
+        self._collapsed = on
 
     # ── build/refresh ────────────────────────────────────────────────
 

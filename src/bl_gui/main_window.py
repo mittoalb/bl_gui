@@ -420,6 +420,10 @@ class Win(QtWidgets.QMainWindow):
         if not self._allow_edit:
             self._inspector.setVisible(False)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self._inspector)
+        self._inspector.visibilityChanged.connect(
+            lambda *_: self._sync_view_menu())
+        self._outliner.visibilityChanged.connect(
+            lambda *_: self._sync_view_menu())
 
         # Create tabs. Skip _build_all_panels when:
         #   1) blank=True — CLI opened a name that doesn't exist yet.
@@ -489,6 +493,30 @@ class Win(QtWidgets.QMainWindow):
         paste_action.setShortcut(QtGui.QKeySequence("Ctrl+V"))
         paste_action.triggered.connect(self._paste_panel_from_clipboard)
 
+        # View menu — toggle/reopen the editor side-docks, which the user
+        # may have hidden via the dock's ✕ button to reclaim screen space
+        # while resizing the main window.
+        view_menu = menubar.addMenu("View")
+        self._act_show_outliner = view_menu.addAction("Panels Outliner")
+        self._act_show_outliner.setCheckable(True)
+        self._act_show_outliner.triggered.connect(
+            lambda on: self._toggle_dock_visible("outliner", on))
+        self._act_show_inspector = view_menu.addAction("Properties Panel")
+        self._act_show_inspector.setCheckable(True)
+        self._act_show_inspector.triggered.connect(
+            lambda on: self._toggle_dock_visible("inspector", on))
+        view_menu.addSeparator()
+        act_collapse_inspector = view_menu.addAction("Collapse Properties")
+        act_collapse_inspector.setShortcut(QtGui.QKeySequence("Ctrl+Shift+P"))
+        act_collapse_inspector.triggered.connect(
+            lambda: self._inspector.toggle_collapsed()
+                    if getattr(self, "_inspector", None) else None)
+        act_collapse_outliner = view_menu.addAction("Collapse Outliner")
+        act_collapse_outliner.setShortcut(QtGui.QKeySequence("Ctrl+Shift+O"))
+        act_collapse_outliner.triggered.connect(
+            lambda: self._outliner.toggle_collapsed()
+                    if getattr(self, "_outliner", None) else None)
+
         # Keyboard zoom: Ctrl+=, Ctrl+-, Ctrl+0 to boost/shrink/reset font
         # scale without needing to see the top-bar slider.
         for keys, delta in (("Ctrl+=", +10), ("Ctrl++", +10), ("Ctrl+-", -10)):
@@ -497,6 +525,10 @@ class Win(QtWidgets.QMainWindow):
                 max(50, min(200, self.font_slider.value() + d))))
         sc0 = QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+0"), self)
         sc0.activated.connect(lambda: self.font_slider.setValue(100))
+
+        # Now that the View menu exists, mirror the docks' initial state
+        # onto the checkable actions so the menu is correct from launch.
+        self._sync_view_menu()
 
     # ── helpers ───────────────────────────────────────────────────────
 
@@ -2573,6 +2605,34 @@ class Win(QtWidgets.QMainWindow):
         if outl is not None and self._edit_mode:
             outl.refresh()
 
+    # ── view menu: dock visibility helpers ──────────────────────────
+
+    def _toggle_dock_visible(self, which: str, on: bool):
+        """Show/hide the inspector or outliner dock from the View menu.
+        `which` is 'inspector' or 'outliner'."""
+        dock = getattr(self, "_inspector" if which == "inspector"
+                       else "_outliner", None)
+        if dock is None:
+            return
+        dock.setVisible(bool(on))
+        # If we're in view mode and the user explicitly opens the dock,
+        # that's fine — nothing enforces hide here. The next toggle_edit
+        # will revisit visibility only on edit-mode transitions.
+
+    def _sync_view_menu(self):
+        """Keep the View menu's checkable items in sync with each dock's
+        actual visibility. Called after any transition."""
+        for act, dock_attr in (
+            (getattr(self, "_act_show_inspector", None), "_inspector"),
+            (getattr(self, "_act_show_outliner",  None), "_outliner"),
+        ):
+            dock = getattr(self, dock_attr, None)
+            if act is None or dock is None:
+                continue
+            act.blockSignals(True)
+            act.setChecked(dock.isVisible())
+            act.blockSignals(False)
+
     # ── edit mode ────────────────────────────────────────────────────
 
     def _toggle_edit(self, on):
@@ -2617,6 +2677,7 @@ class Win(QtWidgets.QMainWindow):
             outl.setVisible(on)
             if on:
                 outl.refresh()
+        self._sync_view_menu()
         # Reflect current state on the toggle button without re-firing.
         btn = getattr(self, "edit_toggle_btn", None)
         if btn is not None and btn.isChecked() != on:
