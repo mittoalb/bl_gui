@@ -648,7 +648,7 @@ class Win(QtWidgets.QMainWindow):
                 panel_key = k
                 break
         if panel_key is None:
-            field.setParent(None); field.deleteLater()
+            field.hide(); field.deleteLater()
             return
         # Remove from PVField registry
         self._pv_fields[panel_key].pop(field_id, None)
@@ -657,19 +657,33 @@ class Win(QtWidgets.QMainWindow):
         self._custom_rows[panel_key] = [r for r in rows if r.get("field_id") != field_id]
         if not self._custom_rows[panel_key]:
             self._custom_rows.pop(panel_key, None)
-        # Detach the whole row: label + the field widget.
-        # In a QFormLayout, removing the field widget also removes its label.
+        # Detach the whole row: label + the field widget. Every widget is
+        # hidden + deleteLater'd, never deleted synchronously: this runs from
+        # the field's own context menu, and that menu is a child of the
+        # field, so QFormLayout.removeRow() (which deletes immediately)
+        # destroyed the menu mid-exec_ and aborted the app.
         p = self._panels.get(panel_key)
         lay = p.layout() if p else None
+        doomed = []
         if isinstance(lay, QtWidgets.QFormLayout):
-            lay.removeRow(field)
+            taken = lay.takeRow(field)
+            for item in (taken.labelItem, taken.fieldItem):
+                if item is not None and item.widget() is not None:
+                    doomed.append(item.widget())
+        elif isinstance(lay, QtWidgets.QGridLayout) and lay.indexOf(field) >= 0:
+            row, col, _, _ = lay.getItemPosition(lay.indexOf(field))
+            label_item = lay.itemAtPosition(row, 0) if col > 0 else None
+            if label_item is not None and isinstance(label_item.widget(), QtWidgets.QLabel):
+                doomed.append(label_item.widget())
+            doomed.append(field)
         else:
             parent = field.parentWidget()
-            if parent and parent is not p:
-                # It's inside the wrap QWidget we made for QVBoxLayout/QHBoxLayout
-                parent.setParent(None); parent.deleteLater()
-            else:
-                field.setParent(None); field.deleteLater()
+            # Inside the wrap QWidget we made for QVBoxLayout/QHBoxLayout
+            doomed.append(parent if parent and parent is not p else field)
+        for w in doomed:
+            if lay is not None:
+                lay.removeWidget(w)
+            w.hide(); w.deleteLater()
 
     def _pv_field_rebind(self, field, old_pv, new_pv):
         """Called by PVField / ValveField / ToggleField after the user
