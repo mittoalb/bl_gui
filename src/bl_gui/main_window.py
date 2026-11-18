@@ -196,6 +196,8 @@ class Win(QtWidgets.QMainWindow):
         # User-added rows (via "Add PV Row..." in edit mode) — per-panel config
         # lists. Each entry = {kind, label, field_id, pv, on_pv, off_pv, opts}
         self._custom_rows: Dict[str, List[dict]] = {}
+        # Built-in rows the user deleted: panel base name -> [field_id].
+        self._deleted_fields: Dict[str, List[str]] = {}
         # panel_key -> Panel  (keys are "PanelName::TabName")
         self._panels: Dict[str, Panel] = {}
         self._tab_canvases: Dict[str, QtWidgets.QWidget] = {}
@@ -558,6 +560,9 @@ class Win(QtWidgets.QMainWindow):
         and, on accept, adds a live PVField/ValveField row to the panel."""
         from .row_builder import AddPVRowDialog
         existing = set(self._pv_fields.get(panel.key, {}).keys())
+        # A new row must not reuse a deleted built-in id, or the next load
+        # would delete the new row too.
+        existing |= set(self._deleted_fields.get(panel.key.split("::")[0], []))
         dlg = AddPVRowDialog(existing_field_ids=existing, parent=panel)
         if dlg.exec_() != QtWidgets.QDialog.Accepted or not dlg.cfg:
             return
@@ -639,20 +644,35 @@ class Win(QtWidgets.QMainWindow):
             })
 
     def _delete_custom_row(self, field):
-        """Remove a PVField/ValveField row from its panel + bookkeeping."""
-        # Find which panel owns it
-        panel_key = None
+        """Delete a PV row from its panel and from the same panel on every
+        other tab. Built-in rows (created by a panel preset, not via Add PV
+        Row) are also recorded in _deleted_fields so the preset doesn't
+        rebuild them on the next load."""
         field_id = getattr(field, "field_id", None)
-        for k, slot in self._pv_fields.items():
-            if slot.get(field_id) is field:
-                panel_key = k
-                break
+        panel_key = next((k for k, slot in self._pv_fields.items()
+                          if slot.get(field_id) is field), None)
         if panel_key is None:
             field.hide(); field.deleteLater()
             return
-        # Remove from PVField registry
-        self._pv_fields[panel_key].pop(field_id, None)
-        # Remove from _custom_rows (if user-added)
+        base = panel_key.split("::")[0]
+        siblings = [(k, slot[field_id]) for k, slot in self._pv_fields.items()
+                    if k.split("::")[0] == base and slot.get(field_id) is not None]
+        built_in = False
+        for k, f in siblings:
+            if not any(r.get("field_id") == field_id
+                       for r in self._custom_rows.get(k, [])):
+                built_in = True
+            self._remove_field_row(k, f)
+        if built_in:
+            deleted = self._deleted_fields.setdefault(base, [])
+            if field_id not in deleted:
+                deleted.append(field_id)
+
+    def _remove_field_row(self, panel_key, field):
+        """Remove one PV row (field + its label) from one panel and from
+        the registries."""
+        field_id = getattr(field, "field_id", None)
+        self._pv_fields.get(panel_key, {}).pop(field_id, None)
         rows = self._custom_rows.get(panel_key, [])
         self._custom_rows[panel_key] = [r for r in rows if r.get("field_id") != field_id]
         if not self._custom_rows[panel_key]:
@@ -680,6 +700,16 @@ class Win(QtWidgets.QMainWindow):
             parent = field.parentWidget()
             # Inside the wrap QWidget we made for QVBoxLayout/QHBoxLayout
             doomed.append(parent if parent and parent is not p else field)
+        # In/Out columns keep their header label in _io_labels (it sits
+        # above the field, not beside it). Drop it here too, or the next
+        # save reads .text() off a deleted QLabel.
+        io = getattr(self, "_io_labels", {})
+        if p is not None and field_id in io:
+            here = [l for l in io[field_id] if p.isAncestorOf(l)]
+            doomed.extend(l for l in here if l not in doomed)
+            io[field_id] = [l for l in io[field_id] if l not in here]
+            if not io[field_id]:
+                del io[field_id]
         for w in doomed:
             if lay is not None:
                 lay.removeWidget(w)
@@ -2771,6 +2801,7 @@ class Win(QtWidgets.QMainWindow):
                 "_panels": {}, "_tab_map": {}, "_buttons": {}, "_styles": {},
                 "_title_fonts": {}, "_titles": {}, "_mcs": {}, "_pv_fields": {},
                 "_custom_rows": self._custom_rows,
+                "_deleted_fields": {b: list(v) for b, v in self._deleted_fields.items() if v},
                 "_plugin_widgets": dict(getattr(self, "_plugin_widgets", {})),
                 "_io_labels": {fid: labels[0].text()
                                for fid, labels in getattr(self, "_io_labels", {}).items()
@@ -2834,7 +2865,7 @@ class Win(QtWidgets.QMainWindow):
         # of `"key": {}` / `"key": []` lines. The load path already
         # uses `.get(key, {})` / `.get(key, [])` defaults, so absence
         # is equivalent to empty — pure noise reduction.
-        _EMPTY_SKIP = ("_styles", "_custom_rows", "_io_labels",
+        _EMPTY_SKIP = ("_styles", "_custom_rows", "_deleted_fields", "_io_labels",
                        "_buttons", "_mcs", "_tab_map", "_titles",
                        "_title_fonts", "_deleted_buttons",
                        "_plugin_widgets", "_pv_fields")
@@ -3323,6 +3354,15 @@ class Win(QtWidgets.QMainWindow):
                     if saved_twv: mc.twv.setText(saved_twv)
                     lay.insertWidget(idx, mc)
                     self.mcs.append(mc)
+            # Built-in rows the user deleted. Applied BEFORE custom rows are
+            # restored so a user-added row can never be caught by this.
+            self._deleted_fields = {}
+            for base, fids in (data.get("_deleted_fields") or {}).items():
+                for fid in fids:
+                    for k, slot in list(self._pv_fields.items()):
+                        if k.split("::")[0] == base and slot.get(fid) is not None:
+                            self._remove_field_row(k, slot[fid])
+                    self._deleted_fields.setdefault(base, []).append(fid)
             # User-added PV rows (from 'Add PV Row...' in edit mode)
             saved_custom = data.get("_custom_rows", {})
             self._custom_rows = {}   # rebuild from the saved config below
