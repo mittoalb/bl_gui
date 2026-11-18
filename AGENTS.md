@@ -391,6 +391,7 @@ Single-GUI changes propagate across tabs in three ways:
 | kind | widget | direction |
 |---|---|---|
 | `sp` | QLineEdit | caput on Enter |
+| `wf` | QLineEdit | long text: `caput -S` on Enter; PV must be a CHAR waveform (beats the 40-char `stringout` limit) |
 | `rb` | QLabel    | monitored, displays formatted value (`fmt`) |
 | `cmb` | QComboBox | monitored; caput selected enum index |
 | `btn` | QPushButton | caput a fixed `button_value` on click |

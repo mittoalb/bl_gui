@@ -43,10 +43,21 @@ class PVEngine(QtCore.QObject):
                     return choices[idx]
                 return str(idx)
             return str(v)
+        if hasattr(v, "tolist") and not isinstance(v, (str, bytes)):
+            v = v.tolist()
         if isinstance(v, (list, tuple)):
-            if len(v) > 0 and isinstance(v[0], int):
-                ba = bytes(b for b in v if b != 0)
-                return ba.decode('utf-8', errors='replace')
+            if not v:
+                return ""
+            if isinstance(v[0], int):
+                # Char waveform: text ends at the first NUL (the buffer past
+                # it is stale), and CHAR (int8) records deliver UTF-8 bytes
+                # above 127 as negative numbers.
+                out = bytearray()
+                for b in v:
+                    if b == 0:
+                        break
+                    out.append(b & 0xFF)
+                return out.decode('utf-8', errors='replace')
             return str(v)
         return str(v)
 
@@ -95,15 +106,18 @@ class PVEngine(QtCore.QObject):
 _pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="ca")
 
 
-def caput_bg(pv, val, t=5.0):
+def caput_bg(pv, val, t=5.0, as_string=False):
     # Bounded subprocess caput as the primary path. pvaccess.Channel.put()
     # has no timeout and was observed to wedge on flaky PLC/valve IOCs,
     # which fed through the worker pool and stalled the GUI. A subprocess
     # costs ~200 ms but is hard-bounded by the timeout and can never hang.
+    # as_string=True adds `-S` so a char waveform receives the whole text
+    # instead of caput trying to parse it as a number.
+    cmd = ["caput", "-S", pv, str(val)] if as_string else ["caput", pv, str(val)]
+
     def _do():
         try:
-            r = subprocess.run(["caput", pv, str(val)],
-                               capture_output=True, timeout=t, text=True)
+            r = subprocess.run(cmd, capture_output=True, timeout=t, text=True)
             if r.returncode != 0:
                 print(f"[CAPUT] {pv}={val} rc={r.returncode} "
                       f"stderr={r.stderr.strip()!r}")

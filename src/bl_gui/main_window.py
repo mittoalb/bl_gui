@@ -2082,6 +2082,11 @@ class Win(QtWidgets.QMainWindow):
             return PVField('sp', "", field_id=self._new_field_id("sp"),
                            placeholder="setpoint", parent=parent)
 
+        def _wf_factory(parent):
+            from .pv_field import PVField
+            return PVField('wf', "", field_id=self._new_field_id("wf"),
+                           placeholder="long text", parent=parent)
+
         def _rb_factory(parent):
             from .pv_field import PVField
             return PVField('rb', "", field_id=self._new_field_id("rb"),
@@ -2103,6 +2108,7 @@ class Win(QtWidgets.QMainWindow):
             "Valve / Shutter":    ("Valve", 260, 90,  _valve_factory),
             "Toggle button":      ("Toggle", 180, 90, _toggle_factory),
             "Setpoint field (SP)": ("Setpoint", 240, 60, _sp_factory),
+            "Long text field (waveform)": ("Text", 360, 60, _wf_factory),
             "Readback field (RB)": ("Readback", 240, 60, _rb_factory),
             "LED indicator":      ("LED",   140, 60,  _led_factory),
             "Action button":      ("Action", 180, 60, _btn_factory),

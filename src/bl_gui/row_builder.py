@@ -8,6 +8,7 @@ from PyQt5 import QtWidgets
 
 _KIND_LABEL = [
     ("sp",       "Setpoint (editable)"),
+    ("wf",       "Long text (char waveform, > 40 chars)"),
     ("rb",       "Readback (live label)"),
     ("cmb",      "Combo / enum"),
     ("btn",      "Action button"),
@@ -78,7 +79,7 @@ class AddPVRowDialog(QtWidgets.QDialog):
     def _on_kind_changed(self, *_):
         k = self.kind_box.currentData()
         # Show PV / On PV / Off PV per kind
-        has_primary = k in ("sp", "rb", "cmb", "btn", "led", "valve", "toggle")
+        has_primary = k in ("sp", "wf", "rb", "cmb", "btn", "led", "valve", "toggle")
         has_on_off  = k in ("btn_pair", "valve", "toggle")
         self.pv_edit.setVisible(has_primary)
         self.on_pv_edit.setVisible(has_on_off)
@@ -87,6 +88,9 @@ class AddPVRowDialog(QtWidgets.QDialog):
         # visibility on the line edit is enough to suggest which fields apply.)
         hints = {
             "sp":       "Options: placeholder=<text>  (e.g. placeholder=sec)",
+            "wf":       "Editable text written with `caput -S`, so strings longer than the "
+                        "40-char stringout limit fit. The PV must be a CHAR waveform record "
+                        "(e.g. areaDetector FilePath). Options: placeholder=<text>",
             "rb":       "Options: fmt=<python-format-spec>  (e.g. fmt=.3f for 3 decimals)",
             "cmb":      "Options: choices=Off,On,Auto   (comma-separated; leave empty for dynamic mbbo)",
             "btn":      "Options: text=<label>, value=<caput-value>  (e.g. text=Go, value=1)",
@@ -119,7 +123,7 @@ class AddPVRowDialog(QtWidgets.QDialog):
             k = k.strip(); v = v.strip()
             if not k:
                 continue
-            if kind == "sp" and k == "placeholder":
+            if kind in ("sp", "wf") and k == "placeholder":
                 out["placeholder"] = v
             elif kind == "rb" and k == "fmt":
                 out["fmt"] = v
@@ -142,7 +146,7 @@ class AddPVRowDialog(QtWidgets.QDialog):
         pv = self.pv_edit.text().strip()
         on_pv = self.on_pv_edit.text().strip()
         off_pv = self.off_pv_edit.text().strip()
-        if kind in ("sp", "rb", "cmb", "led") and not pv:
+        if kind in ("sp", "wf", "rb", "cmb", "led") and not pv:
             QtWidgets.QMessageBox.warning(self, "Missing PV", "This kind needs a PV name.")
             return
         if kind in ("btn_pair", "valve", "toggle") and not (on_pv or off_pv):

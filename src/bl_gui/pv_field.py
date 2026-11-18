@@ -2,6 +2,8 @@
 
 Supports four kinds:
   'sp'  setpoint  — QLineEdit,  caput on return
+  'wf'  long text — QLineEdit,  `caput -S` on return (char waveform,
+                    for strings past the 40-char stringout limit)
   'rb'  readback  — QLabel,     subscribed to PV
   'cmb' combo     — QComboBox,  caput index on change
   'btn' action    — QPushButton, caput fixed value on click
@@ -105,7 +107,7 @@ class PVField(QtWidgets.QWidget):
             if w is not None:
                 w.setParent(None); w.deleteLater()
 
-        if self.kind == 'sp':
+        if self.kind in ('sp', 'wf'):
             w = QtWidgets.QLineEdit()
             # Distinct bluish background so editable fields are obviously
             # different from read-only readbacks / labels. Switches to the
@@ -170,14 +172,14 @@ class PVField(QtWidgets.QWidget):
         if self.pv:
             val = self._inner.text()
             print(f"[SP] {self.field_id}: caput {self.pv} {val!r}")
-            caput_bg(self.pv, val)
+            caput_bg(self.pv, val, as_string=(self.kind == 'wf'))
 
     def _update_sp_dirty(self):
         """Colour the setpoint field so it's obvious when what you see
         doesn't match what the PV actually has (i.e. you typed but
         haven't hit Enter). Clears itself as soon as the IOC echoes
         your commit back."""
-        if self.kind != 'sp' or self._inner is None:
+        if self.kind not in ('sp', 'wf') or self._inner is None:
             return
         pv_val = getattr(self, '_pv_value', None)
         dirty = (pv_val is not None
@@ -240,7 +242,7 @@ class PVField(QtWidgets.QWidget):
                         self._inner.lineEdit().setText(str(value))
             finally:
                 self._inner.blockSignals(False)
-        elif self.kind == 'sp':
+        elif self.kind in ('sp', 'wf'):
             # Apply the field's fmt (if given) so IOC echoes like
             # "6.9999999999" show as "7.000" instead of the raw float.
             # Dirty-check comparison is numeric so the formatted string
@@ -258,6 +260,8 @@ class PVField(QtWidgets.QWidget):
                 self._inner.blockSignals(True)
                 self._inner.setText(text)
                 self._inner.blockSignals(False)
+            if self.kind == 'wf':
+                self._inner.setToolTip(text)
             self._update_sp_dirty()
         elif self.kind == 'led':
             v = str(value).strip().lower()
@@ -364,7 +368,7 @@ class PVField(QtWidgets.QWidget):
         # Reset the display so stale values don't linger
         if self.kind == 'rb':
             self._inner.setText("---")
-        elif self.kind == 'sp':
+        elif self.kind in ('sp', 'wf'):
             self._inner.clear()
         # Ask the window to rebind
         win = self.window()
