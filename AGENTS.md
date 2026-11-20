@@ -590,6 +590,16 @@ Two ways to enter edit mode:
 
 In edit mode:
 
+* Nothing inside a panel is interactive: `edit_drag.EditModeGuard`
+  (an application event filter) swallows left clicks, keys and wheel
+  events aimed at panel contents, so no button, setpoint or combo can
+  fire a caput / shell action. Right-click menus still work, and
+  widgets flagged `_bl_gui_always_enabled` (web-view URL bar) stay live.
+* Drag a motor card to reorder it within its panel or drop it into any
+  other panel; drag a saved CfgButton to reorder it within its own
+  panel (grids keep their cells). An orange line marks the drop slot,
+  Esc cancels, and each move is undoable. A short click selects.
+  Pressing anywhere else on a panel moves the panel.
 * Panels can be dragged and resized; geometry snaps to a 10 px grid
   and to sibling-panel edges (6 px tolerance). Hold **Shift** to
   bypass snapping for 1 px precision. Dashed orange lines appear

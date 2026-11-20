@@ -17,6 +17,8 @@ from .theme import _IMG, _PANEL_SS, _PANEL_SS_EDIT, _SS
 from . import widget_registry as _wreg
 from .inspector import PropertyInspector
 from .outliner import PanelOutliner
+from .edit_drag import (EditModeGuard, mcs_in_order, mc_container,
+                        layout_containing, slot_of, detach, insert_at)
 
 
 # ── XANES element edges — Energy-panel quick-select ─────────────────────
@@ -198,6 +200,10 @@ class Win(QtWidgets.QMainWindow):
         self._custom_rows: Dict[str, List[dict]] = {}
         # Built-in rows the user deleted: panel base name -> [field_id].
         self._deleted_fields: Dict[str, List[str]] = {}
+        # Panels whose motor list must be saved even when empty (a card
+        # was moved out / deleted), so presets don't rebuild defaults.
+        self._mc_touched: set = set()
+        self._edit_guard = EditModeGuard(self)
         # panel_key -> Panel  (keys are "PanelName::TabName")
         self._panels: Dict[str, Panel] = {}
         self._tab_canvases: Dict[str, QtWidgets.QWidget] = {}
@@ -2687,6 +2693,14 @@ class Win(QtWidgets.QMainWindow):
 
     def _toggle_edit(self, on):
         self._edit_mode = on
+        # Edit mode is non-interactive: the guard swallows clicks / keys /
+        # wheel inside panels and turns left-drags into moves.
+        app = QtWidgets.QApplication.instance()
+        if on:
+            app.installEventFilter(self._edit_guard)
+        else:
+            self._edit_guard.cancel()
+            app.removeEventFilter(self._edit_guard)
         for p in self._panels.values():
             p.set_edit(on)
             for w in p.findChildren(QtWidgets.QPushButton):
@@ -2846,9 +2860,11 @@ class Win(QtWidgets.QMainWindow):
             _del_here = getattr(self, "_deleted_buttons", {}).get(k)
             if p.custom_buttons or _del_here:
                 data["_buttons"][k] = [b.to_dict() for b in p.custom_buttons]
-            # Save motor cards (pv + label + custom-label flag) by positional index
-            panel_mcs = p.findChildren(MC)
-            if panel_mcs:
+            # Save motor cards (pv + label + custom-label flag) in on-screen
+            # order. An emptied panel still saves [] so its preset's
+            # default cards aren't rebuilt on load.
+            panel_mcs = mcs_in_order(p)
+            if panel_mcs or k in self._mc_touched:
                 data["_mcs"][k] = [
                     {"label": mc._label, "pv": mc.pv, "custom": bool(mc._custom_label),
                      "twv": mc.twv.text()}
@@ -3332,27 +3348,39 @@ class Win(QtWidgets.QMainWindow):
             # saved entries onto defaults by index causes every motor after the
             # change to shift and show wrong labels/PVs on restart.
             mcs_saved = data.get("_mcs", {})
+            self._mc_touched = set(mcs_saved)
             for panel_key, mc_list in mcs_saved.items():
                 p = self._panels.get(panel_key)
                 if not p: continue
-                lay = p.layout()
+                # Saved cards go where the preset's cards were (same
+                # layout, same starting slot); a panel without cards gets
+                # them appended, in whatever layout type it has.
+                existing = mcs_in_order(p)
+                container = start = None
+                if existing:
+                    container = layout_containing(p.layout(), existing[0])
+                    if container is not None:
+                        start = slot_of(container, existing[0])
                 # Drop every existing MC from this panel and from self.mcs
-                for existing_mc in p.findChildren(MC):
+                for existing_mc in existing:
                     try: self.mcs.remove(existing_mc)
                     except ValueError: pass
-                    if lay is not None:
-                        lay.removeWidget(existing_mc)
+                    lay_e = layout_containing(p.layout(), existing_mc)
+                    if lay_e is not None:
+                        detach(lay_e, existing_mc)
                     existing_mc.setParent(None)
                     existing_mc.deleteLater()
+                if not mc_list: continue
+                if container is None:
+                    container = mc_container(p)
                 # Rebuild from the saved list (preserving order)
-                if lay is None: continue
                 for idx, mc_data in enumerate(mc_list):
                     mc = MC(mc_data.get("label", ""), mc_data.get("pv", ""))
                     if mc_data.get("custom"):
                         mc._custom_label = True
                     saved_twv = mc_data.get("twv")
                     if saved_twv: mc.twv.setText(saved_twv)
-                    lay.insertWidget(idx, mc)
+                    insert_at(container, None if start is None else start + idx, mc)
                     self.mcs.append(mc)
             # Built-in rows the user deleted. Applied BEFORE custom rows are
             # restored so a user-added row can never be caught by this.

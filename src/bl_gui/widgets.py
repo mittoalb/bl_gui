@@ -63,6 +63,7 @@ class Panel(QtWidgets.QFrame):
         self._resize = False
         self._mstart = None
         self._geo0 = None
+        self._drop_hint = None
         self.custom_buttons: List["CfgButton"] = []
         self._btn_filter = _ButtonEditFilter(self)
         self._title = QtWidgets.QLabel(title, self)
@@ -382,6 +383,13 @@ class Panel(QtWidgets.QFrame):
                         lambda p=p, r=after_snap: p.setGeometry(r))
             self._geo_before_drag = None
 
+    def set_drop_hint(self, hint):
+        """Drag feedback from edit_drag: ("line", x1, y1, x2, y2),
+        ("panel",) to outline the whole panel, or None."""
+        if hint != self._drop_hint:
+            self._drop_hint = hint
+            self.update()
+
     def paintEvent(self, e):
         super().paintEvent(e)
         if self._edit:
@@ -390,6 +398,13 @@ class Panel(QtWidgets.QFrame):
             p.setBrush(QtGui.QColor("#f39c12"))
             p.drawRect(self.width() - self.HANDLE, self.height() - self.HANDLE,
                        self.HANDLE, self.HANDLE)
+            if self._drop_hint:
+                p.setBrush(QtCore.Qt.NoBrush)
+                p.setPen(QtGui.QPen(QtGui.QColor("#f39c12"), 3))
+                if self._drop_hint[0] == "line":
+                    p.drawLine(*self._drop_hint[1:])
+                else:
+                    p.drawRect(self.rect().adjusted(2, 2, -3, -3))
             p.end()
 
 
@@ -601,11 +616,11 @@ class WidgetEditor(QtWidgets.QDialog):
         sl.addRow("Preview:", self._preview); tabs.addTab(style_w, "Style")
         pos_w = QtWidgets.QWidget(); pl = QtWidgets.QFormLayout(pos_w); pl.setSpacing(6)
         geo = widget.geometry()
-        self._x_spin = QtWidgets.QSpinBox(); self._x_spin.setRange(-9999, 9999); self._x_spin.setValue(geo.x()); pl.addRow("X:", self._x_spin)
-        self._y_spin = QtWidgets.QSpinBox(); self._y_spin.setRange(-9999, 9999); self._y_spin.setValue(geo.y()); pl.addRow("Y:", self._y_spin)
         self._w_spin = QtWidgets.QSpinBox(); self._w_spin.setRange(10, 9999); self._w_spin.setValue(geo.width()); pl.addRow("Width:", self._w_spin)
         self._h_spin = QtWidgets.QSpinBox(); self._h_spin.setRange(10, 9999); self._h_spin.setValue(geo.height()); pl.addRow("Height:", self._h_spin)
-        tabs.addTab(pos_w, "Position / Size")
+        hint = QtWidgets.QLabel("To change position, drag the item to a new slot in edit mode.")
+        hint.setStyleSheet("color:#888;font-size:8pt;"); hint.setWordWrap(True); pl.addRow(hint)
+        tabs.addTab(pos_w, "Size")
         cur_label = getattr(widget, "_label", None) or self._widget_text()
 
         # For CfgButton widgets, show an "Action" tab instead of a PV tab —
@@ -689,7 +704,6 @@ class WidgetEditor(QtWidgets.QDialog):
 
     def accept(self):
         self.result_data = {"bg": self._bg, "fg": self._fg, "fs": self._fs_spin.value(),
-            "x": self._x_spin.value(), "y": self._y_spin.value(),
             "w": self._w_spin.value(), "h": self._h_spin.value(),
             "pv": self._pv_edit.text().strip(),
             "label": self._label_edit.text().strip()}
@@ -811,6 +825,12 @@ def _delete_widget(widget):
             win.mcs.remove(widget)
         except ValueError:
             pass
+        # Keep saving this panel's (possibly empty) motor list, or the
+        # preset would rebuild the deleted card on the next load.
+        from .edit_drag import enclosing_panel
+        panel = enclosing_panel(widget)
+        if panel is not None and hasattr(win, "_mc_touched"):
+            win._mc_touched.add(panel.key)
     parent = widget.parent()
     lay = parent.layout() if parent is not None else None
     if lay is not None:
