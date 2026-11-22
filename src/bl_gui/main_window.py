@@ -123,6 +123,21 @@ def _user_lay_path():
 # one copy of the polyfit + linear-fallback logic.
 from .headless.calib import _polyfit_interp  # noqa: E402
 
+_SHAKER_SYNC_DEFAULT = {"enabled": True, "cycles": 1}
+# Ceiling for the auto-computed shaker frequency (manual entry is uncapped).
+_SHAKER_AUTO_MAX_HZ = 10.0
+
+
+def _shaker_auto_freq(exposure, cycles, max_hz=_SHAKER_AUTO_MAX_HZ):
+    """cycles / exposure, capped at max_hz. Over the cap, drop to the most
+    whole cycles per exposure that fit; if even one cycle is too fast,
+    use max_hz itself. Returns (freq_hz, cycles_used or None)."""
+    freq = cycles / exposure
+    if freq <= max_hz:
+        return freq, cycles
+    n = int(max_hz * exposure + 1e-9)
+    return (n / exposure, n) if n >= 1 else (max_hz, None)
+
 
 def _lay_path():
     """Layout path actually used by load/save: prefer the user override
@@ -204,6 +219,9 @@ class Win(QtWidgets.QMainWindow):
         # was moved out / deleted), so presets don't rebuild defaults.
         self._mc_touched: set = set()
         self._edit_guard = EditModeGuard(self)
+        # Shaker frequency follows the GUI exposure: freq = cycles / exposure.
+        self._shaker_sync = dict(_SHAKER_SYNC_DEFAULT)
+        self._shaker_sync_widgets: list = []   # (checkbox, spinbox) per Shaker panel
         # panel_key -> Panel  (keys are "PanelName::TabName")
         self._panels: Dict[str, Panel] = {}
         self._tab_canvases: Dict[str, QtWidgets.QWidget] = {}
@@ -1291,6 +1309,7 @@ class Win(QtWidgets.QMainWindow):
             except (TypeError, RuntimeError):
                 pass
             cam_slot[_name]._inner.returnPressed.connect(self._apply_cam_binning)
+        cam_slot['cam_exp_sp'].committed.connect(self._on_exposure_committed)
         p.setLayout(cl); p.setGeometry(700 + GAP + 344, 84 + GAP, 340, 180)
 
     def _build_panel_crop(self, tab_name):
@@ -1427,6 +1446,26 @@ class Win(QtWidgets.QMainWindow):
             ('sp',  "B: Freq Mult:",   "shaker_B_fmult", "32idbShaker:shaker:B:freqMult.VAL",   {}),
         ]
         self._register_pv_fields(p, shaker_fields, skl)
+        # Auto-follow: Enter in the camera exposure field sets frequency =
+        # cycles / exposure. Frequency stays editable; untick Auto to stop.
+        sync_w = QtWidgets.QWidget(p)
+        sync_l = QtWidgets.QHBoxLayout(sync_w); sync_l.setContentsMargins(0, 0, 0, 0); sync_l.setSpacing(6)
+        auto_chk = QtWidgets.QCheckBox("Auto")
+        auto_chk.setToolTip("Set Frequency = cycles / exposure whenever the camera "
+                            f"exposure is changed in this GUI (capped at "
+                            f"{_SHAKER_AUTO_MAX_HZ:g} Hz; typed values are not capped).")
+        auto_chk.setStyleSheet("color:#e0e0e0;")
+        cycles = QtWidgets.QSpinBox()
+        cycles.setRange(1, 1000)
+        cycles.setSuffix(" cycles / exposure")
+        cycles.setToolTip("Shaker cycles per exposure (Frequency = cycles / exposure).")
+        auto_chk.setChecked(self._shaker_sync["enabled"])
+        cycles.setValue(self._shaker_sync["cycles"])
+        auto_chk.toggled.connect(lambda on: self._set_shaker_sync(enabled=on))
+        cycles.valueChanged.connect(lambda n: self._set_shaker_sync(cycles=n))
+        sync_l.addWidget(auto_chk); sync_l.addWidget(cycles, 1)
+        skl.insertRow(1, "From exposure:", sync_w)
+        self._shaker_sync_widgets.append((auto_chk, cycles))
         # Run / Stop as a two-button pair. highlight_buttons=True makes
         # the active side bright and the inactive one dim so you can see
         # the current state at a glance.
@@ -2881,6 +2920,8 @@ class Win(QtWidgets.QMainWindow):
         # of `"key": {}` / `"key": []` lines. The load path already
         # uses `.get(key, {})` / `.get(key, [])` defaults, so absence
         # is equivalent to empty — pure noise reduction.
+        if self._shaker_sync != _SHAKER_SYNC_DEFAULT:
+            data["_shaker_sync"] = dict(self._shaker_sync)
         _EMPTY_SKIP = ("_styles", "_custom_rows", "_deleted_fields", "_io_labels",
                        "_buttons", "_mcs", "_tab_map", "_titles",
                        "_title_fonts", "_deleted_buttons",
@@ -3382,6 +3423,12 @@ class Win(QtWidgets.QMainWindow):
                     if saved_twv: mc.twv.setText(saved_twv)
                     insert_at(container, None if start is None else start + idx, mc)
                     self.mcs.append(mc)
+            ss = data.get("_shaker_sync") or {}
+            try:
+                cyc = max(1, int(ss.get("cycles", 1)))
+            except (TypeError, ValueError):
+                cyc = 1
+            self._set_shaker_sync(enabled=bool(ss.get("enabled", True)), cycles=cyc)
             # Built-in rows the user deleted. Applied BEFORE custom rows are
             # restored so a user-added row can never be caught by this.
             self._deleted_fields = {}
@@ -4208,6 +4255,50 @@ class Win(QtWidgets.QMainWindow):
             if v is None: continue
             print(f"[ENERGY] direct move {lbl} ({pv_name}) -> {v:.6f}")
             caput_bg(pv_name, float(v))
+
+    def _live_shaker_sync_widgets(self):
+        from PyQt5 import sip
+        self._shaker_sync_widgets = [
+            (c, s) for c, s in self._shaker_sync_widgets
+            if not sip.isdeleted(c) and not sip.isdeleted(s)]
+        return self._shaker_sync_widgets
+
+    def _set_shaker_sync(self, enabled=None, cycles=None):
+        """Update the auto-follow settings and mirror them onto every
+        Shaker panel (one per tab)."""
+        if enabled is not None:
+            self._shaker_sync["enabled"] = bool(enabled)
+        if cycles is not None:
+            self._shaker_sync["cycles"] = int(cycles)
+        for chk, spin in self._live_shaker_sync_widgets():
+            for w, v, setter in ((chk, self._shaker_sync["enabled"], chk.setChecked),
+                                 (spin, self._shaker_sync["cycles"], spin.setValue)):
+                w.blockSignals(True); setter(v); w.blockSignals(False)
+
+    def _on_exposure_committed(self, text):
+        """Exposure was typed into the camera panel: set the shaker
+        frequency to cycles / exposure (if Auto is on)."""
+        if not self._shaker_sync.get("enabled"):
+            return
+        try:
+            exposure = float(text)
+        except (TypeError, ValueError):
+            return
+        if exposure <= 0:
+            return
+        freq_pv = next((s["shaker_freq"].pv for s in self._pv_fields.values()
+                        if s.get("shaker_freq") is not None and s["shaker_freq"].pv), None)
+        if not freq_pv:
+            return
+        cycles = self._shaker_sync.get("cycles", 1)
+        hz, used = _shaker_auto_freq(exposure, cycles)
+        freq = f"{hz:.6g}"
+        note = "" if used == cycles else (
+            f" (capped at {_SHAKER_AUTO_MAX_HZ:g} Hz: "
+            + (f"{used} cycle(s))" if used else "under 1 cycle per exposure)"))
+        print(f"[SHAKER] exposure {exposure:g} s x {cycles} cycle(s) -> "
+              f"caput {freq_pv} {freq} Hz{note}")
+        caput_bg(freq_pv, freq)
 
     def _apply_cam_binning(self):
         """Direct copy of pystream's DetectorControlDialog._apply_binning.
