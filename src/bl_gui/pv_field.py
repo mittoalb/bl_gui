@@ -73,6 +73,9 @@ def _add_copy_pv_entries(menu, items):
 
 
 class PVField(QtWidgets.QWidget):
+    # Emitted with the typed text after a user-committed setpoint caput.
+    committed = QtCore.pyqtSignal(str)
+
     def __init__(self, kind, pv, field_id,
                  choices=None, button_text=None, button_value=None,
                  placeholder=None, fmt=None,
@@ -173,6 +176,7 @@ class PVField(QtWidgets.QWidget):
             val = self._inner.text()
             print(f"[SP] {self.field_id}: caput {self.pv} {val!r}")
             caput_bg(self.pv, val, as_string=(self.kind == 'wf'))
+            self.committed.emit(val)
 
     def _update_sp_dirty(self):
         """Colour the setpoint field so it's obvious when what you see

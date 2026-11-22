@@ -333,7 +333,8 @@ write atomic and survive a crash mid-save.
   "_mcs": {key: [{label, pv, custom, twv}]},
   "_pv_fields": {key: {field_id: pv | get_pvs_dict()}},
   "_custom_rows": {key: [row_cfg, ...]},
-  "_io_labels": {fid: text}
+  "_io_labels": {fid: text},
+  "_shaker_sync": {"enabled": bool, "cycles": N}   # only when not the default
 }
 ```
 
