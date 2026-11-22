@@ -122,6 +122,19 @@ def _user_lay_path():
 from .headless.calib import _polyfit_interp  # noqa: E402
 
 _SHAKER_SYNC_DEFAULT = {"enabled": True, "cycles": 1}
+# Ceiling for the auto-computed shaker frequency (manual entry is uncapped).
+_SHAKER_AUTO_MAX_HZ = 10.0
+
+
+def _shaker_auto_freq(exposure, cycles, max_hz=_SHAKER_AUTO_MAX_HZ):
+    """cycles / exposure, capped at max_hz. Over the cap, drop to the most
+    whole cycles per exposure that fit; if even one cycle is too fast,
+    use max_hz itself. Returns (freq_hz, cycles_used or None)."""
+    freq = cycles / exposure
+    if freq <= max_hz:
+        return freq, cycles
+    n = int(max_hz * exposure + 1e-9)
+    return (n / exposure, n) if n >= 1 else (max_hz, None)
 
 
 def _lay_path():
@@ -1433,7 +1446,8 @@ class Win(QtWidgets.QMainWindow):
         sync_l = QtWidgets.QHBoxLayout(sync_w); sync_l.setContentsMargins(0, 0, 0, 0); sync_l.setSpacing(6)
         auto_chk = QtWidgets.QCheckBox("Auto")
         auto_chk.setToolTip("Set Frequency = cycles / exposure whenever the camera "
-                            "exposure is changed in this GUI.")
+                            f"exposure is changed in this GUI (capped at "
+                            f"{_SHAKER_AUTO_MAX_HZ:g} Hz; typed values are not capped).")
         auto_chk.setStyleSheet("color:#e0e0e0;")
         cycles = QtWidgets.QSpinBox()
         cycles.setRange(1, 1000)
@@ -4249,8 +4263,13 @@ class Win(QtWidgets.QMainWindow):
         if not freq_pv:
             return
         cycles = self._shaker_sync.get("cycles", 1)
-        freq = f"{cycles / exposure:.6g}"
-        print(f"[SHAKER] exposure {exposure:g} s x {cycles} cycle(s) -> caput {freq_pv} {freq} Hz")
+        hz, used = _shaker_auto_freq(exposure, cycles)
+        freq = f"{hz:.6g}"
+        note = "" if used == cycles else (
+            f" (capped at {_SHAKER_AUTO_MAX_HZ:g} Hz: "
+            + (f"{used} cycle(s))" if used else "under 1 cycle per exposure)"))
+        print(f"[SHAKER] exposure {exposure:g} s x {cycles} cycle(s) -> "
+              f"caput {freq_pv} {freq} Hz{note}")
         caput_bg(freq_pv, freq)
 
     def _apply_cam_binning(self):
